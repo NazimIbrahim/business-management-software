@@ -1485,6 +1485,19 @@ quotationsRouter.get('/:id/versions/:versionNumber/pdf', optionalAuthenticateTok
     const quotation = snapshot.quotation || {};
     const areas = snapshot.areas || [];
 
+    if (quotation.approved_by_id && !quotation.approved_by_name) {
+      const uApp = await query('SELECT full_name FROM users WHERE id = $1', [quotation.approved_by_id]);
+      if (uApp.length > 0) {
+        quotation.approved_by_name = uApp[0].full_name;
+      }
+    }
+    if (quotation.sales_person_id && !quotation.sales_person_name) {
+      const uSales = await query('SELECT full_name FROM users WHERE id = $1', [quotation.sales_person_id]);
+      if (uSales.length > 0) {
+        quotation.sales_person_name = uSales[0].full_name;
+      }
+    }
+
     // Salespersons can only view/export approved or closed quotations
     if (req.user?.role === 'salesperson' && !['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
       res.status(403).json({

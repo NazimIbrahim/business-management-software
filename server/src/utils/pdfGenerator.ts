@@ -263,13 +263,16 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     ? `Sales: ${quotation.sales_person_name} (Assisted: ${quotation.assisted_sales_person_name})`
     : `Sales Associate: ${quotation.sales_person_name}`;
 
+  const storeManagerTitle = company.store_manager_title || 'Store Manager';
+  const storeManagerName = quotation.approved_by_name || company.store_manager_name || 'Pending Approval';
+
   doc
     .fontSize(8.5)
     .font('Helvetica')
     .fillColor(textColor)
     .text(`Project: ${quotation.project_name || 'Standard Residential'}`, 320, customerBoxY + 18)
     .text(salesAssociateLabel, 320, customerBoxY + 30, { width: 240, ellipsis: true })
-    .text(`Store Manager: ${company.store_manager_name}`, 320, customerBoxY + 42);
+    .text(`${storeManagerTitle}: ${storeManagerName}`, 320, customerBoxY + 42, { width: 240, ellipsis: true });
 
   // Table setup
   const isEncrypted = Boolean(data.encrypted);
@@ -624,8 +627,8 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     .fontSize(7.5)
     .font('Helvetica-Bold')
     .fillColor(textColor)
-    .text(`${company.store_manager_title}`, 450, currentY + 18)
-    .text(quotation.approved_by_name || `${company.store_manager_name}`, 450, currentY + 30, { width: 120, ellipsis: true })
+    .text(`${company.store_manager_title || 'Store Manager'}`, 450, currentY + 18)
+    .text(quotation.approved_by_name || `${company.store_manager_name || 'Store Manager'}`, 450, currentY + 30, { width: 120, ellipsis: true })
     .text(quotation.approved_at ? `Approved: ${new Date(quotation.approved_at).toLocaleDateString('en-GB')}` : `Signature: ________________`, 450, currentY + 44);
 
   currentY += 68;
