@@ -19,7 +19,7 @@ interface Props {
 
 export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   const { login } = useAuth();
-  const { status, serverUrl } = useServer();
+  const { status, serverUrl, company } = useServer();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -51,13 +51,24 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
       <div className="card w-full max-w-md overflow-hidden shadow-2xl border border-[#CBD5E1] animate-page-enter">
         {/* Top Header Banner */}
         <div className="bg-[#0D1B2A] text-[#E0E1DD] p-6 text-center relative">
+          {company?.logo_base64 && (
+            <div className="flex justify-center mb-3">
+              <img
+                src={company.logo_base64}
+                alt={company.company_name || 'Logo'}
+                className="max-h-16 max-w-[200px] object-contain rounded-md bg-white/10 p-1.5 backdrop-blur-sm border border-white/20 shadow-md"
+              />
+            </div>
+          )}
           <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-[11px] font-semibold tracking-wider uppercase mb-2.5 border border-emerald-400/30">
             <Sparkles size={12} className="text-emerald-400" />
             <span>Central Quotation Network</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-[#E0E1DD]">AMA CERAMICS PVT LTD</h1>
+          <h1 className="text-2xl font-black tracking-tight text-[#E0E1DD]">
+            {company?.company_name || 'QUOTATION SYSTEM'}
+          </h1>
           <p className="text-xs text-[#778DA9] mt-1 font-medium">
-            Architectural Surfaces, Vitrified Tiles & Luxury Sanitaries
+            {company?.tagline || 'Commercial Quotation Management'}
           </p>
         </div>
 
@@ -194,7 +205,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
         <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 flex justify-between">
           <span>Security: Direct LAN / Cloud Session</span>
-          <span>AMA Quotation System v2.4.14</span>
+          <span>{company?.company_name ? `${company.company_name} • v2.4.14` : 'Quotation System v2.4.14'}</span>
         </div>
       </div>
     </div>

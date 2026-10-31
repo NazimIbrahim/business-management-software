@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useServer } from '../context/ServerContext';
 import {
   LayoutDashboard,
   FileText,
@@ -48,9 +49,18 @@ interface Props {
 
 export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = false, onClose }) => {
   const { user } = useAuth();
+  const { company } = useServer();
   const [newQuotationExpanded, setNewQuotationExpanded] = useState<boolean>(true);
 
   if (!user) return null;
+
+  const companyInitials = (company?.company_name || 'AMA')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase() || 'AMA';
 
   const handleNavSelect = (tab: NavTab) => {
     setActiveTab(tab);
@@ -342,13 +352,25 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       >
         {/* Mobile Drawer Header */}
         <div className="p-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] border border-white/20 flex items-center justify-center font-bold text-xs shadow-sm">
-              AMA
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white tracking-tight">AMA CERAMICS</div>
-              <div className="text-[10px] text-[#778DA9]">Navigation Menu</div>
+          <div className="flex items-center space-x-2.5 min-w-0">
+            {company?.logo_base64 ? (
+              <img
+                src={company.logo_base64}
+                alt={company.company_name || 'Logo'}
+                className="w-7 h-7 rounded-lg object-contain bg-white shadow-sm shrink-0"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] border border-white/20 flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
+                {companyInitials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white tracking-tight truncate max-w-[170px]">
+                {company?.company_name || 'QUOTATION SYSTEM'}
+              </div>
+              <div className="text-[10px] text-[#778DA9] truncate">
+                {company?.tagline || 'Navigation Menu'}
+              </div>
             </div>
           </div>
           <button

@@ -408,6 +408,65 @@ async function ensureBootstrapData() {
       logger.info('Fresh database detected (0 users). Seeding default admin, manager, accounts, and salesperson accounts...');
       await seedDatabase();
       logger.info('Default accounts and company settings seeded successfully.');
+    } else {
+      // 4. Ensure company_settings has at least 1 record even if users already exist
+      const compCount = await query('SELECT count(*) FROM company_settings').catch(() => [{ count: '0' }]);
+      if (parseInt(compCount[0]?.count || '0', 10) === 0) {
+        logger.info('Empty company_settings table detected. Seeding default company profile...');
+        const defaultTerms = [
+          'Prices are inclusive of GST unless otherwise specified.',
+          'Payment: 100% advance along with confirmed purchase order.',
+          'Delivery: Materials will be dispatched after receipt of full payment.',
+          'Transportation/Freight charges extra at actuals unless explicitly agreed in writing.',
+          'Unloading of materials at destination site is under customer scope and responsibility.',
+          'Goods once sold cannot be returned or exchanged under any circumstances.',
+          'Color shade and sizing variations are inherent in ceramic and vitrified products.',
+          'Any delay in delivery due to unavailability of materials in factory will not hold the seller liable.',
+          'The buyer must inspect the materials upon delivery. Any discrepancies or damages must be reported within 24 hours.',
+          'Once materials are inspected and accepted no claims will be entertained.',
+          'Orders once placed cannot be cancelled.',
+          'Return or replacements are only applicable for defective or damaged products subject to approvals after inspection.',
+          'Non-defective materials are non-returnable.'
+        ];
+        await query(
+          `INSERT INTO company_settings (
+            company_name, tagline, address_line1, address_line2, phone, email, website,
+            gstin, state, state_code, bank_name, account_name, account_number, ifsc_code,
+            branch, account_type, upi_details, store_manager_title, store_manager_name,
+            store_manager_phone, sales_associate_title, terms_json
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7,
+            $8, $9, $10, $11, $12, $13, $14,
+            $15, $16, $17, $18, $19,
+            $20, $21, $22
+          )`,
+          [
+            'AMA CERAMICS PVT LTD',
+            'Architectural Surfaces, Vitrified Tiles & Luxury Sanitaries',
+            '125/1, Sulikunte Village, Sarjapura Main Road',
+            'Varthur Hobli, Bengaluru, 562125',
+            '+91 96637 73871 / +91 98250 12345',
+            'sales@amaceramics.in',
+            'www.amaceramics.in',
+            '24AAACA5678Q1Z4',
+            'Karnataka',
+            '29',
+            'ICICI Bank',
+            'AMA Ceramics Private Limited',
+            '743205000413',
+            'ICIC0007432',
+            'Dommasandra',
+            'Current Account',
+            'GPay / PhonePe / Paytm / UPI: amaceramics@icici\nCheques in favor of: AMA CERAMICS PRIVATE LIMITED',
+            'Store Manager',
+            'Rajesh Sharma',
+            '+91 98250 12345',
+            'Showroom Sales Associate',
+            JSON.stringify(defaultTerms),
+          ]
+        );
+        logger.info('Default company settings row created successfully.');
+      }
     }
   } catch (err: any) {
     logger.warn('Bootstrap data check warning:', err.message);

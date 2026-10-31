@@ -11,7 +11,15 @@ interface Props {
 
 export const Header: React.FC<Props> = ({ onOpenServerSettings, onToggleSidebar, isSidebarOpen }) => {
   const { user, logout } = useAuth();
-  const { status, serverUrl, latencyMs } = useServer();
+  const { status, serverUrl, latencyMs, company } = useServer();
+
+  const companyInitials = (company?.company_name || 'AMA')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase() || 'AMA';
 
   const getStatusBadge = () => {
     if (status === 'connected') {
@@ -67,17 +75,25 @@ export const Header: React.FC<Props> = ({ onOpenServerSettings, onToggleSidebar,
 
         {/* Brand Logo & Name */}
         <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] flex items-center justify-center font-bold text-xs tracking-wider shadow-md border border-white/20 transition-transform duration-200 hover:scale-105 shrink-0 cursor-default">
-            AMA
-          </div>
+          {company?.logo_base64 ? (
+            <img
+              src={company.logo_base64}
+              alt={company.company_name || 'Logo'}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain bg-white shadow-md border border-slate-200 shrink-0 transition-transform duration-200 hover:scale-105"
+            />
+          ) : (
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] flex items-center justify-center font-bold text-xs tracking-wider shadow-md border border-white/20 transition-transform duration-200 hover:scale-105 shrink-0 cursor-default">
+              {companyInitials}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5">
-              <h1 className="text-xs sm:text-sm font-bold text-[#0D1B2A] tracking-tight leading-none truncate">
-                AMA CERAMICS
+              <h1 className="text-xs sm:text-sm font-bold text-[#0D1B2A] tracking-tight leading-none truncate max-w-[200px] sm:max-w-[320px]">
+                {company?.company_name || 'QUOTATION SYSTEM'}
               </h1>
             </div>
-            <p className="text-[9px] sm:text-[10px] text-[#415A77] font-medium tracking-wide mt-0.5 hidden sm:block truncate">
-              Quotation Management System
+            <p className="text-[9px] sm:text-[10px] text-[#415A77] font-medium tracking-wide mt-0.5 hidden sm:block truncate max-w-[200px] sm:max-w-[320px]">
+              {company?.tagline || 'Commercial Quotation Management'}
             </p>
           </div>
         </div>

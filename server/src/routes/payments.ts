@@ -55,9 +55,23 @@ paymentsRouter.get('/:id/receipt', optionalAuthenticateToken, async (req: Reques
     doc.rect(25, 25, 545, 370).stroke('#B0B9C2');
 
     // Header
-    doc.fontSize(14).font('Helvetica-Bold').fillColor(primaryColor).text(company.company_name, 35, 35);
-    doc.fontSize(8).font('Helvetica').fillColor('#555555').text(company.address_line1 + ', ' + company.address_line2, 35, 52);
-    doc.text(`Phone: ${company.phone} | GSTIN: ${company.gstin}`, 35, 64);
+    let hasLogo = false;
+    if (company.logo_base64) {
+      try {
+        const base64Clean = company.logo_base64.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(base64Clean, 'base64');
+        doc.image(imgBuffer, 35, 30, { fit: [50, 48], align: 'center', valign: 'center' });
+        hasLogo = true;
+      } catch (err) {
+        hasLogo = false;
+      }
+    }
+    const textX = hasLogo ? 95 : 35;
+    doc.fontSize(14).font('Helvetica-Bold').fillColor(primaryColor).text(company.company_name || 'Receipt', textX, 35);
+    const addr = [company.address_line1, company.address_line2].filter(Boolean).join(', ');
+    if (addr) doc.fontSize(8).font('Helvetica').fillColor('#555555').text(addr, textX, 52);
+    const contact = [company.phone ? `Phone: ${company.phone}` : '', company.gstin ? `GSTIN: ${company.gstin}` : ''].filter(Boolean).join(' | ');
+    if (contact) doc.fontSize(8).font('Helvetica').fillColor('#555555').text(contact, textX, 64);
 
     doc.fontSize(16).font('Helvetica-Bold').fillColor(primaryColor).text('PAYMENT RECEIPT', 380, 35, { align: 'right', width: 180 });
     doc.fontSize(9).font('Helvetica-Bold').fillColor('#222222').text(`Receipt No: ${payment.payment_number}`, 380, 55, { align: 'right', width: 180 });

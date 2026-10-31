@@ -55,24 +55,26 @@ export interface QuotationPdfData {
       discount_percent?: number;
     }>;
   }>;
-  company: {
-    company_name: string;
-    tagline: string;
-    address_line1: string;
-    address_line2: string;
-    phone: string;
-    email: string;
-    website: string;
-    gstin: string;
-    bank_name: string;
-    account_name: string;
-    account_number: string;
-    ifsc_code: string;
-    branch: string;
-    store_manager_title: string;
-    store_manager_name: string;
-    sales_associate_title: string;
-    terms_json: string[];
+  company?: {
+    company_name?: string;
+    tagline?: string;
+    logo_base64?: string;
+    address_line1?: string;
+    address_line2?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    gstin?: string;
+    bank_name?: string;
+    account_name?: string;
+    account_number?: string;
+    ifsc_code?: string;
+    branch?: string;
+    upi_details?: string;
+    store_manager_title?: string;
+    store_manager_name?: string;
+    sales_associate_title?: string;
+    terms_json?: string[] | string;
   };
   encrypted?: boolean;
   encryptedMap?: Map<string, string>;
@@ -86,28 +88,35 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
   });
 
   const { quotation, areas = [] } = data;
-  const company = data.company || {
-    company_name: 'AMA Ceramics Pvt Ltd',
-    tagline: 'Exclusive Architectural Tiles & Surfaces',
-    address_line1: 'Survey No. 48, Near NH-48 Showroom Corridor',
-    address_line2: 'Bengaluru, Karnataka 560068',
-    phone: '+91 98450 12345',
-    email: 'info@amaceramics.com',
-    website: 'www.amaceramics.com',
-    gstin: '29AABCA1234F1Z5',
-    bank_name: 'ICICI Bank',
-    account_name: 'AMA Ceramics Private Limited',
-    account_number: '000205001234',
-    ifsc_code: 'ICIC0000002',
-    branch: 'Bengaluru Main Branch',
-    store_manager_title: 'Store Manager',
-    store_manager_name: 'Deepak Patel',
-    sales_associate_title: 'Sales Associate',
-    terms_json: [],
+  const rawComp = data.company || {};
+  const company = {
+    company_name: rawComp.company_name || 'Quotation Management System',
+    tagline: rawComp.tagline || '',
+    logo_base64: rawComp.logo_base64 || '',
+    address_line1: rawComp.address_line1 || '',
+    address_line2: rawComp.address_line2 || '',
+    phone: rawComp.phone || '',
+    email: rawComp.email || '',
+    website: rawComp.website || '',
+    gstin: rawComp.gstin || '',
+    bank_name: rawComp.bank_name || '',
+    account_name: rawComp.account_name || rawComp.company_name || '',
+    account_number: rawComp.account_number || '',
+    ifsc_code: rawComp.ifsc_code || '',
+    branch: rawComp.branch || '',
+    upi_details: rawComp.upi_details || '',
+    store_manager_title: rawComp.store_manager_title || 'Store Manager',
+    store_manager_name: rawComp.store_manager_name || '',
+    sales_associate_title: rawComp.sales_associate_title || 'Sales Associate',
+    terms_json: Array.isArray(rawComp.terms_json)
+      ? rawComp.terms_json
+      : (typeof rawComp.terms_json === 'string'
+          ? (() => { try { return JSON.parse(rawComp.terms_json); } catch { return []; } })()
+          : []),
   };
 
   // Colors
-  const primaryColor = '#1B365D'; // AMA Navy
+  const primaryColor = '#1B365D'; // Navy
   const secondaryColor = '#8A6D3B'; // Gold / Bronze accent
   const lightBg = '#F4F6F9';
   const tableBorder = '#D0D7DE';
@@ -121,25 +130,66 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     });
   };
 
-  // Header
+  // Header Box
   doc
     .rect(30, 30, 535, 75)
     .fillAndStroke(lightBg, tableBorder);
 
-  // Company Info (Left)
+  // Logo Rendering (if available)
+  let hasLogo = false;
+  if (company.logo_base64) {
+    try {
+      const base64Clean = company.logo_base64.replace(/^data:image\/\w+;base64,/, '');
+      const imgBuffer = Buffer.from(base64Clean, 'base64');
+      doc.image(imgBuffer, 40, 36, { fit: [65, 62], align: 'center', valign: 'center' });
+      hasLogo = true;
+    } catch (err) {
+      // If image decode fails, gracefully fallback to text-only layout
+      hasLogo = false;
+    }
+  }
+
+  const textX = hasLogo ? 115 : 45;
+  const maxTextW = hasLogo ? 260 : 330;
+
+  // Company Name
   doc
-    .fontSize(16)
+    .fontSize(14)
     .font('Helvetica-Bold')
     .fillColor(primaryColor)
-    .text(company.company_name || 'AMA Ceramics Pvt Ltd', 45, 40);
+    .text(company.company_name, textX, 38, { width: maxTextW, ellipsis: true });
 
-  doc
-    .fontSize(8)
-    .font('Helvetica')
-    .fillColor('#555555')
-    .text(company.address_line1 + ', ' + company.address_line2, 45, 58)
-    .text(`Phone: ${company.phone} | Web: ${company.website}`, 45, 70)
-    .text(`GSTIN: ${company.gstin}`, 45, 82);
+  // Address
+  const addrParts = [company.address_line1, company.address_line2].filter(Boolean);
+  if (addrParts.length > 0) {
+    doc
+      .fontSize(8)
+      .font('Helvetica')
+      .fillColor('#555555')
+      .text(addrParts.join(', '), textX, 55, { width: maxTextW, ellipsis: true });
+  }
+
+  // Contact line
+  const contactParts: string[] = [];
+  if (company.phone) contactParts.push(`Phone: ${company.phone}`);
+  if (company.website) contactParts.push(`Web: ${company.website}`);
+  if (company.email && contactParts.length < 2) contactParts.push(`Email: ${company.email}`);
+  if (contactParts.length > 0) {
+    doc
+      .fontSize(7.5)
+      .font('Helvetica')
+      .fillColor('#555555')
+      .text(contactParts.join(' | '), textX, 67, { width: maxTextW, ellipsis: true });
+  }
+
+  // GSTIN
+  if (company.gstin) {
+    doc
+      .fontSize(7.5)
+      .font('Helvetica-Bold')
+      .fillColor('#333333')
+      .text(`GSTIN: ${company.gstin}`, textX, 78, { width: maxTextW, ellipsis: true });
+  }
 
   // QUOTATION Title (Right)
   doc
@@ -599,7 +649,7 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
       .font('Helvetica')
       .fillColor('#888888')
       .text(
-        `AMA Ceramics Pvt Ltd — Ref: ${quotation.quotation_number}${isEncrypted ? ' (Encrypted Export)' : ''} — Page ${i + 1} of ${totalPages}`,
+        `${company.company_name || 'Quotation'} — Ref: ${quotation.quotation_number}${isEncrypted ? ' (Encrypted Export)' : ''} — Page ${i + 1} of ${totalPages}`,
         30,
         794,
         { align: 'center', width: 535, lineBreak: false }

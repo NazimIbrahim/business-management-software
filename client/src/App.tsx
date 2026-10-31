@@ -40,7 +40,7 @@ const AppContent: React.FC = () => {
       <div className="h-screen flex items-center justify-center bg-slate-100">
         <div className="text-center">
           <div className="w-9 h-9 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-xs font-semibold text-slate-700">Loading AMA Quotation System...</p>
+          <p className="text-xs font-semibold text-slate-700">Loading Quotation System...</p>
         </div>
       </div>
     );

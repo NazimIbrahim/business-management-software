@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { CompanySettings } from '../types';
 
 // Extend window for Electron API
 declare global {
@@ -31,6 +32,8 @@ interface ServerContextType {
   subscribeToEvents: (callback: (event: any) => void) => () => void;
   openServerWizard: boolean;
   setOpenServerWizard: (open: boolean) => void;
+  company: CompanySettings | null;
+  reloadCompany: () => Promise<void>;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -44,6 +47,14 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [openServerWizard, setOpenServerWizard] = useState<boolean>(false);
+  const [company, setCompany] = useState<CompanySettings | null>(() => {
+    try {
+      const cached = localStorage.getItem('ama_company_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const wsRef = useRef<WebSocket | null>(null);
   const subscribersRef = useRef<Set<(event: any) => void>>(new Set());
@@ -145,6 +156,29 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Reload company settings from server
+  const reloadCompany = useCallback(async () => {
+    try {
+      const fullUrl = `${serverUrl}/api/company`;
+      const token = localStorage.getItem('ama_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(fullUrl, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.company) {
+          setCompany(data.company);
+          try {
+            localStorage.setItem('ama_company_cache', JSON.stringify(data.company));
+          } catch {}
+        }
+      }
+    } catch {
+      // background refresh error, ignore
+    }
+  }, [serverUrl]);
+
   // Connect WebSocket for LAN real-time notifications
   const connectWebSocket = useCallback((urlToUse: string) => {
     if (wsRef.current) {
@@ -182,6 +216,17 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           } else {
             setLastSyncTime(new Date());
+            if (data.type === 'SETTINGS_UPDATED') {
+              const incomingComp = data.payload?.company || data.company;
+              if (incomingComp) {
+                setCompany(incomingComp);
+                try {
+                  localStorage.setItem('ama_company_cache', JSON.stringify(incomingComp));
+                } catch {}
+              } else {
+                reloadCompany();
+              }
+            }
             // Broadcast to subscribers
             subscribersRef.current.forEach((cb) => cb(data));
           }
@@ -292,6 +337,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [serverUrl]
   );
 
+  useEffect(() => {
+    reloadCompany();
+  }, [reloadCompany]);
+
   return (
     <ServerContext.Provider
       value={{
@@ -308,6 +357,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         subscribeToEvents,
         openServerWizard,
         setOpenServerWizard,
+        company,
+        reloadCompany,
       }}
     >
       {children}

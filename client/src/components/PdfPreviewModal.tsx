@@ -229,7 +229,7 @@ export const PdfPreviewModal: React.FC<Props> = ({
                   <RefreshCw size={20} className="animate-spin text-[#778DA9]" />
                 </div>
                 <p className="text-xs font-bold text-[#0D1B2A]">Generating Official PDF Document...</p>
-                <p className="text-[11px] text-[#415A77] mt-0.5">AMA High-Performance Formatting Engine</p>
+                <p className="text-[11px] text-[#415A77] mt-0.5">High-Performance Formatting Engine</p>
               </div>
             </div>
           )}

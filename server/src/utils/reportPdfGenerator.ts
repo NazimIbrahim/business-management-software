@@ -236,7 +236,7 @@ export function generateTableReportPdf(options: ReportPdfOptions): PDFKit.PDFDoc
     doc.switchToPage(i);
     doc.fontSize(6.5).font('Helvetica').fillColor('#94A3B8');
     doc.text(
-      `AMA Ceramics Quotation Management System  •  Confidential Financial Document`,
+      `${company.company_name || 'Quotation Management System'}  •  Confidential Financial Document`,
       margin,
       pageHeight - margin + 8,
       { width: usableWidth / 2, align: 'left' }
