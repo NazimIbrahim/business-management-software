@@ -79,7 +79,7 @@ export const Header: React.FC<Props> = ({ onOpenServerSettings, onToggleSidebar,
             <img
               src={company.logo_base64}
               alt={company.company_name || 'Logo'}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain bg-white shadow-md border border-slate-200 shrink-0 transition-transform duration-200 hover:scale-105"
+              className="h-7 sm:h-8 max-w-[120px] w-auto rounded-lg object-contain bg-white shadow-md border border-slate-200 shrink-0 transition-transform duration-200 hover:scale-105"
             />
           ) : (
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] flex items-center justify-center font-bold text-xs tracking-wider shadow-md border border-white/20 transition-transform duration-200 hover:scale-105 shrink-0 cursor-default">

@@ -67,11 +67,22 @@ paymentsRouter.get('/:id/receipt', optionalAuthenticateToken, async (req: Reques
       }
     }
     const textX = hasLogo ? 95 : 35;
-    doc.fontSize(14).font('Helvetica-Bold').fillColor(primaryColor).text(company.company_name || 'Receipt', textX, 35);
-    const addr = [company.address_line1, company.address_line2].filter(Boolean).join(', ');
-    if (addr) doc.fontSize(8).font('Helvetica').fillColor('#555555').text(addr, textX, 52);
+    let curY = 33;
+    doc.fontSize(13).font('Helvetica-Bold').fillColor(primaryColor).text(company.company_name || 'Receipt', textX, curY);
+    curY += doc.heightOfString(company.company_name || 'Receipt') + 2;
+
+    if (company.address_line1) {
+      doc.fontSize(7.5).font('Helvetica').fillColor('#555555').text(company.address_line1, textX, curY);
+      curY += doc.heightOfString(company.address_line1) + 1;
+    }
+    if (company.address_line2) {
+      doc.fontSize(7.5).font('Helvetica').fillColor('#555555').text(company.address_line2, textX, curY);
+      curY += doc.heightOfString(company.address_line2) + 1;
+    }
     const contact = [company.phone ? `Phone: ${company.phone}` : '', company.gstin ? `GSTIN: ${company.gstin}` : ''].filter(Boolean).join(' | ');
-    if (contact) doc.fontSize(8).font('Helvetica').fillColor('#555555').text(contact, textX, 64);
+    if (contact) {
+      doc.fontSize(7.5).font('Helvetica').fillColor('#555555').text(contact, textX, curY);
+    }
 
     doc.fontSize(16).font('Helvetica-Bold').fillColor(primaryColor).text('PAYMENT RECEIPT', 380, 35, { align: 'right', width: 180 });
     doc.fontSize(9).font('Helvetica-Bold').fillColor('#222222').text(`Receipt No: ${payment.payment_number}`, 380, 55, { align: 'right', width: 180 });

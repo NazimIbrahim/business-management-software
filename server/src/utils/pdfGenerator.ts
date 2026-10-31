@@ -132,7 +132,7 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
 
   // Header Box
   doc
-    .rect(30, 30, 535, 75)
+    .rect(30, 26, 535, 84)
     .fillAndStroke(lightBg, tableBorder);
 
   // Logo Rendering (if available)
@@ -141,7 +141,7 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     try {
       const base64Clean = company.logo_base64.replace(/^data:image\/\w+;base64,/, '');
       const imgBuffer = Buffer.from(base64Clean, 'base64');
-      doc.image(imgBuffer, 40, 36, { fit: [65, 62], align: 'center', valign: 'center' });
+      doc.image(imgBuffer, 38, 34, { fit: [72, 68], align: 'center', valign: 'center' });
       hasLogo = true;
     } catch (err) {
       // If image decode fails, gracefully fallback to text-only layout
@@ -149,65 +149,90 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     }
   }
 
-  const textX = hasLogo ? 115 : 45;
-  const maxTextW = hasLogo ? 260 : 330;
+  const textX = hasLogo ? 118 : 42;
+  const maxTextW = hasLogo ? 268 : 340;
 
-  // Company Name
+  let curY = 32;
+
+  // 1. Company Name
   doc
-    .fontSize(14)
+    .fontSize(13)
     .font('Helvetica-Bold')
     .fillColor(primaryColor)
-    .text(company.company_name, textX, 38, { width: maxTextW, ellipsis: true });
+    .text(company.company_name, textX, curY, { width: maxTextW, ellipsis: true });
+  curY += doc.heightOfString(company.company_name, { width: maxTextW }) + 1.5;
 
-  // Address
-  const addrParts = [company.address_line1, company.address_line2].filter(Boolean);
-  if (addrParts.length > 0) {
+  // 2. Tagline (if set and distinct from company name)
+  if (company.tagline && company.tagline !== company.company_name) {
     doc
-      .fontSize(8)
-      .font('Helvetica')
-      .fillColor('#555555')
-      .text(addrParts.join(', '), textX, 55, { width: maxTextW, ellipsis: true });
+      .fontSize(7)
+      .font('Helvetica-Oblique')
+      .fillColor('#64748B')
+      .text(company.tagline, textX, curY, { width: maxTextW, ellipsis: true });
+    curY += doc.heightOfString(company.tagline, { width: maxTextW }) + 1;
   }
 
-  // Contact line
+  // 3. Address Line 1
+  if (company.address_line1) {
+    doc
+      .fontSize(7.5)
+      .font('Helvetica')
+      .fillColor('#475569')
+      .text(company.address_line1, textX, curY, { width: maxTextW });
+    curY += doc.heightOfString(company.address_line1, { width: maxTextW }) + 1;
+  }
+
+  // 4. Address Line 2
+  if (company.address_line2) {
+    doc
+      .fontSize(7.5)
+      .font('Helvetica')
+      .fillColor('#475569')
+      .text(company.address_line2, textX, curY, { width: maxTextW });
+    curY += doc.heightOfString(company.address_line2, { width: maxTextW }) + 1;
+  }
+
+  // 5. Contact line (Phone | Web | Email)
   const contactParts: string[] = [];
   if (company.phone) contactParts.push(`Phone: ${company.phone}`);
   if (company.website) contactParts.push(`Web: ${company.website}`);
   if (company.email && contactParts.length < 2) contactParts.push(`Email: ${company.email}`);
   if (contactParts.length > 0) {
+    const contactText = contactParts.join(' | ');
     doc
       .fontSize(7.5)
       .font('Helvetica')
-      .fillColor('#555555')
-      .text(contactParts.join(' | '), textX, 67, { width: maxTextW, ellipsis: true });
+      .fillColor('#475569')
+      .text(contactText, textX, curY, { width: maxTextW, ellipsis: true });
+    curY += doc.heightOfString(contactText, { width: maxTextW }) + 1;
   }
 
-  // GSTIN
+  // 6. GSTIN
   if (company.gstin) {
     doc
       .fontSize(7.5)
       .font('Helvetica-Bold')
-      .fillColor('#333333')
-      .text(`GSTIN: ${company.gstin}`, textX, 78, { width: maxTextW, ellipsis: true });
+      .fillColor('#0F172A')
+      .text(`GSTIN: ${company.gstin}`, textX, curY, { width: maxTextW, ellipsis: true });
   }
 
   // QUOTATION Title (Right)
   doc
-    .fontSize(18)
+    .fontSize(17)
     .font('Helvetica-Bold')
     .fillColor(primaryColor)
-    .text('QUOTATION', 380, 42, { align: 'right', width: 170 });
+    .text('QUOTATION', 390, 32, { align: 'right', width: 165 });
 
   doc
-    .fontSize(9)
+    .fontSize(8.5)
     .font('Helvetica-Bold')
     .fillColor(textColor)
-    .text(`Ref: ${quotation.quotation_number}`, 380, 64, { align: 'right', width: 170 })
-    .text(`Date: ${new Date(quotation.quotation_date).toLocaleDateString('en-GB')}`, 380, 78, { align: 'right', width: 170 })
-    .text(`Status: ${quotation.status.toUpperCase()}`, 380, 92, { align: 'right', width: 170 });
+    .text(`Ref: ${quotation.quotation_number}`, 390, 54, { align: 'right', width: 165 })
+    .text(`Date: ${new Date(quotation.quotation_date).toLocaleDateString('en-GB')}`, 390, 67, { align: 'right', width: 165 })
+    .text(`Status: ${quotation.status.toUpperCase()}`, 390, 80, { align: 'right', width: 165 });
 
   // Customer & Salesperson Info Box
-  const customerBoxY = 115;
+  const customerBoxY = 116;
   doc
     .rect(30, customerBoxY, 535, 55)
     .fillAndStroke('#FFFFFF', tableBorder);

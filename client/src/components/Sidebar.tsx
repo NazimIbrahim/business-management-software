@@ -357,7 +357,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
               <img
                 src={company.logo_base64}
                 alt={company.company_name || 'Logo'}
-                className="w-7 h-7 rounded-lg object-contain bg-white shadow-sm shrink-0"
+                className="h-7 max-w-[100px] w-auto rounded-lg object-contain bg-white shadow-sm shrink-0"
               />
             ) : (
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] border border-white/20 flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
