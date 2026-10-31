@@ -136,19 +136,30 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
 
       // Detect category from page text
       let pageCategory = 'Water Closet';
-      const first35 = items.slice(0, 35).map((it) => (it.str || '').toLowerCase()).join(' ');
-      if (first35.includes('faucet') || first35.includes('mixer') || first35.includes('tap') || first35.includes('spout') || first35.includes('cock')) {
-        pageCategory = 'Faucet';
-      } else if (first35.includes('basin') || first35.includes('counter top') || first35.includes('table top') || first35.includes('vanity') || first35.includes('sink')) {
-        pageCategory = 'Wash Basin';
-      } else if (first35.includes('urinal')) {
-        pageCategory = 'Urinal';
-      } else if (first35.includes('shower') || first35.includes('diverter') || first35.includes('overhead')) {
-        pageCategory = 'Shower';
-      } else if (first35.includes('accessories') || first35.includes('towel') || first35.includes('holder') || first35.includes('soap')) {
-        pageCategory = 'Bath Accessories';
-      } else if (first35.includes('closet') || first35.includes('ewc') || first35.includes('toilet') || first35.includes('commode') || first35.includes('squatting')) {
+      const headerText = items.slice(0, 50).map((it) => (it.str || '').toLowerCase()).join(' ');
+      if (
+        headerText.includes('cistern') ||
+        headerText.includes('actuation') ||
+        headerText.includes('flush plate') ||
+        headerText.includes('closet') ||
+        headerText.includes('ewc') ||
+        headerText.includes('toilet') ||
+        headerText.includes('commode') ||
+        headerText.includes('squatting')
+      ) {
         pageCategory = 'Water Closet';
+      } else if (headerText.includes('basin') || headerText.includes('counter top') || headerText.includes('table top') || headerText.includes('vanity') || headerText.includes('sink')) {
+        pageCategory = 'Wash Basin';
+      } else if (headerText.includes('urinal')) {
+        pageCategory = 'Urinal';
+      } else if (headerText.includes('shower') || headerText.includes('overhead')) {
+        pageCategory = 'Shower';
+      } else if (headerText.includes('diverter')) {
+        pageCategory = 'Diverter';
+      } else if (headerText.includes('faucet') || headerText.includes('mixer') || headerText.includes('tap') || headerText.includes('spout') || headerText.includes('cock')) {
+        pageCategory = 'Faucet';
+      } else if (headerText.includes('accessories') || headerText.includes('towel') || headerText.includes('holder') || headerText.includes('soap')) {
+        pageCategory = 'Bath Accessories';
       }
 
       // Skip pure certification / index / appendix table pages
@@ -485,13 +496,45 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
           const str = (it.str || '').trim();
           if (!str || !it.transform) continue;
 
+          // Check lookback to ensure this line is not part of a multi-line compatibility/accessory note
+          let isCompat = false;
+          for (let lookback = 1; lookback <= 4; lookback++) {
+            if (i - lookback >= 0) {
+              const prevStr = (items[i - lookback].str || '').toLowerCase();
+              const prevY = items[i - lookback].transform[5];
+              const curY = it.transform[5];
+              if (Math.abs(prevY - curY) <= 35) {
+                if (
+                  prevStr.includes('compatible') ||
+                  prevStr.includes('suitable') ||
+                  prevStr.includes('comp.') ||
+                  prevStr.includes('fits with') ||
+                  prevStr.includes('use with') ||
+                  prevStr.includes('matches with') ||
+                  prevStr.includes('must order')
+                ) {
+                  isCompat = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (isCompat) continue;
+
           // Skip non-product accessory notes and parenthesized strings
+          const lowerStr = str.toLowerCase();
           if (
-            str.toLowerCase().startsWith('with ') ||
-            str.toLowerCase().includes('(comp') ||
-            str.toLowerCase().includes('compatible with') ||
-            str.toLowerCase().includes('suitable for') ||
-            str.toLowerCase().startsWith('page') ||
+            lowerStr.startsWith('with ') ||
+            lowerStr.includes('(comp') ||
+            lowerStr.includes('compatible with') ||
+            lowerStr.includes('suitable for') ||
+            lowerStr.includes('fits with') ||
+            lowerStr.startsWith('page') ||
+            str.startsWith('&') ||
+            str.startsWith('+') ||
+            str.startsWith(',') ||
+            str.includes(',') ||
+            (str.includes('&') && !str.includes(' - ')) ||
             (str.startsWith('(') && str.endsWith(')'))
           ) {
             continue;
@@ -648,10 +691,14 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
               const dy = cand.pdfY - iy;
 
               if (dx >= -40 && dx <= 160 && dy > 0 && dy < 75) {
+                const lower = str.toLowerCase();
                 if (
                   str !== '`' &&
                   str !== '₹' &&
-                  !str.toLowerCase().startsWith('per piece') &&
+                  !lower.startsWith('per piece') &&
+                  !lower.startsWith('also available') &&
+                  !lower.includes('compatible') &&
+                  !lower.includes('suitable') &&
                   !str.match(codeRegex) &&
                   !parsePrice(str)
                 ) {
@@ -672,9 +719,13 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
                 const dx = Math.abs(ix - cand.pdfX);
                 if (dy > 0 && dy <= 160 && dx <= 70) {
                   const s = (it.str || '').trim();
+                  const sl = s.toLowerCase();
                   if (
-                    s.length >= 8 &&
+                    s.length >= 6 &&
                     !s.includes('/') &&
+                    !sl.startsWith('also available') &&
+                    !sl.includes('compatible') &&
+                    !sl.includes('suitable') &&
                     !codeRegex.test(s) &&
                     !parsePrice(s)
                   ) {
@@ -685,9 +736,21 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
               }
             }
 
-            const cleanDesc =
-              descLines.join(' ').replace(/\s+/g, ' ').trim() ||
-              `${brandToUse} ${cand.code} ${pageCategory}`;
+            let cleanDesc = descLines.join(' ').replace(/\s+/g, ' ').trim();
+            cleanDesc = cleanDesc.replace(/\s*\((?:comp|suitable)[^)]*(?:\)|$)/gi, '').trim();
+            cleanDesc = cleanDesc.replace(/\s*(?:compatible with|suitable for).*/gi, '').trim();
+            cleanDesc = cleanDesc.replace(/\s*also available.*/gi, '').trim();
+
+            // Always ensure cand.modelTitle (e.g. ABRIN, HALO, EVORA) is prominently included
+            if (cand.modelTitle) {
+              if (!cleanDesc.toUpperCase().includes(cand.modelTitle.toUpperCase())) {
+                cleanDesc = cleanDesc ? `${cand.modelTitle} - ${cleanDesc}` : `${cand.modelTitle} ${brandToUse} ${pageCategory}`;
+              }
+            }
+
+            if (!cleanDesc) {
+              cleanDesc = `${brandToUse} ${cand.code} ${pageCategory}`;
+            }
 
             let photoDataUrl = '';
             if (clusterImg) {
@@ -1502,9 +1565,27 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
           </div>
         )}
         {importSuccess && (
-          <div className="mx-6 mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold flex items-center space-x-2 shrink-0">
-            <Check size={16} className="shrink-0 text-emerald-600" />
-            <span>{importSuccess}</span>
+          <div className="mx-6 mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold flex items-center justify-between shrink-0 shadow-xs">
+            <div className="flex items-center space-x-2">
+              <Check size={16} className="shrink-0 text-emerald-600" />
+              <span>{importSuccess}</span>
+            </div>
+            {stagedItems.length > 0 && (
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={handleSaveToCatalog}
+                className="btn btn-success btn-xs px-3.5 py-1.5 font-extrabold rounded-lg text-white shadow cursor-pointer ml-3 shrink-0 flex items-center space-x-1"
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#FFFFFF',
+                  border: '1px solid #065F46',
+                }}
+              >
+                {isImporting ? <RefreshCw size={12} className="animate-spin text-white" /> : <Check size={12} className="text-white" />}
+                <span>{isImporting ? 'Saving...' : `Save ${stagedItems.length} Items to Catalog`}</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -1991,14 +2072,22 @@ export const SanitaryPdfCatalogUploaderModal: React.FC<Props> = ({
                 type="button"
                 disabled={stagedItems.length === 0 || isImporting}
                 onClick={handleSaveToCatalog}
-                className="btn btn-sm bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold flex items-center space-x-1.5 px-4 py-2 rounded-xl shadow-xs"
+                className="btn btn-success btn-sm font-extrabold flex items-center space-x-2 px-5 py-2.5 rounded-xl shadow-md cursor-pointer transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                style={{
+                  background: stagedItems.length > 0 ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : '#94A3B8',
+                  color: '#FFFFFF',
+                  border: '1px solid #065F46',
+                  boxShadow: stagedItems.length > 0 ? '0 4px 14px rgba(5, 150, 105, 0.4)' : 'none',
+                }}
               >
                 {isImporting ? (
-                  <RefreshCw size={14} className="animate-spin" />
+                  <RefreshCw size={15} className="animate-spin text-white" />
                 ) : (
-                  <Check size={14} />
+                  <Check size={15} className="text-white" />
                 )}
-                <span>{isImporting ? 'Importing...' : `Save ${stagedItems.length} Items to Catalog`}</span>
+                <span className="text-white font-bold text-xs">
+                  {isImporting ? 'Saving to Database...' : `Save ${stagedItems.length} Items to Catalog`}
+                </span>
               </button>
             </div>
           </div>

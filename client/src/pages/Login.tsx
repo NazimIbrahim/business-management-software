@@ -4,14 +4,13 @@ import { useServer } from '../context/ServerContext';
 import {
   Server,
   AlertCircle,
-  ShieldCheck,
   User as UserIcon,
   Lock,
-  ArrowRight,
   Eye,
   EyeOff,
   Sparkles,
-  KeyRound,
+  LogIn,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Props {
@@ -19,34 +18,20 @@ interface Props {
 }
 
 export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
-  const { login, loginAsRole } = useAuth();
+  const { login } = useAuth();
   const { status, serverUrl } = useServer();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [adminLoading, setAdminLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1-Click Administrator Instant Login
-  const handleAdminLogin = async () => {
-    setError(null);
-    setAdminLoading(true);
-    try {
-      await loginAsRole('admin');
-    } catch (err: any) {
-      setError(err.message || 'Administrator login failed. Please verify the host server connection.');
-    } finally {
-      setAdminLoading(false);
-    }
-  };
-
-  // Standard Login with Username & Password (for Salespersons & Staff)
+  // Standard Login with Username & Password (for All Roles: Admin, Salespersons & Staff)
   const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError('Please enter both username and password.');
+      setError('Please enter both your username and password.');
       return;
     }
 
@@ -55,7 +40,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
     try {
       await login(username.trim(), password);
     } catch (err: any) {
-      setError(err.message || 'Invalid username or password. Please contact your Administrator.');
+      setError(err.message || 'Invalid username or password. Please verify your credentials or contact Administrator.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +48,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
   return (
     <div className="min-h-screen bg-[#F4F5F7] flex flex-col justify-center items-center p-4">
-      <div className="card w-full max-w-lg overflow-hidden shadow-2xl border border-[#CBD5E1] animate-page-enter">
+      <div className="card w-full max-w-md overflow-hidden shadow-2xl border border-[#CBD5E1] animate-page-enter">
         {/* Top Header Banner */}
         <div className="bg-[#0D1B2A] text-[#E0E1DD] p-6 text-center relative">
           <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-[11px] font-semibold tracking-wider uppercase mb-2.5 border border-emerald-400/30">
@@ -84,7 +69,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                 status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
               }`}
             ></span>
-            <span className="text-slate-700 font-mono text-[11px] font-semibold truncate max-w-[240px]">
+            <span className="text-slate-700 font-mono text-[11px] font-semibold truncate max-w-[220px]">
               {serverUrl}
             </span>
           </div>
@@ -125,71 +110,25 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             </div>
           )}
 
-          {/* 1. Quick Administrator Access Card */}
-          <div className="border border-indigo-200 rounded-xl p-4 bg-gradient-to-r from-indigo-50/70 to-slate-50 relative overflow-hidden shadow-2xs">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-                  <ShieldCheck size={22} />
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h2 className="font-extrabold text-slate-900 text-sm">Administrator Access</h2>
-                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Admin Role
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Full control, user management, password reset & permissions
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3.5 pt-3 border-t border-indigo-100/80 flex items-center justify-between">
-              <span className="text-[11px] text-indigo-700 font-semibold flex items-center space-x-1">
-                <Sparkles size={13} className="text-indigo-500" />
-                <span>1-Click Instant Login Active</span>
-              </span>
-              <button
-                type="button"
-                disabled={adminLoading || loading}
-                onClick={handleAdminLogin}
-                className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white font-bold border-none shadow px-4 flex items-center space-x-1.5 cursor-pointer"
-              >
-                <span>{adminLoading ? 'Signing in...' : 'Sign In as Administrator'}</span>
-                <ArrowRight size={13} />
-              </button>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-3 text-slate-400 text-[11px] uppercase tracking-wider font-bold">
-              Or Sign In With Credentials
-            </span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-
-          {/* 2. Salesperson & Staff Login Form */}
-          <form onSubmit={handleCredentialSubmit} className="space-y-3.5">
+          {/* Secure Credential Login Form */}
+          <form onSubmit={handleCredentialSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Username or Email
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <UserIcon size={15} />
+                  <UserIcon size={16} />
                 </div>
                 <input
                   type="text"
                   className="input pl-9 text-xs w-full font-medium"
-                  placeholder="Enter your unique salesperson username..."
+                  placeholder="Enter your username or email..."
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  disabled={loading || adminLoading}
+                  disabled={loading}
                   autoComplete="username"
+                  autoFocus
                 />
               </div>
             </div>
@@ -200,7 +139,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock size={15} />
+                  <Lock size={16} />
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -208,38 +147,54 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                   placeholder="Enter your password..."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading || adminLoading}
+                  disabled={loading}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
+            {/* Prominent High-Contrast Login Button */}
             <button
               type="submit"
-              disabled={loading || adminLoading || !username.trim() || !password}
-              className="btn btn-primary w-full py-2.5 text-xs font-bold flex items-center justify-center space-x-1.5 shadow-md cursor-pointer mt-2"
+              disabled={loading}
+              className="btn btn-primary w-full py-3 text-sm font-extrabold flex items-center justify-center space-x-2 shadow-lg cursor-pointer mt-4 rounded-xl text-white transition-all transform hover:scale-[1.01] active:scale-[0.99]"
+              style={{
+                background: 'linear-gradient(135deg, #1B263B 0%, #0D1B2A 100%)',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                boxShadow: '0 4px 14px rgba(13, 27, 42, 0.35)',
+              }}
             >
-              <KeyRound size={14} />
-              <span>{loading ? 'Authenticating...' : 'Sign In with Credentials'}</span>
+              {loading ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin text-white" />
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <LogIn size={16} className="text-white" />
+                  <span>Sign In</span>
+                </>
+              )}
             </button>
 
-            <p className="text-[11px] text-slate-400 text-center pt-1">
-              Every sales associate has unique login credentials assigned and managed by the Administrator.
+            <p className="text-[11px] text-slate-500 text-center pt-2">
+              Please log in with your assigned credentials. Session is securely authenticated.
             </p>
           </form>
         </div>
 
         <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 flex justify-between">
           <span>Security: Direct LAN / Cloud Session</span>
-          <span>AMA Quotation System v2.4.13</span>
+          <span>AMA Quotation System v2.4.14</span>
         </div>
       </div>
     </div>

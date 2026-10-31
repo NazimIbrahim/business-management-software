@@ -235,7 +235,12 @@ async function upsertCatalogItem(item: any, catalog_name?: string): Promise<any[
         brand = EXCLUDED.brand,
         category = EXCLUDED.category,
         item_description = CASE 
-          WHEN sanitary_catalog_items.item_image IS NOT NULL AND length(sanitary_catalog_items.item_image) > 500 AND (EXCLUDED.item_image IS NULL OR length(EXCLUDED.item_image) <= 500) THEN sanitary_catalog_items.item_description
+          WHEN LOWER(EXCLUDED.item_description) LIKE 'per piece%' 
+            OR LOWER(EXCLUDED.item_description) LIKE 'also available%' 
+            OR LOWER(EXCLUDED.item_description) LIKE 'compatible%'
+            OR LOWER(EXCLUDED.item_description) LIKE '(comp%' THEN sanitary_catalog_items.item_description
+          WHEN length(sanitary_catalog_items.item_description) > length(EXCLUDED.item_description) + 15 
+            AND sanitary_catalog_items.item_image IS NOT NULL AND length(sanitary_catalog_items.item_image) > 500 THEN sanitary_catalog_items.item_description
           ELSE EXCLUDED.item_description
         END,
         mrp_price = CASE 
@@ -280,7 +285,12 @@ async function upsertCatalogItem(item: any, catalog_name?: string): Promise<any[
             brand = EXCLUDED.brand,
             category = EXCLUDED.category,
             item_description = CASE 
-              WHEN sanitary_catalog_items.item_image IS NOT NULL AND length(sanitary_catalog_items.item_image) > 500 AND (EXCLUDED.item_image IS NULL OR length(EXCLUDED.item_image) <= 500) THEN sanitary_catalog_items.item_description
+              WHEN LOWER(EXCLUDED.item_description) LIKE 'per piece%' 
+                OR LOWER(EXCLUDED.item_description) LIKE 'also available%' 
+                OR LOWER(EXCLUDED.item_description) LIKE 'compatible%'
+                OR LOWER(EXCLUDED.item_description) LIKE '(comp%' THEN sanitary_catalog_items.item_description
+              WHEN length(sanitary_catalog_items.item_description) > length(EXCLUDED.item_description) + 15 
+                AND sanitary_catalog_items.item_image IS NOT NULL AND length(sanitary_catalog_items.item_image) > 500 THEN sanitary_catalog_items.item_description
               ELSE EXCLUDED.item_description
             END,
             mrp_price = CASE 
