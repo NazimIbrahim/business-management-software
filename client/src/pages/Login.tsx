@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import {
@@ -28,7 +28,37 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Standard Login with Username & Password (for All Roles: Admin, Salespersons & Staff)
+  // Generate 40 deterministic pseudo-random floating particles across the black background
+  const particles = useMemo(() => {
+    const colors = [
+      'rgba(56, 189, 248, 0.85)',  // cyan
+      'rgba(99, 102, 241, 0.85)',  // indigo
+      'rgba(168, 85, 247, 0.85)',  // purple
+      'rgba(52, 211, 153, 0.85)',  // emerald
+      'rgba(251, 191, 36, 0.8)',   // amber
+      'rgba(255, 255, 255, 0.9)',  // white star
+    ];
+
+    return Array.from({ length: 42 }, (_, i) => {
+      const left = ((i * 19 + 7) % 94) + 3; // 3% to 97%
+      const top = ((i * 29 + 11) % 94) + 3; // 3% to 97%
+      const size = (i % 4) + 2.5;           // 2.5px to 5.5px
+      const duration = 6 + (i % 8) * 2;     // 6s to 20s
+      const delay = -((i * 1.7) % 12);      // -0s to -12s
+      const color = colors[i % colors.length];
+
+      return {
+        id: i,
+        left: `${left}%`,
+        top: `${top}%`,
+        size,
+        duration: `${duration}s`,
+        delay: `${delay}s`,
+        color,
+      };
+    });
+  }, []);
+
   const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) {
@@ -48,177 +78,414 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#0a0f1d] flex flex-col justify-center items-center p-4 selection:bg-indigo-500 selection:text-white">
-      {/* Dynamic Animated Ambient Background */}
+    <div className="login-universe-bg">
+      {/* Random Floating Glowing Particles across Black Background */}
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="login-particle"
+          style={{
+            left: p.left,
+            top: p.top,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+          }}
+        />
+      ))}
+
+      {/* Ambient Pulsing Glow Nebulae in Background */}
+      <div className="login-nebula-1" />
+      <div className="login-nebula-2" />
+      <div className="login-nebula-3" />
+
+      {/* Centered Minimalistic Login Card in the Classic Style */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-20"
+        className="card animate-page-enter"
         style={{
-          backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px)`,
-          backgroundSize: '24px 24px',
+          width: '100%',
+          maxWidth: '430px',
+          margin: '0 auto',
+          position: 'relative',
+          zIndex: 10,
+          overflow: 'hidden',
+          borderRadius: '1rem',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.1)',
         }}
-      />
-
-      {/* Floating Glowing Ambient Orbs */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-cyan-500/20 blur-3xl animate-login-orb-1 pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-indigo-500/20 blur-3xl animate-login-orb-2 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full bg-blue-600/10 blur-[120px] animate-login-orb-3 pointer-events-none" />
-
-      {/* Sleek Minimalistic Unified Glassmorphic Login Card */}
-      <div className="relative z-10 w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] border border-white/60 p-7 sm:p-9 animate-page-enter">
-        {/* Harmonious Header with Logo & Typography */}
-        <div className="text-center">
+      >
+        {/* Top Header Banner - Clean Minimalist Dark Navy */}
+        <div
+          style={{
+            backgroundColor: '#0D1B2A',
+            color: '#E0E1DD',
+            padding: '1.5rem',
+            textAlign: 'center',
+            position: 'relative',
+          }}
+        >
           {company?.logo_base64 ? (
-            <div className="flex justify-center mb-4">
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
               <img
                 src={company.logo_base64}
                 alt={company.company_name || 'Logo'}
-                className="max-h-16 max-w-[210px] w-auto object-contain transition-transform duration-300 hover:scale-105"
+                style={{
+                  maxHeight: '58px',
+                  maxWidth: '220px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
               />
             </div>
           ) : (
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-center font-black text-xl shadow-lg mx-auto mb-4 tracking-wider">
+            <div
+              style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '0.75rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.25rem',
+                margin: '0 auto 0.75rem auto',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+              }}
+            >
               {(company?.company_name || 'AMA').slice(0, 3).toUpperCase()}
             </div>
           )}
 
-          <div className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/80 mb-2">
-            <Sparkles size={11} className="text-indigo-600" />
-            <span>Quotation Network</span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.375rem',
+              padding: '0.2rem 0.65rem',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              color: '#6EE7B7',
+              borderRadius: '9999px',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: '0.5rem',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <Sparkles size={11} style={{ color: '#34D399' }} />
+            <span>Central Quotation Network</span>
           </div>
 
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+          <h1
+            style={{
+              fontSize: '1.25rem',
+              fontWeight: 900,
+              letterSpacing: '-0.02em',
+              color: '#FFFFFF',
+              margin: '0 0 0.25rem 0',
+              lineHeight: 1.2,
+            }}
+          >
             {company?.company_name || 'AMA CERAMICS PVT LTD'}
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">
+          <p
+            style={{
+              fontSize: '11px',
+              color: '#778DA9',
+              margin: 0,
+              fontWeight: 500,
+            }}
+          >
             {company?.tagline || 'Commercial Quotation Management'}
           </p>
-
-          {/* Minimalist Server Connection Pill */}
-          <div className="flex items-center justify-between px-3 py-1.5 mt-4 bg-slate-100/90 rounded-full border border-slate-200 text-[11px]">
-            <div className="flex items-center space-x-1.5 truncate max-w-[240px]">
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-                }`}
-              />
-              <span className="font-mono text-slate-600 text-[11px] truncate" title={serverUrl}>
-                {serverUrl}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={onOpenServerSettings}
-              className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center space-x-1 shrink-0 ml-2 cursor-pointer hover:underline"
-            >
-              <Server size={11} />
-              <span>Configure</span>
-            </button>
-          </div>
         </div>
 
-        {/* Server Disconnected Alert */}
-        {status !== 'connected' && (
-          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between shadow-xs">
-            <div className="flex items-center space-x-2">
-              <AlertCircle size={16} className="text-amber-600 shrink-0" />
-              <span className="font-semibold">Server disconnected</span>
-            </div>
-            <button
-              type="button"
-              onClick={onOpenServerSettings}
-              className="btn btn-primary btn-xs py-1 px-2.5 text-[10px] font-bold rounded-lg"
+        {/* Minimalist Server Connection Bar */}
+        <div
+          style={{
+            padding: '0.5rem 1.25rem',
+            backgroundColor: '#F8FAFC',
+            borderBottom: '1px solid #E2E8F0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: status === 'connected' ? '#10B981' : '#EF4444',
+                boxShadow: status === 'connected' ? '0 0 6px #10B981' : 'none',
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                color: '#475569',
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '220px',
+              }}
+              title={serverUrl}
             >
-              Connect
-            </button>
+              {serverUrl}
+            </span>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={onOpenServerSettings}
+            style={{
+              color: '#1D4ED8',
+              fontSize: '11px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              backgroundColor: '#EFF6FF',
+              padding: '0.25rem 0.5rem',
+              borderRadius: '0.375rem',
+              border: '1px solid #BFDBFE',
+              cursor: 'pointer',
+            }}
+          >
+            <Server size={11} />
+            <span>Configure Server</span>
+          </button>
+        </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-start space-x-2 shadow-xs animate-fade-in">
-            <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-600" />
-            <span className="font-medium whitespace-pre-wrap">{error}</span>
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleCredentialSubmit} className="mt-5 space-y-4">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Username or Email
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <UserIcon size={15} />
+        {/* Form Body */}
+        <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#FFFFFF' }}>
+          {status !== 'connected' && (
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                borderRadius: '0.5rem',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={15} style={{ color: '#D97706', flexShrink: 0 }} />
+                <span style={{ fontWeight: 600 }}>Server Disconnected</span>
               </div>
-              <input
-                type="text"
-                className="w-full text-xs font-medium pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-hidden text-slate-900 placeholder:text-slate-400"
-                placeholder="Enter username or email..."
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-                autoComplete="username"
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Password
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Lock size={15} />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="w-full text-xs font-mono pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-hidden text-slate-900 placeholder:text-slate-400"
-                placeholder="Enter password..."
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                autoComplete="current-password"
-              />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                tabIndex={-1}
+                onClick={onOpenServerSettings}
+                className="btn btn-primary btn-xs"
+                style={{ padding: '0.25rem 0.65rem', fontSize: '10px' }}
               >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                Connect
               </button>
             </div>
-          </div>
+          )}
 
-          {/* Minimalist High-End Sign-In Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 py-3 text-xs sm:text-sm font-bold tracking-wide flex items-center justify-center space-x-2 rounded-xl text-white bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 hover:from-slate-800 hover:to-indigo-900 shadow-lg shadow-slate-900/25 active:scale-[0.99] transition-all cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <RefreshCw size={15} className="animate-spin text-white" />
-                <span>Signing In...</span>
-              </>
-            ) : (
-              <>
-                <LogIn size={15} className="text-white" />
-                <span>Sign In</span>
-              </>
-            )}
-          </button>
-        </form>
+          {error && (
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#B91C1C',
+                borderRadius: '0.5rem',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.5rem',
+              }}
+            >
+              <AlertCircle size={15} style={{ marginTop: '1px', flexShrink: 0 }} />
+              <span style={{ fontWeight: 500, whiteSpace: 'pre-wrap' }}>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleCredentialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '0.375rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Username or Email
+              </label>
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    paddingLeft: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    color: '#94A3B8',
+                  }}
+                >
+                  <UserIcon size={15} />
+                </div>
+                <input
+                  type="text"
+                  className="input text-xs w-full font-medium"
+                  style={{ paddingLeft: '2.25rem', height: '2.4rem' }}
+                  placeholder="Enter your username or email..."
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '0.375rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Password
+              </label>
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    paddingLeft: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    color: '#94A3B8',
+                  }}
+                >
+                  <Lock size={15} />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input text-xs w-full font-mono"
+                  style={{ paddingLeft: '2.25rem', paddingRight: '2.25rem', height: '2.4rem' }}
+                  placeholder="Enter your password..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    paddingRight: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#94A3B8',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary w-full"
+              style={{
+                marginTop: '0.5rem',
+                padding: '0.75rem 1rem',
+                fontSize: '13px',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                borderRadius: '0.5rem',
+                background: 'linear-gradient(135deg, #1B263B 0%, #0D1B2A 100%)',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow: '0 4px 14px rgba(13, 27, 42, 0.35)',
+                cursor: 'pointer',
+              }}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin text-white" />
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <LogIn size={15} className="text-white" />
+                  <span>Sign In</span>
+                </>
+              )}
+            </button>
+
+            <p style={{ fontSize: '10px', color: '#94A3B8', textAlign: 'center', margin: '0.25rem 0 0 0' }}>
+              Please log in with your assigned credentials. Session is securely authenticated.
+            </p>
+          </form>
+        </div>
 
         {/* Minimal Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium">
-          <span className="flex items-center gap-1">
-            <ShieldCheck size={11} className="text-emerald-600" />
+        <div
+          style={{
+            padding: '0.625rem 1.25rem',
+            backgroundColor: '#F8FAFC',
+            borderTop: '1px solid #E2E8F0',
+            fontSize: '10px',
+            color: '#64748B',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <ShieldCheck size={12} style={{ color: '#059669' }} />
             <span>Secure Enterprise Session</span>
           </span>
-          <span>v2.4.23</span>
+          <span>{company?.company_name ? `${company.company_name} • v2.4.24` : 'Quotation System v2.4.24'}</span>
         </div>
       </div>
     </div>
