@@ -16,6 +16,8 @@ import {
   Plus,
   ShieldAlert,
   Lock,
+  Truck,
+  X,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 
@@ -37,6 +39,18 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
     fileName: string;
     quotationId?: number;
     initialEncrypted?: boolean;
+  } | null>(null);
+
+  // Dispatch Update Real-Time Alert
+  const [dispatchAlert, setDispatchAlert] = useState<{
+    quotation_id: number;
+    quotation_number: string;
+    customer_name?: string;
+    sales_person_name?: string;
+    dispatch_status?: string;
+    expected_dispatch_date?: string;
+    updated_by?: string;
+    updated_at?: string;
   } | null>(null);
 
   const loadDashboard = async () => {
@@ -64,10 +78,21 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
         ].includes(event.type)
       ) {
         loadDashboard();
+      } else if (event.type === 'DISPATCH_UPDATED') {
+        loadDashboard();
+        const isUserRelevant =
+          ['admin', 'manager'].includes(user?.role || '') ||
+          (user?.role === 'salesperson' &&
+            (event.payload?.sales_person_id === user?.id ||
+              event.payload?.sales_person_name === user?.full_name));
+
+        if (isUserRelevant) {
+          setDispatchAlert(event.payload);
+        }
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const formatCurrency = (val: number) => {
     return Number(val || 0).toLocaleString('en-IN', {
@@ -143,6 +168,93 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
           </button>
         </div>
       </div>
+
+      {/* Real-time Dispatch Update Popup Banner */}
+      {dispatchAlert && (
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-3.5 sm:p-4 rounded-xl shadow-lg border border-teal-500/40 flex items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start sm:items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-400/30 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+              <Truck size={17} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
+                <span>Dispatch Status Updated</span>
+                <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-teal-400/20 text-teal-200 border border-teal-400/30">
+                  {dispatchAlert.dispatch_status || 'Ready Stock'}
+                </span>
+                {dispatchAlert.updated_by && (
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    by {dispatchAlert.updated_by}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Quotation <strong className="text-white">{dispatchAlert.quotation_number}</strong>
+                {dispatchAlert.customer_name ? ` for ${dispatchAlert.customer_name}` : ''} — Expected Dispatch Date:{' '}
+                <strong className="text-teal-300 font-mono">
+                  {dispatchAlert.expected_dispatch_date
+                    ? new Date(dispatchAlert.expected_dispatch_date).toLocaleDateString('en-GB')
+                    : 'Not Specified'}
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+            <button
+              onClick={() => onSelectQuotation(dispatchAlert.quotation_id)}
+              className="btn btn-xs bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg border-none shadow-xs cursor-pointer"
+            >
+              View Order
+            </button>
+            <button
+              onClick={() => setDispatchAlert(null)}
+              className="text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
+              title="Dismiss alert"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Items Dispatching Today Banner */}
+      {data?.todaysDispatches && data.todaysDispatches.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300/80 rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start sm:items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
+              <Truck size={17} />
+            </div>
+            <div>
+              <div className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
+                <span>Items Dispatching Today</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
+                  {data.todaysDispatches.length} Order{data.todaysDispatches.length > 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="text-[11px] text-amber-900/90 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                {data.todaysDispatches.map((d: any) => (
+                  <span
+                    key={d.id}
+                    onClick={() => onSelectQuotation(d.id)}
+                    className="inline-flex items-center space-x-1 cursor-pointer hover:underline"
+                  >
+                    <strong>{d.quotation_number}</strong>
+                    <span>({d.customer_name} • {d.total_items} items • {d.dispatch_status})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onSelectQuotation(data.todaysDispatches[0].id)}
+            className="btn btn-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg border-none shadow-xs self-start sm:self-auto cursor-pointer whitespace-nowrap"
+          >
+            View Details
+          </button>
+        </div>
+      )}
 
       {/* KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

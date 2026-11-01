@@ -28,6 +28,7 @@ import {
   Download,
   FileSpreadsheet,
   Trash2,
+  Truck,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 
@@ -189,6 +190,18 @@ export const SalespersonDashboard: React.FC<Props> = ({
         if (event.type === 'USER_CREATED') {
           loadSalespersons();
         }
+      } else if (event.type === 'DISPATCH_UPDATED') {
+        loadSalespersonStats();
+        loadQuotations();
+        const isUserRelevant =
+          ['admin', 'manager'].includes(user?.role || '') ||
+          (user?.role === 'salesperson' &&
+            (event.payload?.sales_person_id === user?.id ||
+              event.payload?.sales_person_name === user?.full_name));
+
+        if (isUserRelevant) {
+          setDispatchAlert(event.payload);
+        }
       }
     });
     return () => unsubscribe();
@@ -243,6 +256,17 @@ export const SalespersonDashboard: React.FC<Props> = ({
 
   // Export State
   const [exportingFormat, setExportingFormat] = useState<'xlsx' | 'csv' | 'pdf' | null>(null);
+
+  // Dispatch Update Real-Time Alert
+  const [dispatchAlert, setDispatchAlert] = useState<{
+    quotation_id: number;
+    quotation_number: string;
+    customer_name?: string;
+    sales_person_name?: string;
+    dispatch_status?: string;
+    expected_dispatch_date?: string;
+    updated_by?: string;
+  } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const handleOpenPdf = (q: Quotation, e: React.MouseEvent, encrypted: boolean = false) => {
@@ -431,6 +455,55 @@ export const SalespersonDashboard: React.FC<Props> = ({
           </button>
         </div>
       </div>
+
+      {/* Real-time Dispatch Update Popup Banner */}
+      {dispatchAlert && (
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-3.5 sm:p-4 rounded-xl shadow-lg border border-teal-500/40 flex items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start sm:items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-400/30 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+              <Truck size={17} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
+                <span>Dispatch Status Updated</span>
+                <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-teal-400/20 text-teal-200 border border-teal-400/30">
+                  {dispatchAlert.dispatch_status || 'Ready Stock'}
+                </span>
+                {dispatchAlert.updated_by && (
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    by {dispatchAlert.updated_by}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Quotation <strong className="text-white">{dispatchAlert.quotation_number}</strong>
+                {dispatchAlert.customer_name ? ` for ${dispatchAlert.customer_name}` : ''} — Expected Dispatch Date:{' '}
+                <strong className="text-teal-300 font-mono">
+                  {dispatchAlert.expected_dispatch_date
+                    ? new Date(dispatchAlert.expected_dispatch_date).toLocaleDateString('en-GB')
+                    : 'Not Specified'}
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+            <button
+              onClick={() => onSelectQuotation(dispatchAlert.quotation_id)}
+              className="btn btn-xs bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg border-none shadow-xs cursor-pointer"
+            >
+              View Order
+            </button>
+            <button
+              onClick={() => setDispatchAlert(null)}
+              className="text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
+              title="Dismiss alert"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sales Team Quick Selector Bar */}
       <div className="card p-3">

@@ -71,9 +71,10 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
 
   const isAdmin = user.role === 'admin';
   const isManager = user.role === 'manager';
+  const isSalesperson = user.role === 'salesperson';
   const isDispatch = user.role === 'dispatch' || user.role === 'dispatch_team';
   const canAudit = isAdmin || isManager;
-  const canDispatch = isAdmin || isManager || isDispatch || user.role === 'accounts';
+  const canDispatch = isAdmin || isManager || isDispatch || isSalesperson || user.role === 'accounts';
 
   const isTileCreateActive = activeTab === 'quotation-create' || activeTab === 'quotation-create-tiles';
   const isSanitaryCreateActive = activeTab === 'quotation-create-sanitary';
@@ -138,7 +139,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
                 <span className="tracking-wide font-semibold">Dispatch Management</span>
               </div>
               <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
-                Orders
+                {isDispatch || isAdmin ? 'Orders' : 'View Only'}
               </span>
             </button>
           )}
@@ -362,7 +363,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       </div>
       <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
         <span>App Build:</span>
-        <span className="font-mono text-[#E0E1DD]/80">v2.4.19</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.20</span>
       </div>
     </div>
   );

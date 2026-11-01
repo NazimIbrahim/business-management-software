@@ -221,6 +221,32 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       ORDER BY month ASC
     `);
 
+    const dispatchUserFilter = isSalesperson
+      ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})`
+      : '';
+
+    const todaysDispatches = await query(`
+      SELECT 
+        q.id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_name,
+        COALESCE(q.dispatch_status, 'Ready Stock') as dispatch_status,
+        q.expected_dispatch_date,
+        COUNT(qi.id) as total_items,
+        COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
+      FROM quotations q
+      LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+      WHERE q.status IN ('approved', 'closed')
+        AND q.expected_dispatch_date = CURRENT_DATE
+        AND COALESCE(q.dispatch_status, 'Ready Stock') != 'Dispatched'
+        ${dispatchUserFilter}
+      GROUP BY q.id
+      ORDER BY q.id DESC
+    `);
+
     res.json({
       statusCounts,
       financials: {
@@ -232,6 +258,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       recentQuotations,
       leaderboard,
       monthlyTrend,
+      todaysDispatches,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

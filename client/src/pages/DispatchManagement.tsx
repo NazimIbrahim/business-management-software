@@ -23,6 +23,7 @@ import {
   X,
   ShieldCheck,
   Check,
+  Eye,
 } from 'lucide-react';
 
 export const DISPATCH_STATUS_OPTIONS = [
@@ -45,11 +46,15 @@ interface DispatchStats {
   factory_order_count: number;
   dispatched_count: number;
   overdue_count: number;
+  todays_dispatches?: Quotation[];
 }
 
 export const DispatchManagement: React.FC = () => {
   const { user } = useAuth();
   const { fetchApi, subscribeToEvents } = useServer();
+
+  const canEditDispatch = ['admin', 'dispatch', 'dispatch_team'].includes(user?.role || '');
+  const isViewOnly = !canEditDispatch;
 
   const [loading, setLoading] = useState<boolean>(true);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -61,6 +66,9 @@ export const DispatchManagement: React.FC = () => {
   const [quotationStatusFilter, setQuotationStatusFilter] = useState<'all' | 'approved' | 'closed'>('all');
   const [dispatchStatusFilter, setDispatchStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'overdue'>('all');
+
+  // Today's dispatches popup banner dismiss state
+  const [isTodayBannerDismissed, setIsTodayBannerDismissed] = useState<boolean>(false);
 
   // Active / Selected Quotation for Editing
   const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
@@ -380,16 +388,20 @@ export const DispatchManagement: React.FC = () => {
       {/* Formal Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-teal-400 shadow-sm shrink-0">
-            <Truck size={20} />
+          <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
+            <Truck size={22} className="text-white" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                 Dispatch Management
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-teal-100 text-teal-900 border border-teal-300">
-                Fulfillment
+              <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase rounded ${
+                isViewOnly
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-teal-100 text-teal-900 border border-teal-300'
+              }`}>
+                {isViewOnly ? 'View Only' : 'Fulfillment'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -617,6 +629,70 @@ export const DispatchManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* TODAY'S PLANNED DISPATCHES POPUP BANNER */}
+      {stats?.todays_dispatches && stats.todays_dispatches.length > 0 && !isTodayBannerDismissed && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border-2 border-amber-300/90 rounded-xl p-3.5 shadow-xs space-y-2.5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Truck size={17} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5">
+                  <span>Today's Planned Dispatches</span>
+                  <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-amber-200 text-amber-950 border border-amber-300">
+                    {stats.todays_dispatches.length} Order{stats.todays_dispatches.length > 1 ? 's' : ''} Due Today
+                  </span>
+                </h3>
+                <p className="text-[11px] text-amber-900/80">
+                  Stock readiness and delivery checklist scheduled for today ({new Date().toLocaleDateString('en-GB')}).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setDateFilter('today')}
+                className={`btn btn-xs font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
+                  dateFilter === 'today'
+                    ? 'bg-amber-700 text-white border-amber-800'
+                    : 'bg-amber-600 hover:bg-amber-700 text-white border-transparent'
+                }`}
+              >
+                {dateFilter === 'today' ? 'Showing Today' : 'Filter Table to Today'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTodayBannerDismissed(true)}
+                className="text-amber-700 hover:text-amber-950 p-1 rounded cursor-pointer"
+                title="Dismiss today's banner"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick interactive order chips */}
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            {stats.todays_dispatches.map((td: any) => (
+              <button
+                type="button"
+                key={td.id}
+                onClick={() => handleToggleRow(td)}
+                className="bg-white hover:bg-amber-50/80 border border-amber-300 hover:border-amber-400 rounded-lg px-2.5 py-1.5 text-left shadow-2xs flex items-center space-x-2 cursor-pointer transition-all"
+              >
+                <span className="font-mono font-bold text-xs text-slate-900">{td.quotation_number}</span>
+                <span className="text-[11px] font-semibold text-slate-700">{td.customer_name}</span>
+                <span className="text-[10px] text-amber-900 font-extrabold bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">
+                  {td.total_items} items • {td.dispatch_status}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Formal Quotations Table with Row Expansion */}
       <div className="card overflow-hidden bg-white border border-slate-200 shadow-xs">
         <div className="overflow-x-auto">
@@ -759,18 +835,22 @@ export const DispatchManagement: React.FC = () => {
 
                         {/* 8. Fulfillment Progress */}
                         <td className="py-3 px-3.5 align-middle">
-                          <div className="flex items-center justify-between text-[10px] text-slate-600 font-bold mb-1">
-                            <span>{dispatchedCount}/{totalItems} items</span>
-                            <span className={isFullyDispatched ? 'text-teal-700' : 'text-indigo-600'}>
+                          <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+                            <span className="text-slate-600">{dispatchedCount}/{totalItems} items</span>
+                            <span
+                              style={{ color: percentDispatched === 100 ? '#059669' : percentDispatched > 0 ? '#2563eb' : '#64748b' }}
+                              className="font-extrabold"
+                            >
                               {percentDispatched}%
                             </span>
                           </div>
-                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                          <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden border border-slate-300 shadow-inner">
                             <div
-                              style={{ width: `${percentDispatched}%` }}
-                              className={`h-full transition-all duration-300 ${
-                                isFullyDispatched ? 'bg-teal-600' : 'bg-indigo-600'
-                              }`}
+                              style={{
+                                width: `${Math.min(100, Math.max(percentDispatched > 0 ? 6 : 0, percentDispatched))}%`,
+                                backgroundColor: percentDispatched === 100 ? '#10b981' : percentDispatched > 0 ? '#2563eb' : '#cbd5e1',
+                              }}
+                              className="h-full rounded-full transition-all duration-300"
                             />
                           </div>
                         </td>
@@ -807,6 +887,19 @@ export const DispatchManagement: React.FC = () => {
                               </div>
                             ) : (
                               <div className="space-y-4">
+                                {/* View-Only Banner */}
+                                {isViewOnly && (
+                                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 flex items-center space-x-2">
+                                    <Eye size={16} className="text-amber-700 shrink-0" />
+                                    <div>
+                                      <span className="font-bold">View-Only Access: </span>
+                                      <span>
+                                        You are viewing dispatch tracking details in read-only mode. Only Dispatch Team and Admins can update fulfillment stages, dates, and vehicle notes.
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Validation & Success Alerts */}
                                 {validationError && (
                                   <div className="bg-rose-50 border border-rose-300 rounded-xl p-3 text-xs text-rose-800 flex items-start space-x-2">
@@ -858,8 +951,11 @@ export const DispatchManagement: React.FC = () => {
                                       </label>
                                       <select
                                         value={overallStatus}
+                                        disabled={isViewOnly}
                                         onChange={(e) => setOverallStatus(e.target.value)}
-                                        className="select select-sm text-xs font-semibold w-full cursor-pointer"
+                                        className={`select select-sm text-xs font-semibold w-full ${
+                                          isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'cursor-pointer'
+                                        }`}
                                       >
                                         {DISPATCH_STATUS_OPTIONS.map((opt) => (
                                           <option key={opt} value={opt}>
@@ -867,16 +963,18 @@ export const DispatchManagement: React.FC = () => {
                                           </option>
                                         ))}
                                       </select>
-                                      <div className="flex items-center space-x-1 mt-1">
-                                        <span className="text-[10px] text-slate-400">Quick set:</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleApplyStatusToAllItems(overallStatus as any)}
-                                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
-                                        >
-                                          Apply to all items
-                                        </button>
-                                      </div>
+                                      {!isViewOnly && (
+                                        <div className="flex items-center space-x-1 mt-1">
+                                          <span className="text-[10px] text-slate-400">Quick set:</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApplyStatusToAllItems(overallStatus as any)}
+                                            className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+                                          >
+                                            Apply to all items
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
 
                                     {/* Overall Expected Dispatch Date */}
@@ -884,9 +982,9 @@ export const DispatchManagement: React.FC = () => {
                                       <div className="flex items-center justify-between mb-1">
                                         <label className="text-[11px] font-bold text-slate-700 flex items-center space-x-1">
                                           <span>Expected Dispatch Date</span>
-                                          <span className="text-rose-500 font-bold">*</span>
+                                          {!isViewOnly && <span className="text-rose-500 font-bold">*</span>}
                                         </label>
-                                        {overallDate && (
+                                        {!isViewOnly && overallDate && (
                                           <button
                                             type="button"
                                             onClick={handleApplyDateToAllItems}
@@ -899,19 +997,25 @@ export const DispatchManagement: React.FC = () => {
                                       <input
                                         type="date"
                                         value={overallDate}
+                                        disabled={isViewOnly}
+                                        readOnly={isViewOnly}
                                         onChange={(e) => {
                                           setOverallDate(e.target.value);
                                           setValidationError(null);
                                         }}
                                         className={`input input-sm text-xs w-full font-mono ${
+                                          isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                        } ${
                                           !overallDate && validationError
                                             ? 'border-rose-400 ring-2 ring-rose-200'
                                             : ''
                                         }`}
-                                        required
+                                        required={!isViewOnly}
                                       />
                                       <p className="text-[10px] text-slate-400 mt-1">
-                                        Required when saving dispatch status.
+                                        {isViewOnly
+                                          ? 'Expected delivery date set by dispatch team.'
+                                          : 'Required when saving dispatch status.'}
                                       </p>
                                     </div>
 
@@ -922,10 +1026,18 @@ export const DispatchManagement: React.FC = () => {
                                       </label>
                                       <input
                                         type="text"
-                                        placeholder="Optional driver contact, vehicle number, dispatch remarks..."
+                                        placeholder={
+                                          isViewOnly
+                                            ? 'No vehicle/dispatch notes provided'
+                                            : 'Optional driver contact, vehicle number, dispatch remarks...'
+                                        }
                                         value={overallNotes}
+                                        disabled={isViewOnly}
+                                        readOnly={isViewOnly}
                                         onChange={(e) => setOverallNotes(e.target.value)}
-                                        className="input input-sm text-xs w-full"
+                                        className={`input input-sm text-xs w-full ${
+                                          isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                        }`}
                                       />
                                     </div>
                                   </div>
@@ -1015,7 +1127,9 @@ export const DispatchManagement: React.FC = () => {
                                               <td className="py-2.5 px-3">
                                                 <select
                                                   value={itemState.status}
+                                                  disabled={isViewOnly}
                                                   onChange={(e) => {
+                                                    if (isViewOnly) return;
                                                     const newStatus = e.target.value;
                                                     setEditedItems((prev) => ({
                                                       ...prev,
@@ -1025,7 +1139,9 @@ export const DispatchManagement: React.FC = () => {
                                                       },
                                                     }));
                                                   }}
-                                                  className={`select select-sm text-xs font-semibold w-full cursor-pointer ${
+                                                  className={`select select-sm text-xs font-semibold w-full ${
+                                                    isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
+                                                  } ${
                                                     itemState.status === 'Ready Stock'
                                                       ? 'text-emerald-700 bg-emerald-50/50 border-emerald-200'
                                                       : itemState.status === 'Need to Arrange from Local'
@@ -1046,7 +1162,10 @@ export const DispatchManagement: React.FC = () => {
                                                 <input
                                                   type="date"
                                                   value={itemState.date || overallDate}
+                                                  disabled={isViewOnly}
+                                                  readOnly={isViewOnly}
                                                   onChange={(e) => {
+                                                    if (isViewOnly) return;
                                                     const newDate = e.target.value;
                                                     setEditedItems((prev) => ({
                                                       ...prev,
@@ -1058,19 +1177,24 @@ export const DispatchManagement: React.FC = () => {
                                                     setValidationError(null);
                                                   }}
                                                   className={`input input-sm text-xs font-mono w-full ${
-                                                    isItemMissingDate && validationError
+                                                    isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                                  } ${
+                                                    !isViewOnly && isItemMissingDate && validationError
                                                       ? 'border-rose-400 ring-2 ring-rose-200'
                                                       : ''
                                                   }`}
-                                                  required
+                                                  required={!isViewOnly}
                                                 />
                                               </td>
                                               <td className="py-2.5 px-3">
                                                 <input
                                                   type="text"
-                                                  placeholder="Optional rack, supplier, or notes..."
+                                                  placeholder={isViewOnly ? 'None' : 'Optional rack, supplier, or notes...'}
                                                   value={itemState.notes}
+                                                  disabled={isViewOnly}
+                                                  readOnly={isViewOnly}
                                                   onChange={(e) => {
+                                                    if (isViewOnly) return;
                                                     const newNotes = e.target.value;
                                                     setEditedItems((prev) => ({
                                                       ...prev,
@@ -1080,7 +1204,9 @@ export const DispatchManagement: React.FC = () => {
                                                       },
                                                     }));
                                                   }}
-                                                  className="input input-sm text-xs w-full"
+                                                  className={`input input-sm text-xs w-full ${
+                                                    isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                                  }`}
                                                 />
                                               </td>
                                             </tr>
@@ -1112,17 +1238,24 @@ export const DispatchManagement: React.FC = () => {
                                       onClick={() => setSelectedQuotationId(null)}
                                       className="btn btn-secondary btn-sm text-xs px-3 py-1.5 text-slate-700 cursor-pointer"
                                     >
-                                      Cancel
+                                      {isViewOnly ? 'Close View' : 'Cancel'}
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleSaveDispatch}
-                                      disabled={saving}
-                                      className="btn btn-primary btn-sm text-xs px-4 py-1.5 font-bold flex items-center space-x-1.5 shadow-sm cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white border-none"
-                                    >
-                                      <Save size={13} className={saving ? 'animate-spin' : ''} />
-                                      <span>{saving ? 'Saving...' : 'Save Dispatch Details'}</span>
-                                    </button>
+                                    {!isViewOnly ? (
+                                      <button
+                                        type="button"
+                                        onClick={handleSaveDispatch}
+                                        disabled={saving}
+                                        className="btn btn-primary btn-sm text-xs px-4 py-1.5 font-bold flex items-center space-x-1.5 shadow-sm cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white border-none"
+                                      >
+                                        <Save size={13} className={saving ? 'animate-spin' : ''} />
+                                        <span>{saving ? 'Saving...' : 'Save Dispatch Details'}</span>
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 font-bold text-xs">
+                                        <Eye size={13} className="text-amber-700" />
+                                        <span>View-Only Access</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>

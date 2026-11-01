@@ -59,6 +59,30 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
 
     const stats = itemsStatsRes[0] || {};
 
+    const todaysDispatchesRes = await query(`
+      SELECT 
+        q.id,
+        q.quotation_number,
+        q.quotation_date,
+        q.quotation_type,
+        q.status,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_name,
+        COALESCE(q.dispatch_status, 'Ready Stock') as dispatch_status,
+        q.expected_dispatch_date,
+        COUNT(qi.id) as total_items,
+        COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
+      FROM quotations q
+      LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+      WHERE q.status IN ('approved', 'closed')
+        AND q.expected_dispatch_date = CURRENT_DATE
+        AND COALESCE(q.dispatch_status, 'Ready Stock') != 'Dispatched'
+      GROUP BY q.id
+      ORDER BY q.id DESC
+    `);
+
     res.json({
       total_orders: totalOrders,
       total_closed_quotations: totalOrders,
@@ -70,6 +94,11 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       factory_order_count: parseInt(stats.factory_order_count || '0', 10),
       dispatched_count: parseInt(stats.dispatched_count || '0', 10),
       overdue_count: parseInt(stats.overdue_count || '0', 10),
+      todays_dispatches: todaysDispatchesRes.map((r: any) => ({
+        ...r,
+        total_items: parseInt(r.total_items || '0', 10),
+        dispatched_items_count: parseInt(r.dispatched_items_count || '0', 10),
+      })),
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -263,7 +292,7 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
 // 4. Update Dispatch Status & Expected Dispatch Date
 dispatchRouter.put(
   '/quotations/:id',
-  requireRole(['admin', 'manager', 'dispatch', 'dispatch_team']),
+  requireRole(['admin', 'dispatch', 'dispatch_team']),
   async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -428,13 +457,27 @@ dispatchRouter.put(
         },
       });
 
+      // Fetch fresh details of quotation for the broadcast
+      const updatedQuoteRows = await query(
+        `SELECT q.id, q.quotation_number, q.customer_name, q.sales_person_id, q.sales_person_name, q.dispatch_status, q.expected_dispatch_date
+         FROM quotations q WHERE q.id = $1`,
+        [id]
+      );
+      const updatedQuote = updatedQuoteRows[0] || {};
+
       // Broadcast WebSocket notification to keep all client dashboards in sync
       broadcast({
         type: 'DISPATCH_UPDATED',
         payload: {
           quotation_id: id,
-          quotation_number: qCheck[0].quotation_number,
+          quotation_number: updatedQuote.quotation_number || qCheck[0].quotation_number,
+          customer_name: updatedQuote.customer_name,
+          sales_person_id: updatedQuote.sales_person_id,
+          sales_person_name: updatedQuote.sales_person_name,
+          dispatch_status: updatedQuote.dispatch_status || normalizedOverallStatus,
+          expected_dispatch_date: updatedQuote.expected_dispatch_date || expected_dispatch_date,
           updated_by: req.user!.full_name,
+          timestamp: new Date().toISOString(),
         },
       });
 
