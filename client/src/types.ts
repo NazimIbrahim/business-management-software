@@ -191,6 +191,9 @@ export interface Quotation {
   dispatched_at?: string | null;
   dispatched_by_id?: number | null;
   dispatched_by_name?: string | null;
+  has_dispatch_item_changes?: boolean;
+  dispatch_change_summary?: string;
+  dispatch_change_acknowledged_at?: string;
   total_items?: number;
   dispatched_items_count?: number;
   ready_stock_items_count?: number;

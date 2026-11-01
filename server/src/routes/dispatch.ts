@@ -32,13 +32,15 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       `SELECT 
          count(*) as total_orders,
          COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
-         COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count
+         COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count,
+         COUNT(CASE WHEN has_dispatch_item_changes = true THEN 1 END) as pending_item_changes_count
        FROM quotations WHERE status IN ('approved', 'closed')`
     );
     const countRow = ordersCountRes[0] || {};
     const totalOrders = parseInt(countRow.total_orders || '0', 10);
     const approvedCount = parseInt(countRow.approved_count || '0', 10);
     const closedCount = parseInt(countRow.closed_count || '0', 10);
+    const pendingItemChangesCount = parseInt(countRow.pending_item_changes_count || '0', 10);
 
     const itemsStatsRes = await query(`
       SELECT 
@@ -83,11 +85,36 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       ORDER BY q.id DESC
     `);
 
+    const changedQuotationsRes = await query(`
+      SELECT 
+        q.id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_name,
+        q.dispatch_status,
+        q.expected_dispatch_date,
+        q.dispatch_change_summary,
+        q.updated_at
+      FROM quotations q
+      WHERE q.status IN ('approved', 'closed')
+        AND q.has_dispatch_item_changes = true
+      ORDER BY q.updated_at DESC
+    `);
+
     res.json({
       total_orders: totalOrders,
       total_closed_quotations: totalOrders,
       approved_count: approvedCount,
       closed_count: closedCount,
+      pending_item_changes_count: pendingItemChangesCount,
+      changed_quotations: changedQuotationsRes.map((cq: any) => ({
+        ...cq,
+        change_summary_parsed: cq.dispatch_change_summary ? (() => {
+          try { return JSON.parse(cq.dispatch_change_summary); } catch { return null; }
+        })() : null,
+      })),
       total_items: parseInt(stats.total_items || '0', 10),
       ready_stock_count: parseInt(stats.ready_stock_count || '0', 10),
       local_arrange_count: parseInt(stats.local_arrange_count || '0', 10),
@@ -172,6 +199,9 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
         q.net_total,
         q.version,
         q.updated_at,
+        COALESCE(q.has_dispatch_item_changes, false) as has_dispatch_item_changes,
+        q.dispatch_change_summary,
+        q.dispatch_change_acknowledged_at,
         COALESCE(q.dispatch_status, 'Ready Stock') as dispatch_status,
         q.expected_dispatch_date,
         q.dispatch_notes,
@@ -188,6 +218,7 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       ${whereClause}
       GROUP BY q.id, u_app.full_name
       ORDER BY 
+        CASE WHEN q.has_dispatch_item_changes = true THEN 0 ELSE 1 END ASC,
         CASE WHEN q.expected_dispatch_date IS NULL THEN 1 ELSE 0 END ASC,
         q.expected_dispatch_date ASC,
         q.id DESC
@@ -427,6 +458,8 @@ dispatchRouter.put(
                dispatched_by_name = $5,
                dispatched_at = CASE WHEN $6::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END,
                status = CASE WHEN $6::boolean AND status = 'approved' THEN 'closed' ELSE status END,
+               has_dispatch_item_changes = false,
+               dispatch_change_acknowledged_at = CURRENT_TIMESTAMP,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $7`,
           [
@@ -484,6 +517,47 @@ dispatchRouter.put(
       res.json({
         success: true,
         message: 'Dispatch status and expected date saved successfully',
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// 5. Acknowledge and Clear Item Changes Notification
+dispatchRouter.post(
+  '/quotations/:id/acknowledge-changes',
+  requireRole(['admin', 'dispatch', 'dispatch_team']),
+  async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      const qRows = await query(`SELECT quotation_number FROM quotations WHERE id = $1`, [id]);
+      if (qRows.length === 0) {
+        res.status(404).json({ error: 'Quotation not found' });
+        return;
+      }
+
+      await query(
+        `UPDATE quotations
+         SET has_dispatch_item_changes = false,
+             dispatch_change_acknowledged_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id]
+      );
+
+      broadcast({
+        type: 'DISPATCH_CHANGES_ACKNOWLEDGED',
+        payload: {
+          quotation_id: id,
+          quotation_number: qRows[0].quotation_number,
+          acknowledged_by: req.user!.full_name,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'Quotation item changes acknowledged successfully',
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

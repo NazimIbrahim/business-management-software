@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import {
@@ -51,8 +51,9 @@ interface Props {
 
 export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = false, onClose }) => {
   const { user } = useAuth();
-  const { company } = useServer();
+  const { company, fetchApi, subscribeToEvents } = useServer();
   const [newQuotationExpanded, setNewQuotationExpanded] = useState<boolean>(true);
+  const [dispatchChangesCount, setDispatchChangesCount] = useState<number>(0);
 
   if (!user) return null;
 
@@ -75,6 +76,26 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
   const isDispatch = user.role === 'dispatch' || user.role === 'dispatch_team';
   const canAudit = isAdmin || isManager;
   const canDispatch = isAdmin || isManager || isDispatch || isSalesperson || user.role === 'accounts';
+
+  useEffect(() => {
+    if (!canDispatch) return;
+    const loadStats = async () => {
+      try {
+        const stats = await fetchApi<any>('/api/dispatch/stats');
+        setDispatchChangesCount(stats?.pending_item_changes_count || 0);
+      } catch {
+        // silent
+      }
+    };
+    loadStats();
+
+    const unsubscribe = subscribeToEvents((event) => {
+      if (['DISPATCH_ITEM_CHANGED', 'DISPATCH_CHANGES_ACKNOWLEDGED', 'DISPATCH_UPDATED'].includes(event.type)) {
+        loadStats();
+      }
+    });
+    return () => unsubscribe();
+  }, [canDispatch]);
 
   const isTileCreateActive = activeTab === 'quotation-create' || activeTab === 'quotation-create-tiles';
   const isSanitaryCreateActive = activeTab === 'quotation-create-sanitary';
@@ -138,9 +159,16 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
                 <Truck size={16} className={activeTab === 'dispatch' ? 'text-teal-300' : 'nav-icon'} />
                 <span className="tracking-wide font-semibold">Dispatch Management</span>
               </div>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
-                {isDispatch || isAdmin ? 'Orders' : 'View Only'}
-              </span>
+              <div className="flex items-center space-x-1">
+                {dispatchChangesCount > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-extrabold animate-pulse shadow-xs">
+                    {dispatchChangesCount} changed
+                  </span>
+                )}
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
+                  {isDispatch || isAdmin ? 'Orders' : 'View Only'}
+                </span>
+              </div>
             </button>
           )}
 
@@ -363,7 +391,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       </div>
       <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
         <span>App Build:</span>
-        <span className="font-mono text-[#E0E1DD]/80">v2.4.20</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.21</span>
       </div>
     </div>
   );

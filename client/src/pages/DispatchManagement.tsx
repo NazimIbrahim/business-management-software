@@ -24,6 +24,8 @@ import {
   ShieldCheck,
   Check,
   Eye,
+  Bell,
+  ArrowRight,
 } from 'lucide-react';
 
 export const DISPATCH_STATUS_OPTIONS = [
@@ -35,11 +37,34 @@ export const DISPATCH_STATUS_OPTIONS = [
 
 export type DispatchStatusType = (typeof DISPATCH_STATUS_OPTIONS)[number];
 
+export interface ChangedQuotationSummary {
+  id: number;
+  quotation_number: string;
+  customer_name: string;
+  customer_phone?: string;
+  site_location?: string;
+  sales_person_name?: string;
+  dispatch_status?: string;
+  expected_dispatch_date?: string;
+  dispatch_change_summary?: string;
+  change_summary_parsed?: {
+    changed_by?: string;
+    changed_by_role?: string;
+    changed_at?: string;
+    prev_version?: number;
+    new_version?: number;
+    diffs?: string[];
+  } | null;
+  updated_at: string;
+}
+
 interface DispatchStats {
   total_orders?: number;
   total_closed_quotations: number;
   approved_count?: number;
   closed_count?: number;
+  pending_item_changes_count?: number;
+  changed_quotations?: ChangedQuotationSummary[];
   total_items: number;
   ready_stock_count: number;
   local_arrange_count: number;
@@ -85,6 +110,11 @@ export const DispatchManagement: React.FC = () => {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
+  // Review Item Changes Modal State (for when items were modified after dispatch update)
+  const [reviewingChangeQuotation, setReviewingChangeQuotation] = useState<any | null>(null);
+  const [acknowledgingChange, setAcknowledgingChange] = useState<boolean>(false);
+  const [itemChangedAlert, setItemChangedAlert] = useState<any | null>(null);
+
   // Print Slip Modal State
   const [isPrintSlipOpen, setIsPrintSlipOpen] = useState<boolean>(false);
 
@@ -127,15 +157,58 @@ export const DispatchManagement: React.FC = () => {
   // Real-time synchronization
   useEffect(() => {
     const unsubscribe = subscribeToEvents((event) => {
-      if (['DISPATCH_UPDATED', 'QUOTATION_STATUS_CHANGED'].includes(event.type)) {
+      if (
+        ['DISPATCH_UPDATED', 'QUOTATION_STATUS_CHANGED', 'QUOTATION_UPDATED', 'DISPATCH_CHANGES_ACKNOWLEDGED'].includes(
+          event.type
+        )
+      ) {
         loadData();
         if (selectedQuotationId && event.payload?.quotation_id === selectedQuotationId) {
           loadQuotationDetail(selectedQuotationId);
         }
+      } else if (event.type === 'DISPATCH_ITEM_CHANGED') {
+        loadData();
+        setItemChangedAlert(event.payload);
       }
     });
     return () => unsubscribe();
   }, [selectedQuotationId]);
+
+  // Handle opening the item changes review modal
+  const handleOpenReviewModal = (q: any) => {
+    let parsed = q.change_summary_parsed;
+    if (!parsed && q.dispatch_change_summary) {
+      try {
+        parsed = JSON.parse(q.dispatch_change_summary);
+      } catch {
+        parsed = null;
+      }
+    }
+    setReviewingChangeQuotation({
+      ...q,
+      parsedSummary: parsed,
+    });
+  };
+
+  // Handle acknowledging and clearing the item changes notification
+  const handleAcknowledgeItemChanges = async (quotationId: number) => {
+    try {
+      setAcknowledgingChange(true);
+      await fetchApi(`/api/dispatch/quotations/${quotationId}/acknowledge-changes`, {
+        method: 'POST',
+      });
+      setReviewingChangeQuotation(null);
+      setItemChangedAlert(null);
+      await loadData();
+      if (selectedQuotationId === quotationId) {
+        await loadQuotationDetail(quotationId);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to acknowledge item changes');
+    } finally {
+      setAcknowledgingChange(false);
+    }
+  };
 
   // Load single quotation detail for editing
   const loadQuotationDetail = async (id: number) => {
@@ -629,6 +702,106 @@ export const DispatchManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* REAL-TIME TOAST ALERT FOR DISPATCH ITEM CHANGES */}
+      {itemChangedAlert && (
+        <div className="bg-gradient-to-r from-amber-600 via-rose-600 to-amber-700 text-white p-3.5 sm:p-4 rounded-xl shadow-lg border border-amber-300 flex items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-start sm:items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
+                <span>Quotation Items Modified</span>
+                <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-white/25 text-white">
+                  {itemChangedAlert.quotation_number}
+                </span>
+                {itemChangedAlert.changed_by && (
+                  <span className="text-[10px] text-amber-100 font-normal">
+                    by {itemChangedAlert.changed_by}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-100 mt-0.5">
+                Item quantities or products were revised after material availability was configured. Please review the changes.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                const matched = quotations.find((q) => q.id === itemChangedAlert.quotation_id) || {
+                  id: itemChangedAlert.quotation_id,
+                  quotation_number: itemChangedAlert.quotation_number,
+                  customer_name: itemChangedAlert.customer_name,
+                  parsedSummary: {
+                    changed_by: itemChangedAlert.changed_by,
+                    changed_at: itemChangedAlert.changed_at,
+                    diffs: itemChangedAlert.diffs,
+                  },
+                };
+                handleOpenReviewModal(matched);
+                setItemChangedAlert(null);
+              }}
+              className="btn btn-xs bg-white hover:bg-amber-100 text-amber-950 font-bold px-3 py-1.5 rounded-lg border-none shadow-xs cursor-pointer"
+            >
+              See Changes
+            </button>
+            <button
+              type="button"
+              onClick={() => setItemChangedAlert(null)}
+              className="text-amber-200 hover:text-white p-1 rounded cursor-pointer"
+              title="Dismiss toast"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PERSISTENT NOTIFICATION BANNER: ORDER ITEMS MODIFIED AFTER DISPATCH UPDATE */}
+      {stats?.changed_quotations && stats.changed_quotations.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/10 border-2 border-amber-400 rounded-xl p-3.5 sm:p-4 shadow-sm space-y-2.5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-start sm:items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
+                <Bell size={18} className="animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5 uppercase tracking-wide">
+                  <span>Attention: Order Items Modified After Dispatch Update</span>
+                  <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-2xs">
+                    {stats.changed_quotations.length} Order{stats.changed_quotations.length > 1 ? 's' : ''} Need Review
+                  </span>
+                </h3>
+                <p className="text-[11px] text-amber-900/90 mt-0.5">
+                  The sales team updated item quantities or descriptions after material availability was set. Click an order to inspect the changes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick interactive order chips with 'Click to See Changes' */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {stats.changed_quotations.map((cq) => (
+              <button
+                type="button"
+                key={cq.id}
+                onClick={() => handleOpenReviewModal(cq)}
+                className="bg-white hover:bg-amber-50/90 border border-amber-300 hover:border-amber-500 rounded-lg px-3 py-1.5 text-left shadow-2xs flex items-center space-x-2 cursor-pointer transition-all"
+              >
+                <span className="font-mono font-bold text-xs text-slate-900">{cq.quotation_number}</span>
+                <span className="text-[11px] font-semibold text-slate-700">{cq.customer_name}</span>
+                <span className="text-[10px] text-rose-800 font-extrabold bg-rose-100 px-2 py-0.5 rounded border border-rose-200 flex items-center gap-1">
+                  <Eye size={10} />
+                  <span>Click to See Changes</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TODAY'S PLANNED DISPATCHES POPUP BANNER */}
       {stats?.todays_dispatches && stats.todays_dispatches.length > 0 && !isTodayBannerDismissed && (
         <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border-2 border-amber-300/90 rounded-xl p-3.5 shadow-xs space-y-2.5 animate-fade-in">
@@ -744,7 +917,9 @@ export const DispatchManagement: React.FC = () => {
                       <tr
                         onClick={() => handleToggleRow(q)}
                         className={`transition-colors cursor-pointer border-b border-[#E0E1DD]/40 ${
-                          isSelected
+                          q.has_dispatch_item_changes
+                            ? 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500 font-medium'
+                            : isSelected
                             ? 'bg-indigo-50/60 font-medium'
                             : 'hover:bg-slate-50/80 bg-white'
                         }`}
@@ -763,6 +938,20 @@ export const DispatchManagement: React.FC = () => {
                               </span>
                             )}
                           </div>
+                          {q.has_dispatch_item_changes && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenReviewModal(q);
+                              }}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-950 border border-amber-400 hover:bg-amber-300 shadow-2xs transition-all cursor-pointer mt-1"
+                              title="Items modified after dispatch update. Click to review changes."
+                            >
+                              <AlertTriangle size={11} className="text-amber-800 animate-pulse" />
+                              <span>Items Changed (Review)</span>
+                            </button>
+                          )}
                         </td>
 
                         {/* 2. Date */}
@@ -887,6 +1076,43 @@ export const DispatchManagement: React.FC = () => {
                               </div>
                             ) : (
                               <div className="space-y-4">
+                                {/* Item Changes Detected Alert in Drawer */}
+                                {q.has_dispatch_item_changes && (
+                                  <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
+                                    <div className="flex items-center space-x-2.5">
+                                      <AlertTriangle size={18} className="text-amber-700 shrink-0" />
+                                      <div>
+                                        <div className="font-extrabold text-amber-950">
+                                          Items were modified after material availability was set!
+                                        </div>
+                                        <div className="text-[11px] text-amber-900/90 mt-0.5">
+                                          Sales updated item quantities or product details. Please inspect the line items and re-confirm readiness.
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenReviewModal(q)}
+                                        className="btn btn-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer shadow-xs flex items-center space-x-1"
+                                      >
+                                        <Eye size={12} />
+                                        <span>See Changes Diff</span>
+                                      </button>
+                                      {!isViewOnly && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAcknowledgeItemChanges(q.id)}
+                                          disabled={acknowledgingChange}
+                                          className="btn btn-xs btn-secondary text-[11px] px-2.5 py-1.5 text-slate-700 border-amber-300 hover:bg-amber-100 cursor-pointer"
+                                        >
+                                          {acknowledgingChange ? 'Clearing...' : 'Dismiss'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* View-Only Banner */}
                                 {isViewOnly && (
                                   <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 flex items-center space-x-2">
@@ -1401,6 +1627,139 @@ export const DispatchManagement: React.FC = () => {
                 <Printer size={14} />
                 <span>Print Slip</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REVIEW ITEM CHANGES MODAL */}
+      {reviewingChangeQuotation && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="card bg-white p-5 sm:p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                    <span>Order Items Changed</span>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                      {reviewingChangeQuotation.quotation_number}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Customer: <strong className="text-slate-800">{reviewingChangeQuotation.customer_name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReviewingChangeQuotation(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Change Context Banner */}
+            <div className="bg-amber-50/70 border border-amber-300 rounded-xl p-3 text-xs text-amber-950 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold">Modified by:</span>
+                <span className="font-semibold text-slate-800">
+                  {reviewingChangeQuotation.parsedSummary?.changed_by ||
+                    reviewingChangeQuotation.sales_person_name ||
+                    'Sales Team'}
+                </span>
+              </div>
+              {reviewingChangeQuotation.parsedSummary?.changed_at && (
+                <div className="flex items-center justify-between text-[11px] text-slate-600">
+                  <span>Change Timestamp:</span>
+                  <span>{new Date(reviewingChangeQuotation.parsedSummary.changed_at).toLocaleString('en-GB')}</span>
+                </div>
+              )}
+              <p className="text-[11px] text-amber-900/90 pt-1">
+                Notice: These items were revised after material availability or dispatch schedule was previously configured. Review the item diff below to ensure readiness.
+              </p>
+            </div>
+
+            {/* Changes Diff List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <span>Summary of Changes:</span>
+                {reviewingChangeQuotation.parsedSummary?.diffs && (
+                  <span className="text-[11px] font-normal text-slate-500">
+                    {reviewingChangeQuotation.parsedSummary.diffs.length} change{reviewingChangeQuotation.parsedSummary.diffs.length > 1 ? 's' : ''} detected
+                  </span>
+                )}
+              </h4>
+              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-60 overflow-y-auto bg-slate-50/50">
+                {reviewingChangeQuotation.parsedSummary?.diffs &&
+                reviewingChangeQuotation.parsedSummary.diffs.length > 0 ? (
+                  reviewingChangeQuotation.parsedSummary.diffs.map((diff: string, dIdx: number) => {
+                    const isAdded = diff.toLowerCase().includes('added');
+                    const isRemoved = diff.toLowerCase().includes('removed');
+
+                    return (
+                      <div key={dIdx} className="p-3 text-xs flex items-start space-x-2.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                            isAdded
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : isRemoved
+                              ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}
+                        >
+                          {isAdded ? '+ Added' : isRemoved ? '- Removed' : '~ Changed'}
+                        </span>
+                        <span className="text-slate-800 font-medium leading-relaxed">{diff}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    Line items were revised. Please open the line items editor to verify quantities and products.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const qId = reviewingChangeQuotation.id;
+                  setReviewingChangeQuotation(null);
+                  setSelectedQuotationId(qId);
+                  loadQuotationDetail(qId);
+                }}
+                className="btn btn-secondary btn-sm text-xs text-indigo-700 hover:text-indigo-900 font-bold w-full sm:w-auto cursor-pointer flex items-center space-x-1"
+              >
+                <span>Open Line Items Editor</span>
+                <ArrowRight size={13} />
+              </button>
+
+              <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReviewingChangeQuotation(null)}
+                  className="btn btn-secondary btn-sm text-xs text-slate-600 cursor-pointer"
+                >
+                  Close
+                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAcknowledgeItemChanges(reviewingChangeQuotation.id)}
+                    disabled={acknowledgingChange}
+                    className="btn btn-primary btn-sm text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-xs cursor-pointer flex items-center space-x-1"
+                  >
+                    <Check size={13} className={acknowledgingChange ? 'animate-spin' : ''} />
+                    <span>{acknowledgingChange ? 'Clearing...' : 'Acknowledge Changes & Clear'}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

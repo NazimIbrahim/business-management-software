@@ -788,10 +788,24 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
 
     const updated = await withTransaction(async (client) => {
       // Optimistic concurrency check
-      const current = await client.query('SELECT version, status, quotation_type FROM quotations WHERE id = $1', [id]);
+      const current = await client.query(
+        `SELECT version, status, quotation_type, quotation_number, customer_name,
+                dispatch_status, expected_dispatch_date, dispatched_at, dispatched_by_id, dispatched_by_name,
+                has_dispatch_item_changes
+         FROM quotations WHERE id = $1`,
+        [id]
+      );
       if (current.rows.length === 0) {
         throw new Error('Quotation not found');
       }
+
+      // Fetch existing items before update to detect changes if dispatch status was previously set
+      const existingItemsRes = await client.query(
+        `SELECT id, description, size, brand, product_type, quantity_boxes, quantity_sqft
+         FROM quotation_items WHERE quotation_id = $1 ORDER BY sl_no ASC`,
+        [id]
+      );
+      const existingItems = existingItemsRes.rows;
 
       if (current.rows[0].version !== parseInt(version, 10)) {
         const conflictErr: any = new Error(
@@ -874,6 +888,65 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
         );
       }
 
+      // Detect if items changed after the dispatch guy had updated material availability or dates
+      const wasDispatchConfigured = Boolean(
+        current.rows[0].dispatched_by_id ||
+        current.rows[0].expected_dispatch_date ||
+        current.rows[0].dispatched_at ||
+        (current.rows[0].dispatch_status && current.rows[0].dispatch_status !== 'Ready Stock')
+      );
+
+      const itemDiffs: string[] = [];
+      if (existingItems.length !== allItems.length) {
+        itemDiffs.push(`Total items count changed from ${existingItems.length} to ${allItems.length}`);
+      }
+
+      const oldItemMap = new Map<string, any>();
+      existingItems.forEach((it: any) => {
+        const key = `${(it.description || '').trim().toLowerCase()}___${(it.size || '').trim().toLowerCase()}`;
+        oldItemMap.set(key, it);
+      });
+
+      const newItemMap = new Map<string, any>();
+      allItems.forEach((it: any) => {
+        const desc = (it.item_description || it.description || '').trim();
+        const size = (it.size || '').trim();
+        const key = `${desc.toLowerCase()}___${size.toLowerCase()}`;
+        newItemMap.set(key, it);
+
+        const old = oldItemMap.get(key);
+        if (!old) {
+          const qty = it.quantity !== undefined ? it.quantity : (it.quantity_boxes || it.quantity_sqft || 0);
+          itemDiffs.push(`Added new item: "${desc}" (${qty} ${it.product_type || 'units'})`);
+        } else {
+          const oldQty = parseFloat(old.quantity_boxes || old.quantity_sqft || '0') || 0;
+          const newQty = parseFloat(it.quantity !== undefined ? it.quantity : (it.quantity_boxes || it.quantity_sqft || '0')) || 0;
+          if (Math.abs(oldQty - newQty) > 0.001) {
+            itemDiffs.push(`"${desc}": quantity changed from ${oldQty} to ${newQty}`);
+          }
+        }
+      });
+
+      existingItems.forEach((it: any) => {
+        const key = `${(it.description || '').trim().toLowerCase()}___${(it.size || '').trim().toLowerCase()}`;
+        if (!newItemMap.has(key)) {
+          itemDiffs.push(`Removed item: "${it.description}"`);
+        }
+      });
+
+      const shouldNotifyDispatch = wasDispatchConfigured && itemDiffs.length > 0;
+      let dispatchChangeSummary: string | null = null;
+      if (shouldNotifyDispatch) {
+        dispatchChangeSummary = JSON.stringify({
+          changed_by: req.user!.full_name,
+          changed_by_role: req.user!.role,
+          changed_at: new Date().toISOString(),
+          prev_version: current.rows[0].version,
+          new_version: nextVersion,
+          diffs: itemDiffs,
+        });
+      }
+
       // Update Quotation Header and bump version
       const qRes = await client.query(
         `UPDATE quotations
@@ -923,6 +996,9 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
              net_total = $34,
              special_notes = $35,
              version = $36,
+             has_dispatch_item_changes = CASE WHEN $39::boolean THEN true ELSE has_dispatch_item_changes END,
+             dispatch_change_summary = CASE WHEN $39::boolean THEN $40::text ELSE dispatch_change_summary END,
+             dispatch_change_acknowledged_at = CASE WHEN $39::boolean THEN NULL ELSE dispatch_change_acknowledged_at END,
              updated_at = NOW()
          WHERE id = $37 AND version = $38
          RETURNING *`,
@@ -965,6 +1041,8 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
           nextVersion,
           id,
           current.rows[0].version,
+          shouldNotifyDispatch,
+          dispatchChangeSummary,
         ]
       );
 
@@ -1125,12 +1203,32 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
         qRes.rows[0]
       );
 
-      return qRes.rows[0];
+      return {
+        quotation: qRes.rows[0],
+        shouldNotifyDispatch,
+        itemDiffs,
+        dispatchChangeSummary,
+      };
     });
 
-    broadcast({ type: 'QUOTATION_UPDATED', payload: { id, version: updated.version } });
+    broadcast({ type: 'QUOTATION_UPDATED', payload: { id, version: updated.quotation.version } });
 
-    res.json({ quotation: updated });
+    if (updated.shouldNotifyDispatch) {
+      broadcast({
+        type: 'DISPATCH_ITEM_CHANGED',
+        payload: {
+          quotation_id: id,
+          quotation_number: updated.quotation.quotation_number,
+          customer_name: updated.quotation.customer_name,
+          changed_by: req.user!.full_name,
+          changed_at: new Date().toISOString(),
+          diffs: updated.itemDiffs,
+          summary: updated.dispatchChangeSummary,
+        },
+      });
+    }
+
+    res.json({ quotation: updated.quotation });
   } catch (error: any) {
     res.status(error.statusCode || 500).json({ error: error.message });
   }

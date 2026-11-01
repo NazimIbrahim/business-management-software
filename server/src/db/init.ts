@@ -91,6 +91,10 @@ export async function initializeDatabase(): Promise<void> {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS mrp_price NUMERIC(12, 2) DEFAULT 0.00;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS encrypted_code VARCHAR(100);
       CREATE INDEX IF NOT EXISTS idx_quotations_type ON quotations (quotation_type);
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS has_dispatch_item_changes BOOLEAN DEFAULT FALSE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_summary TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_acknowledged_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_quotations_dispatch_changes ON quotations (has_dispatch_item_changes) WHERE has_dispatch_item_changes = TRUE;
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_target NUMERIC(14, 2) DEFAULT 0.00;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(120);

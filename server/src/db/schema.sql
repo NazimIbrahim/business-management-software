@@ -155,6 +155,9 @@ CREATE TABLE IF NOT EXISTS quotations (
     dispatched_at TIMESTAMPTZ,
     dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     dispatched_by_name VARCHAR(120),
+    has_dispatch_item_changes BOOLEAN DEFAULT FALSE,
+    dispatch_change_summary TEXT,
+    dispatch_change_acknowledged_at TIMESTAMPTZ,
     version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
