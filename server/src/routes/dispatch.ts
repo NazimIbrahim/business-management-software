@@ -325,15 +325,16 @@ dispatchRouter.put(
               it.expected_dispatch_date && dateRegex.test(String(it.expected_dispatch_date).trim())
                 ? String(it.expected_dispatch_date).trim()
                 : cleanExpectedDate;
+            const isItemDispatched = itStatus === 'Dispatched';
 
             await client.query(
               `UPDATE quotation_items
                SET dispatch_status = $1,
                    expected_dispatch_date = $2,
                    dispatch_notes = $3,
-                   dispatched_at = CASE WHEN $1 = 'Dispatched' THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END
-               WHERE id = $4 AND quotation_id = $5`,
-              [itStatus, itDate, it.dispatch_notes || null, it.id, id]
+                   dispatched_at = CASE WHEN $4::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END
+               WHERE id = $5 AND quotation_id = $6`,
+              [itStatus, itDate, it.dispatch_notes || null, isItemDispatched, it.id, id]
             );
           }
         }

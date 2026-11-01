@@ -918,11 +918,11 @@ export const DispatchManagement: React.FC = () => {
                                     {/* Dispatch Notes / Vehicle Info */}
                                     <div>
                                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                        Dispatch Notes & Vehicle Details
+                                        Dispatch Notes & Vehicle Details <span className="font-normal text-slate-400">(Optional)</span>
                                       </label>
                                       <input
                                         type="text"
-                                        placeholder="Driver contact, vehicle number, dispatch remarks..."
+                                        placeholder="Optional driver contact, vehicle number, dispatch remarks..."
                                         value={overallNotes}
                                         onChange={(e) => setOverallNotes(e.target.value)}
                                         className="input input-sm text-xs w-full"
@@ -952,7 +952,7 @@ export const DispatchManagement: React.FC = () => {
                                           <th className="py-2.5 px-3 w-24 text-right">Quantity</th>
                                           <th className="py-2.5 px-3 w-48">Status *</th>
                                           <th className="py-2.5 px-3 w-40">Expected Date *</th>
-                                          <th className="py-2.5 px-3 min-w-[160px]">Location / Supplier Remarks</th>
+                                          <th className="py-2.5 px-3 min-w-[170px]">Location / Supplier Remarks (Optional)</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
@@ -1068,7 +1068,7 @@ export const DispatchManagement: React.FC = () => {
                                               <td className="py-2.5 px-3">
                                                 <input
                                                   type="text"
-                                                  placeholder="Rack, supplier, or notes..."
+                                                  placeholder="Optional rack, supplier, or notes..."
                                                   value={itemState.notes}
                                                   onChange={(e) => {
                                                     const newNotes = e.target.value;
