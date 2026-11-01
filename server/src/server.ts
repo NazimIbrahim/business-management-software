@@ -24,7 +24,7 @@ import { reportsRouter } from './routes/reports';
 import { backupRouter } from './routes/backup';
 import { sanitaryCatalogRouter } from './routes/sanitaryCatalog';
 import { rolesRouter, ensureRolesSchema } from './routes/roles';
-import { dispatchRouter } from './routes/dispatch';
+import { dispatchRouter, ensureDispatchSchema } from './routes/dispatch';
 
 const app = express();
 const server = http.createServer(app);
@@ -55,7 +55,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.22',
+    version: '2.4.23',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -115,7 +115,7 @@ async function runAutoMigrations() {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS item_image TEXT;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS mrp_price NUMERIC(12, 2) DEFAULT 0.00;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS encrypted_code VARCHAR(100);
-      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Ready Stock';
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Yet to Update';
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
@@ -137,13 +137,22 @@ async function runAutoMigrations() {
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS round_off NUMERIC(12, 2) NOT NULL DEFAULT 0.00;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS special_notes TEXT;
-      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Ready Stock';
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Yet to Update';
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_name VARCHAR(120);
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS has_dispatch_item_changes BOOLEAN DEFAULT FALSE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_summary TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_acknowledged_at TIMESTAMPTZ;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+
+      -- Set default dispatch_status to 'Yet to Update'
+      ALTER TABLE quotations ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
+      ALTER TABLE quotation_items ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
+      UPDATE quotations SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
+      UPDATE quotation_items SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
 
       -- users columns
       ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_target NUMERIC(14, 2) DEFAULT 0.00;
@@ -413,6 +422,7 @@ async function ensureBootstrapData() {
 
     // 2. Run incremental migrations to guarantee all columns and extra tables exist
     await runAutoMigrations();
+    await ensureDispatchSchema();
 
     // 3. If users table has 0 users, seed default accounts and roles
     const userCount = await query('SELECT count(*) FROM users');

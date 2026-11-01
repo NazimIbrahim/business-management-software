@@ -707,6 +707,68 @@ table tbody tr:hover {
   }
 }
 
+/* Animated Login Mesh & Floating Ambient Orbs */
+@keyframes loginFloat1 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(45px, -60px) scale(1.12);
+  }
+  66% {
+    transform: translate(-30px, 35px) scale(0.92);
+  }
+}
+
+@keyframes loginFloat2 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(-50px, 45px) scale(1.15);
+  }
+  66% {
+    transform: translate(35px, -40px) scale(0.88);
+  }
+}
+
+@keyframes loginFloat3 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(40px, 40px) scale(1.1);
+  }
+}
+
+@keyframes loginPulseGlow {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.animate-login-orb-1 {
+  animation: loginFloat1 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-login-orb-2 {
+  animation: loginFloat2 24s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-login-orb-3 {
+  animation: loginFloat3 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-login-pulse {
+  animation: loginPulseGlow 6s ease-in-out infinite;
+}
+
 /* Dropdown Opening Animation */
 .animate-dropdown-open {
   animation: dropdownSlide 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;

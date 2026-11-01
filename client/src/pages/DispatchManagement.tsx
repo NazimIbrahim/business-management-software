@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 
 export const DISPATCH_STATUS_OPTIONS = [
+  'Yet to Update',
   'Ready Stock',
   'Need to Arrange from Local',
   'Factory Order',
@@ -66,6 +67,7 @@ interface DispatchStats {
   pending_item_changes_count?: number;
   changed_quotations?: ChangedQuotationSummary[];
   total_items: number;
+  yet_to_update_count?: number;
   ready_stock_count: number;
   local_arrange_count: number;
   factory_order_count: number;
@@ -76,7 +78,7 @@ interface DispatchStats {
 
 export const DispatchManagement: React.FC = () => {
   const { user } = useAuth();
-  const { fetchApi, subscribeToEvents } = useServer();
+  const { fetchApi, subscribeToEvents, company } = useServer();
 
   const canEditDispatch = ['admin', 'dispatch', 'dispatch_team'].includes(user?.role || '');
   const isViewOnly = !canEditDispatch;
@@ -102,7 +104,7 @@ export const DispatchManagement: React.FC = () => {
   const [activeItems, setActiveItems] = useState<QuotationItem[]>([]);
 
   // Form State for Active Quotation
-  const [overallStatus, setOverallStatus] = useState<string>('Ready Stock');
+  const [overallStatus, setOverallStatus] = useState<string>('Yet to Update');
   const [overallDate, setOverallDate] = useState<string>('');
   const [overallNotes, setOverallNotes] = useState<string>('');
   const [editedItems, setEditedItems] = useState<Record<number, { status: string; date: string; notes: string }>>({});
@@ -222,7 +224,7 @@ export const DispatchManagement: React.FC = () => {
       const itemsList: QuotationItem[] = res.items || [];
       setActiveItems(itemsList);
 
-      const qStatus = res.quotation?.dispatch_status || 'Ready Stock';
+      const qStatus = res.quotation?.dispatch_status || 'Yet to Update';
       const qDate = res.quotation?.expected_dispatch_date
         ? String(res.quotation.expected_dispatch_date).split('T')[0]
         : '';
@@ -237,7 +239,7 @@ export const DispatchManagement: React.FC = () => {
       itemsList.forEach((it) => {
         if (it.id) {
           itemMap[it.id] = {
-            status: it.dispatch_status || qStatus || 'Ready Stock',
+            status: it.dispatch_status || qStatus || 'Yet to Update',
             date: it.expected_dispatch_date
               ? String(it.expected_dispatch_date).split('T')[0]
               : qDate,
@@ -357,6 +359,13 @@ export const DispatchManagement: React.FC = () => {
   // Status Badge Helper
   const renderDispatchBadge = (status?: string) => {
     switch (status) {
+      case 'Yet to Update':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-xs whitespace-nowrap">
+            <Clock size={11} className="text-slate-500" />
+            <span>Yet to Update</span>
+          </span>
+        );
       case 'Ready Stock':
         return (
           <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs whitespace-nowrap">
@@ -388,7 +397,7 @@ export const DispatchManagement: React.FC = () => {
       default:
         return (
           <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-300 whitespace-nowrap">
-            <span>{status || 'Ready Stock'}</span>
+            <span>{status || 'Yet to Update'}</span>
           </span>
         );
     }
@@ -460,16 +469,26 @@ export const DispatchManagement: React.FC = () => {
     <div className="flex-1 p-4 sm:p-5 lg:p-6 space-y-4 overflow-y-auto w-full min-w-0">
       {/* Formal Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
-            <Truck size={22} className="text-white" />
-          </div>
-          <div>
+        <div className="flex items-center space-x-3 min-w-0">
+          {company?.logo_base64 ? (
+            <div className="h-11 px-2.5 py-1 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-center shrink-0">
+              <img
+                src={company.logo_base64}
+                alt={company.company_name || 'Logo'}
+                className="h-8 max-w-[140px] w-auto object-contain"
+              />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
+              <Truck size={22} className="text-white" />
+            </div>
+          )}
+          <div className="min-w-0">
             <div className="flex items-center space-x-2">
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">
                 Dispatch Management
               </h1>
-              <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase rounded ${
+              <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase rounded shrink-0 ${
                 isViewOnly
                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                   : 'bg-teal-100 text-teal-900 border border-teal-300'
@@ -477,13 +496,13 @@ export const DispatchManagement: React.FC = () => {
                 {isViewOnly ? 'View Only' : 'Fulfillment'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 truncate">
               Order Fulfillment & Delivery Tracking • Approved & Closed Quotations Pipeline
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 self-start sm:self-auto">
+        <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
           <button
             onClick={loadData}
             disabled={loading}
@@ -497,9 +516,9 @@ export const DispatchManagement: React.FC = () => {
       </div>
 
       {/* Formal KPI Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
         {/* Total Orders */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-slate-700 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-slate-700 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Orders Pipeline
@@ -511,13 +530,31 @@ export const DispatchManagement: React.FC = () => {
               {totalOrdersCount}
             </div>
             <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
-              {stats?.approved_count || 0} Approved • {stats?.closed_count || 0} Closed
+              {stats?.approved_count || 0} Appr • {stats?.closed_count || 0} Closed
+            </div>
+          </div>
+        </div>
+
+        {/* Yet to Update */}
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-slate-400 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+              Yet to Update
+            </span>
+            <Clock size={14} className="text-slate-400" />
+          </div>
+          <div className="mt-2">
+            <div className="text-2xl font-black text-slate-800 leading-tight">
+              {stats?.yet_to_update_count || 0}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
+              Awaiting stage check
             </div>
           </div>
         </div>
 
         {/* Ready Stock */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-emerald-600 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-emerald-600 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
               Ready Stock
@@ -529,13 +566,13 @@ export const DispatchManagement: React.FC = () => {
               {stats?.ready_stock_count || 0}
             </div>
             <div className="text-[10px] text-emerald-600 font-medium mt-0.5 truncate">
-              Items available in godown
+              Available in godown
             </div>
           </div>
         </div>
 
         {/* Arrange Local */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-amber-500 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-amber-500 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
               Arrange Local
@@ -553,7 +590,7 @@ export const DispatchManagement: React.FC = () => {
         </div>
 
         {/* Factory Order */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-indigo-600 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-indigo-600 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider">
               Factory Order
@@ -565,13 +602,13 @@ export const DispatchManagement: React.FC = () => {
               {stats?.factory_order_count || 0}
             </div>
             <div className="text-[10px] text-indigo-600 font-medium mt-0.5 truncate">
-              Under production / transit
+              Production / transit
             </div>
           </div>
         </div>
 
         {/* Dispatched */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-teal-600 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-teal-600 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-teal-800 uppercase tracking-wider">
               Dispatched
@@ -589,7 +626,7 @@ export const DispatchManagement: React.FC = () => {
         </div>
 
         {/* Overdue */}
-        <div className="card p-3.5 bg-white border border-slate-200 shadow-xs border-l-4 border-l-rose-500 flex flex-col justify-between">
+        <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-rose-500 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">
               Overdue
@@ -662,6 +699,7 @@ export const DispatchManagement: React.FC = () => {
                 }`}
               >
                 <option value="all">All Dispatch Stages</option>
+                <option value="Yet to Update">Yet to Update</option>
                 <option value="Ready Stock">Ready Stock</option>
                 <option value="Need to Arrange from Local">Need to Arrange Local</option>
                 <option value="Factory Order">Factory Order</option>
@@ -1368,7 +1406,9 @@ export const DispatchManagement: React.FC = () => {
                                                   className={`select select-sm text-xs font-semibold w-full ${
                                                     isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
                                                   } ${
-                                                    itemState.status === 'Ready Stock'
+                                                    itemState.status === 'Yet to Update'
+                                                      ? 'text-slate-700 bg-slate-50 border-slate-300'
+                                                      : itemState.status === 'Ready Stock'
                                                       ? 'text-emerald-700 bg-emerald-50/50 border-emerald-200'
                                                       : itemState.status === 'Need to Arrange from Local'
                                                       ? 'text-amber-800 bg-amber-50/50 border-amber-200'
@@ -1585,7 +1625,7 @@ export const DispatchManagement: React.FC = () => {
                               ? `${it.quantity_sqft} sqft`
                               : '1 nos'}
                           </td>
-                          <td className="py-2 px-2.5 font-semibold text-[11px]">{st || 'Ready Stock'}</td>
+                          <td className="py-2 px-2.5 font-semibold text-[11px]">{st || 'Yet to Update'}</td>
                         </tr>
                       );
                     })}

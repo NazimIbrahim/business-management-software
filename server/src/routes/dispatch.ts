@@ -9,7 +9,39 @@ export const dispatchRouter = Router();
 // Protect all dispatch routes
 dispatchRouter.use(authenticateToken);
 
+let schemaEnsured = false;
+export async function ensureDispatchSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  try {
+    await query(`
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Yet to Update';
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_name VARCHAR(120);
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS has_dispatch_item_changes BOOLEAN DEFAULT FALSE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_summary TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_change_acknowledged_at TIMESTAMPTZ;
+
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Yet to Update';
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+
+      ALTER TABLE quotations ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
+      ALTER TABLE quotation_items ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
+      UPDATE quotations SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
+      UPDATE quotation_items SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
+    `);
+    schemaEnsured = true;
+  } catch (err: any) {
+    console.warn('[Dispatch] Schema check notice:', err.message);
+  }
+}
+
 const VALID_DISPATCH_STATUSES = [
+  'Yet to Update',
   'Ready Stock',
   'Need to Arrange from Local',
   'Factory Order',
@@ -18,23 +50,33 @@ const VALID_DISPATCH_STATUSES = [
 
 // Helper to normalize status strings
 function normalizeStatus(st?: string): string {
-  if (!st) return 'Ready Stock';
+  if (!st) return 'Yet to Update';
   const found = VALID_DISPATCH_STATUSES.find(
     (v) => v.toLowerCase() === st.trim().toLowerCase()
   );
-  return found || 'Ready Stock';
+  return found || 'Yet to Update';
 }
 
 // 1. Get Summary Stats for Dispatch Pipeline
 dispatchRouter.get('/stats', async (req: Request, res: Response) => {
   try {
+    await ensureDispatchSchema();
+
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    const userFilter = isSalesperson
+      ? `AND (q.sales_person_id = $1 OR q.assisted_sales_person_id = $1)`
+      : '';
+    const userParams: any[] = isSalesperson ? [req.user!.id] : [];
+
     const ordersCountRes = await query(
       `SELECT 
          count(*) as total_orders,
-         COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
-         COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count,
-         COUNT(CASE WHEN has_dispatch_item_changes = true THEN 1 END) as pending_item_changes_count
-       FROM quotations WHERE status IN ('approved', 'closed')`
+         COUNT(CASE WHEN LOWER(q.status) = 'approved' THEN 1 END) as approved_count,
+         COUNT(CASE WHEN LOWER(q.status) = 'closed' THEN 1 END) as closed_count,
+         COUNT(CASE WHEN q.has_dispatch_item_changes = true THEN 1 END) as pending_item_changes_count
+       FROM quotations q
+       WHERE LOWER(q.status) IN ('approved', 'closed') ${userFilter}`,
+      userParams
     );
     const countRow = ordersCountRes[0] || {};
     const totalOrders = parseInt(countRow.total_orders || '0', 10);
@@ -42,10 +84,11 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
     const closedCount = parseInt(countRow.closed_count || '0', 10);
     const pendingItemChangesCount = parseInt(countRow.pending_item_changes_count || '0', 10);
 
-    const itemsStatsRes = await query(`
-      SELECT 
+    const itemsStatsRes = await query(
+      `SELECT 
         COUNT(qi.id) as total_items,
-        COUNT(CASE WHEN COALESCE(qi.dispatch_status, 'Ready Stock') = 'Ready Stock' THEN 1 END) as ready_stock_count,
+        COUNT(CASE WHEN COALESCE(qi.dispatch_status, 'Yet to Update') = 'Yet to Update' THEN 1 END) as yet_to_update_count,
+        COUNT(CASE WHEN qi.dispatch_status = 'Ready Stock' THEN 1 END) as ready_stock_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Need to Arrange from Local' THEN 1 END) as local_arrange_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Factory Order' THEN 1 END) as factory_order_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_count,
@@ -56,13 +99,14 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
           THEN 1 END) as overdue_count
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
-      WHERE q.status IN ('approved', 'closed')
-    `);
+      WHERE LOWER(q.status) IN ('approved', 'closed') ${userFilter}`,
+      userParams
+    );
 
     const stats = itemsStatsRes[0] || {};
 
-    const todaysDispatchesRes = await query(`
-      SELECT 
+    const todaysDispatchesRes = await query(
+      `SELECT 
         q.id,
         q.quotation_number,
         q.quotation_date,
@@ -72,36 +116,40 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         q.customer_phone,
         q.site_location,
         q.sales_person_name,
-        COALESCE(q.dispatch_status, 'Ready Stock') as dispatch_status,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
         q.expected_dispatch_date,
         COUNT(qi.id) as total_items,
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
       FROM quotations q
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE q.status IN ('approved', 'closed')
+      WHERE LOWER(q.status) IN ('approved', 'closed')
         AND q.expected_dispatch_date = CURRENT_DATE
-        AND COALESCE(q.dispatch_status, 'Ready Stock') != 'Dispatched'
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+        ${userFilter}
       GROUP BY q.id
-      ORDER BY q.id DESC
-    `);
+      ORDER BY q.id DESC`,
+      userParams
+    );
 
-    const changedQuotationsRes = await query(`
-      SELECT 
+    const changedQuotationsRes = await query(
+      `SELECT 
         q.id,
         q.quotation_number,
         q.customer_name,
         q.customer_phone,
         q.site_location,
         q.sales_person_name,
-        q.dispatch_status,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
         q.expected_dispatch_date,
         q.dispatch_change_summary,
         q.updated_at
       FROM quotations q
-      WHERE q.status IN ('approved', 'closed')
+      WHERE LOWER(q.status) IN ('approved', 'closed')
         AND q.has_dispatch_item_changes = true
-      ORDER BY q.updated_at DESC
-    `);
+        ${userFilter}
+      ORDER BY q.updated_at DESC`,
+      userParams
+    );
 
     res.json({
       total_orders: totalOrders,
@@ -116,6 +164,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         })() : null,
       })),
       total_items: parseInt(stats.total_items || '0', 10),
+      yet_to_update_count: parseInt(stats.yet_to_update_count || '0', 10),
       ready_stock_count: parseInt(stats.ready_stock_count || '0', 10),
       local_arrange_count: parseInt(stats.local_arrange_count || '0', 10),
       factory_order_count: parseInt(stats.factory_order_count || '0', 10),
@@ -135,18 +184,28 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
 // 2. Get All Approved & Closed Quotations for Dispatch Management
 dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
   try {
+    await ensureDispatchSchema();
+
     const { search, dispatch_status, filter_date, quotation_status } = req.query;
 
     const conditions: string[] = [];
     const params: any[] = [];
     let pIdx = 1;
 
+    // Salespersons can only view quotations of their own customers
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    if (isSalesperson) {
+      conditions.push(`(q.sales_person_id = $${pIdx} OR q.assisted_sales_person_id = $${pIdx})`);
+      params.push(req.user!.id);
+      pIdx++;
+    }
+
     if (quotation_status === 'approved') {
-      conditions.push(`q.status = 'approved'`);
+      conditions.push(`LOWER(q.status) = 'approved'`);
     } else if (quotation_status === 'closed') {
-      conditions.push(`q.status = 'closed'`);
+      conditions.push(`LOWER(q.status) = 'closed'`);
     } else {
-      conditions.push(`q.status IN ('approved', 'closed')`);
+      conditions.push(`LOWER(q.status) IN ('approved', 'closed')`);
     }
 
     if (search && typeof search === 'string' && search.trim()) {
@@ -158,7 +217,7 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
     }
 
     if (dispatch_status && typeof dispatch_status === 'string' && dispatch_status !== 'all') {
-      conditions.push(`COALESCE(q.dispatch_status, 'Ready Stock') = $${pIdx}`);
+      conditions.push(`COALESCE(q.dispatch_status, 'Yet to Update') = $${pIdx}`);
       params.push(normalizeStatus(dispatch_status));
       pIdx++;
     }
@@ -171,7 +230,7 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       );
     } else if (filter_date === 'overdue') {
       conditions.push(
-        `q.expected_dispatch_date < CURRENT_DATE AND COALESCE(q.dispatch_status, 'Ready Stock') != 'Dispatched'`
+        `q.expected_dispatch_date < CURRENT_DATE AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'`
       );
     }
 
@@ -191,7 +250,10 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
         q.delivery_address,
         q.site_location,
         q.project_name,
+        q.sales_person_id,
         q.sales_person_name,
+        q.assisted_sales_person_id,
+        q.assisted_sales_person_name,
         q.approved_by_id,
         u_app.full_name as approved_by_name,
         q.approved_at,
@@ -202,14 +264,15 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
         COALESCE(q.has_dispatch_item_changes, false) as has_dispatch_item_changes,
         q.dispatch_change_summary,
         q.dispatch_change_acknowledged_at,
-        COALESCE(q.dispatch_status, 'Ready Stock') as dispatch_status,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
         q.expected_dispatch_date,
         q.dispatch_notes,
         q.dispatched_at,
         q.dispatched_by_name,
         COUNT(qi.id) as total_items,
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count,
-        COUNT(CASE WHEN COALESCE(qi.dispatch_status, 'Ready Stock') = 'Ready Stock' THEN 1 END) as ready_stock_items_count,
+        COUNT(CASE WHEN COALESCE(qi.dispatch_status, 'Yet to Update') = 'Yet to Update' THEN 1 END) as yet_to_update_items_count,
+        COUNT(CASE WHEN qi.dispatch_status = 'Ready Stock' THEN 1 END) as ready_stock_items_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Need to Arrange from Local' THEN 1 END) as local_arrange_items_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Factory Order' THEN 1 END) as factory_order_items_count
       FROM quotations q
@@ -230,6 +293,7 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       ...r,
       total_items: parseInt(r.total_items || '0', 10),
       dispatched_items_count: parseInt(r.dispatched_items_count || '0', 10),
+      yet_to_update_items_count: parseInt(r.yet_to_update_items_count || '0', 10),
       ready_stock_items_count: parseInt(r.ready_stock_items_count || '0', 10),
       local_arrange_items_count: parseInt(r.local_arrange_items_count || '0', 10),
       factory_order_items_count: parseInt(r.factory_order_items_count || '0', 10),
@@ -244,6 +308,8 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
 // 3. Get Single Closed Quotation with Area & Item Details for Dispatch
 dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
   try {
+    await ensureDispatchSchema();
+
     const id = parseInt(req.params.id as string, 10);
     const qRows = await query(
       `SELECT q.*, u_app.full_name as approved_by_name
@@ -262,6 +328,19 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
     if (!['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
       res.status(400).json({
         error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
+      });
+      return;
+    }
+
+    // Salespersons can only view their own quotations
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    if (
+      isSalesperson &&
+      quotation.sales_person_id !== req.user!.id &&
+      quotation.assisted_sales_person_id !== req.user!.id
+    ) {
+      res.status(403).json({
+        error: 'Access denied: Salespersons can only view dispatch status of their own quotations.',
       });
       return;
     }
@@ -289,7 +368,7 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
         qi.item_image,
         qi.mrp_price,
         qi.total_amount,
-        COALESCE(qi.dispatch_status, 'Ready Stock') as dispatch_status,
+        COALESCE(qi.dispatch_status, 'Yet to Update') as dispatch_status,
         COALESCE(qi.expected_dispatch_date, q.expected_dispatch_date) as expected_dispatch_date,
         qi.dispatch_notes,
         qi.dispatched_at
@@ -310,7 +389,7 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
     res.json({
       quotation: {
         ...quotation,
-        dispatch_status: quotation.dispatch_status || 'Ready Stock',
+        dispatch_status: quotation.dispatch_status || 'Yet to Update',
       },
       areas: areasWithItems,
       items,
@@ -326,6 +405,8 @@ dispatchRouter.put(
   requireRole(['admin', 'dispatch', 'dispatch_team']),
   async (req: Request, res: Response) => {
     try {
+      await ensureDispatchSchema();
+
       const id = parseInt(req.params.id as string, 10);
       const {
         expected_dispatch_date,
@@ -423,6 +504,10 @@ dispatchRouter.put(
             itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
             10
           );
+          const ready = parseInt(
+            itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
+            10
+          );
 
           if (total > 0 && dispatched === total) {
             finalQuotationStatus = 'Dispatched';
@@ -430,8 +515,10 @@ dispatchRouter.put(
             finalQuotationStatus = 'Factory Order';
           } else if (local > 0) {
             finalQuotationStatus = 'Need to Arrange from Local';
-          } else {
+          } else if (ready > 0) {
             finalQuotationStatus = 'Ready Stock';
+          } else {
+            finalQuotationStatus = 'Yet to Update';
           }
         }
 
