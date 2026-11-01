@@ -21,8 +21,9 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
     const params: any[] = [];
     let idx = 1;
 
-    const targetSpId = req.user?.role === 'salesperson'
-      ? req.user.id
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    const targetSpId = isSalesperson
+      ? req.user!.id
       : (sales_person_id && !isNaN(Number(sales_person_id)) ? parseInt(sales_person_id as string, 10) : null);
 
     if (targetSpId) {
@@ -314,8 +315,9 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
 reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
     const { start_date, end_date, sales_person_id } = req.query;
-    const targetSpId = req.user?.role === 'salesperson'
-      ? req.user.id
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    const targetSpId = isSalesperson
+      ? req.user!.id
       : (sales_person_id && !isNaN(Number(sales_person_id)) ? parseInt(sales_person_id as string, 10) : null);
 
     const dateClauses: string[] = [];
@@ -413,7 +415,7 @@ reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req
         COUNT(DISTINCT CASE WHEN q.assisted_sales_person_id = u.id THEN q.id END) as assisted_count
       FROM users u
       LEFT JOIN quotations q ON (q.sales_person_id = u.id OR q.assisted_sales_person_id = u.id) ${dateFilter}
-      WHERE u.is_active = true ${userFilter}
+      WHERE u.is_active = true ${userFilter} ${userFilter}
       GROUP BY u.id, u.full_name, u.role, u.email, u.phone, u.monthly_target
       ORDER BY closed_value DESC, total_value DESC, u.full_name ASC
     `, params);
@@ -450,7 +452,11 @@ reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req
 // Export Salesperson Performance Summary to XLSX or CSV
 reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
-    const { format = 'xlsx', start_date, end_date } = req.query;
+    const { format = 'xlsx', start_date, end_date, sales_person_id } = req.query;
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    const targetSpId = isSalesperson
+      ? req.user!.id
+      : (sales_person_id && !isNaN(Number(sales_person_id)) ? parseInt(sales_person_id as string, 10) : null);
 
     const dateClauses: string[] = [];
     const params: any[] = [];
@@ -466,6 +472,11 @@ reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req:
     }
 
     const dateFilter = dateClauses.length > 0 ? `AND ${dateClauses.join(' AND ')}` : '';
+    let userFilter = '';
+    if (targetSpId) {
+      userFilter = `AND u.id = $${idx++}::integer`;
+      params.push(targetSpId);
+    }
 
     const rows = await query(`
       SELECT
@@ -536,7 +547,7 @@ reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req:
         ), 0) as "Total Quoted Value (INR)"
       FROM users u
       LEFT JOIN quotations q ON (q.sales_person_id = u.id OR q.assisted_sales_person_id = u.id) ${dateFilter}
-      WHERE u.is_active = true
+      WHERE u.is_active = true ${userFilter}
       GROUP BY u.id, u.full_name, u.role, u.monthly_target
       ORDER BY "Closed Revenue (INR)" DESC, "Total Quoted Value (INR)" DESC
     `, params);
@@ -622,11 +633,21 @@ reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req:
 // Export Payments as XLSX or CSV
 reportsRouter.get('/payments/export', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
-    const { format = 'xlsx', start_date, end_date } = req.query;
+    const { format = 'xlsx', start_date, end_date, sales_person_id } = req.query;
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    const targetSpId = isSalesperson
+      ? req.user!.id
+      : (sales_person_id && !isNaN(Number(sales_person_id)) ? parseInt(sales_person_id as string, 10) : null);
 
     const whereClauses = ['1=1'];
     const params: any[] = [];
     let idx = 1;
+
+    if (targetSpId) {
+      whereClauses.push(`(q.sales_person_id = $${idx}::integer OR q.assisted_sales_person_id = $${idx}::integer)`);
+      params.push(targetSpId);
+      idx++;
+    }
 
     if (start_date) {
       whereClauses.push(`p.payment_date >= $${idx++}::date`);

@@ -15,7 +15,7 @@ customersRouter.get('/', async (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
     const offset = (page - 1) * limit;
     const search = (req.query.search as string || '').trim();
-    const isSalesperson = req.user!.role === 'salesperson';
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
 
     let whereClause = 'WHERE c.is_active = true';
     const params: any[] = [];
@@ -85,7 +85,7 @@ customersRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Fast customer lookup by phone, name, email, or address for autocomplete popup
+// Fast customer lookup by phone, name, email, or address for autocomplete popup (scoped for salespersons)
 customersRouter.get('/lookup', async (req: Request, res: Response) => {
   try {
     const q = ((req.query.q as string) || '').trim();
@@ -94,22 +94,41 @@ customersRouter.get('/lookup', async (req: Request, res: Response) => {
       return;
     }
     const cleanDigits = q.replace(/\D/g, '');
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
     let sql = `
       SELECT id, name, mobile_number, email, delivery_address, site_location, gstin, notes
-      FROM customers
-      WHERE is_active = true AND (
-        name ILIKE $1 
-        OR mobile_number ILIKE $1 
-        OR site_location ILIKE $1 
-        OR email ILIKE $1 
-        OR gstin ILIKE $1
+      FROM customers c
+      WHERE c.is_active = true
     `;
-    const params = [`%${q}%`];
-    if (cleanDigits.length >= 3) {
-      sql += ` OR REPLACE(mobile_number, ' ', '') ILIKE $2`;
-      params.push(`%${cleanDigits}%`);
+    const params: any[] = [];
+    let idx = 1;
+
+    if (isSalesperson) {
+      sql += ` AND (c.created_by_id = $${idx} OR c.id IN (
+        SELECT DISTINCT customer_id FROM quotations
+        WHERE customer_id IS NOT NULL AND (sales_person_id = $${idx} OR assisted_sales_person_id = $${idx})
+      ))`;
+      params.push(req.user!.id);
+      idx++;
     }
-    sql += `) ORDER BY name ASC LIMIT 10`;
+
+    sql += ` AND (
+      c.name ILIKE $${idx} 
+      OR c.mobile_number ILIKE $${idx} 
+      OR c.site_location ILIKE $${idx} 
+      OR c.email ILIKE $${idx} 
+      OR c.gstin ILIKE $${idx}
+    `;
+    params.push(`%${q}%`);
+    idx++;
+
+    if (cleanDigits.length >= 3) {
+      sql += ` OR REPLACE(c.mobile_number, ' ', '') ILIKE $${idx}`;
+      params.push(`%${cleanDigits}%`);
+      idx++;
+    }
+    sql += `) ORDER BY c.name ASC LIMIT 10`;
 
     const rows = await query(sql, params);
     res.json({ customers: rows });
@@ -122,7 +141,7 @@ customersRouter.get('/lookup', async (req: Request, res: Response) => {
 customersRouter.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string, 10);
-    const isSalesperson = req.user!.role === 'salesperson';
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
 
     const custRows = await query('SELECT * FROM customers WHERE id = $1', [id]);
     if (custRows.length === 0) {
@@ -218,6 +237,25 @@ customersRouter.put('/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string, 10);
     const { name, mobile_number, email, delivery_address, site_location, gstin, notes, is_active } = req.body;
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
+    if (isSalesperson) {
+      const allowed = await query(
+        `SELECT 1 FROM customers c
+         WHERE c.id = $1 AND (
+           c.created_by_id = $2
+           OR EXISTS (
+             SELECT 1 FROM quotations q
+             WHERE q.customer_id = c.id AND (q.sales_person_id = $2 OR q.assisted_sales_person_id = $2)
+           )
+         )`,
+        [id, req.user!.id]
+      );
+      if (allowed.length === 0) {
+        res.status(403).json({ error: 'You only have permission to edit your own customers.' });
+        return;
+      }
+    }
 
     const rows = await query(
       `UPDATE customers

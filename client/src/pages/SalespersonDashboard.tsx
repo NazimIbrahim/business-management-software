@@ -109,14 +109,12 @@ export const SalespersonDashboard: React.FC<Props> = ({
       setSalespersons(team);
 
       // Auto-select logged in user if salesperson, or first in list
-      if (selectedSalespersonId === null) {
-        if (user?.role === 'salesperson') {
-          setSelectedSalespersonId(user.id);
-        } else if (team.length > 0) {
-          // If admin or manager, select first salesperson or keep all
-          const firstSp = team.find((t) => t.role === 'salesperson') || team[0];
-          setSelectedSalespersonId(firstSp.id);
-        }
+      if (user?.role?.toLowerCase() === 'salesperson') {
+        setSelectedSalespersonId(user.id);
+      } else if (selectedSalespersonId === null && team.length > 0) {
+        // If admin or manager, select first salesperson or keep all
+        const firstSp = team.find((t) => t.role === 'salesperson') || team[0];
+        setSelectedSalespersonId(firstSp.id);
       }
     } catch (err) {
       console.error('Failed to load sales team:', err);
@@ -156,7 +154,9 @@ export const SalespersonDashboard: React.FC<Props> = ({
         page: String(page),
         limit: '15',
       });
-      if (selectedSalespersonId) {
+      if (user?.role?.toLowerCase() === 'salesperson') {
+        params.append('sales_person_id', String(user.id));
+      } else if (selectedSalespersonId) {
         params.append('sales_person_id', String(selectedSalespersonId));
       }
       if (debouncedSearch) params.append('search', debouncedSearch);
@@ -289,7 +289,9 @@ export const SalespersonDashboard: React.FC<Props> = ({
     setExportingFormat(format);
     try {
       const params = new URLSearchParams({ format });
-      if (selectedSalespersonId) {
+      if (user?.role?.toLowerCase() === 'salesperson') {
+        params.append('sales_person_id', String(user.id));
+      } else if (selectedSalespersonId) {
         params.append('sales_person_id', String(selectedSalespersonId));
       }
       if (debouncedSearch) params.append('search', debouncedSearch);
@@ -534,7 +536,7 @@ export const SalespersonDashboard: React.FC<Props> = ({
 
         {/* Team Chips */}
         <div className="flex items-center space-x-2 overflow-x-auto pb-1">
-          {user?.role !== 'salesperson' && (
+          {user?.role?.toLowerCase() !== 'salesperson' && (
             <button
               onClick={() => {
                 setSelectedSalespersonId(null);
@@ -550,41 +552,43 @@ export const SalespersonDashboard: React.FC<Props> = ({
             </button>
           )}
 
-          {salespersons.map((sp) => {
-            const isSelected = selectedSalespersonId === sp.id;
-            return (
-              <button
-                key={sp.id}
-                onClick={() => {
-                  setSelectedSalespersonId(sp.id);
-                  setPage(1);
-                }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  isSelected
-                    ? 'bg-slate-900 text-white font-semibold shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    isSelected ? 'bg-white text-slate-900' : 'bg-slate-300 text-slate-700'
+          {salespersons
+            .filter((sp) => (user?.role?.toLowerCase() === 'salesperson' ? sp.id === user.id : true))
+            .map((sp) => {
+              const isSelected = selectedSalespersonId === sp.id;
+              return (
+                <button
+                  key={sp.id}
+                  onClick={() => {
+                    setSelectedSalespersonId(sp.id);
+                    setPage(1);
+                  }}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-slate-900 text-white font-semibold shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  {sp.full_name.charAt(0).toUpperCase()}
-                </div>
-                <span>{sp.full_name}</span>
-                {sp.monthly_target && sp.monthly_target > 0 && (
-                  <span
-                    className={`text-[10px] font-mono tabular-nums ${
-                      isSelected ? 'text-slate-300' : 'text-slate-500'
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      isSelected ? 'bg-white text-slate-900' : 'bg-slate-300 text-slate-700'
                     }`}
                   >
-                    (₹{formatCurrency(sp.monthly_target)})
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                    {sp.full_name.charAt(0).toUpperCase()}
+                  </div>
+                  <span>{sp.full_name}</span>
+                  {sp.monthly_target && sp.monthly_target > 0 && (
+                    <span
+                      className={`text-[10px] font-mono tabular-nums ${
+                        isSelected ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      (₹{formatCurrency(sp.monthly_target)})
+                    </span>
+                  )}
+                </button>
+              );
+            })}
         </div>
       </div>
 

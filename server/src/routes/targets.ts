@@ -23,7 +23,7 @@ targetsRouter.get('/', async (req: Request, res: Response) => {
     let idx = 1;
 
     // Salespersons can only view their own targets
-    if (req.user!.role === 'salesperson') {
+    if (req.user?.role?.toLowerCase() === 'salesperson') {
       sql += ` AND t.sales_person_id = $${idx++}`;
       params.push(req.user!.id);
     } else if (salesperson_id) {
@@ -152,7 +152,7 @@ targetsRouter.get('/performance', async (req: Request, res: Response) => {
     const startDate = (start_date as string) || firstDay;
     const endDate = (end_date as string) || lastDay;
 
-    const isSalesperson = req.user!.role === 'salesperson';
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
 
     // Salespersons only track and view their own performance; managers and admins see all
     const salespersons = isSalesperson

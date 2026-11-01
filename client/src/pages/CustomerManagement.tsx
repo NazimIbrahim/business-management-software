@@ -11,7 +11,7 @@ interface Props {
 export const CustomerManagement: React.FC<Props> = ({ onSelectQuotation }) => {
   const { fetchApi, subscribeToEvents } = useServer();
   const { user } = useAuth();
-  const isSalesperson = user?.role === 'salesperson';
+  const isSalesperson = user?.role?.toLowerCase() === 'salesperson';
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);

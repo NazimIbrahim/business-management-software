@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useServer } from '../context/ServerContext';
+import { useAuth } from '../context/AuthContext';
 import { User, Quotation } from '../types';
 import {
   BarChart3,
@@ -35,6 +36,8 @@ interface Props {
 
 export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   const { serverUrl, fetchApi, getPdfUrl } = useServer();
+  const { user } = useAuth();
+  const isSalesperson = user?.role?.toLowerCase() === 'salesperson';
   const token = localStorage.getItem('ama_token');
 
   // Active Tab: 'salesperson' | 'quotations' | 'payments'
@@ -42,7 +45,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
 
   // Sales team state
   const [salesTeam, setSalesTeam] = useState<User[]>([]);
-  const [selectedSpId, setSelectedSpId] = useState<string>('');
+  const [selectedSpId, setSelectedSpId] = useState<string>(isSalesperson && user ? String(user.id) : '');
   const [spStatus, setSpStatus] = useState<string>('');
   const [spStartDate, setSpStartDate] = useState<string>('');
   const [spEndDate, setSpEndDate] = useState<string>('');
@@ -53,7 +56,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
 
   // General Quotation export filters
   const [qStatus, setQStatus] = useState('');
-  const [qSalespersonId, setQSalespersonId] = useState('');
+  const [qSalespersonId, setQSalespersonId] = useState(isSalesperson && user ? String(user.id) : '');
   const [qStartDate, setQStartDate] = useState('');
   const [qEndDate, setQEndDate] = useState('');
   const [qExportMode, setQExportMode] = useState<'standard' | 'encrypted'>('standard');
@@ -74,6 +77,14 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     initialEncrypted?: boolean;
   } | null>(null);
 
+  // Sync salesperson restriction when user loads
+  useEffect(() => {
+    if (isSalesperson && user?.id) {
+      setSelectedSpId(String(user.id));
+      setQSalespersonId(String(user.id));
+    }
+  }, [isSalesperson, user]);
+
   // Fetch sales team users on mount
   useEffect(() => {
     fetchApi('/api/users')
@@ -90,11 +101,19 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     const params = new URLSearchParams();
     if (spStartDate) params.append('start_date', spStartDate);
     if (spEndDate) params.append('end_date', spEndDate);
-    if (selectedSpId) params.append('sales_person_id', selectedSpId);
+    if (isSalesperson && user?.id) {
+      params.append('sales_person_id', String(user.id));
+    } else if (selectedSpId) {
+      params.append('sales_person_id', selectedSpId);
+    }
 
     fetchApi(`/api/reports/salespersons/summary?${params.toString()}`)
       .then((res) => {
-        setSpSummary(res.summary || []);
+        let list = res.summary || [];
+        if (isSalesperson && user?.id) {
+          list = list.filter((s: any) => String(s.user_id) === String(user.id));
+        }
+        setSpSummary(list);
       })
       .catch((err) => console.error('Failed to load summary:', err))
       .finally(() => setLoadingSummary(false));
@@ -104,12 +123,19 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   const loadSalespersonQuotations = () => {
     setLoadingQuotes(true);
     const params = new URLSearchParams({ limit: '100' });
-    if (selectedSpId) params.append('sales_person_id', selectedSpId);
+    if (isSalesperson && user?.id) {
+      params.append('sales_person_id', String(user.id));
+    } else if (selectedSpId) {
+      params.append('sales_person_id', selectedSpId);
+    }
     if (spStatus) params.append('status', spStatus);
 
     fetchApi(`/api/quotations?${params.toString()}`)
       .then((res) => {
         let list: Quotation[] = res.quotations || [];
+        if (isSalesperson && user?.id) {
+          list = list.filter((q: any) => q.sales_person_id === user.id || q.assisted_sales_person_id === user.id);
+        }
         // Apply local date filtering if provided
         if (spStartDate) {
           list = list.filter((q) => q.quotation_date >= spStartDate);
@@ -126,7 +152,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   useEffect(() => {
     loadSalespersonSummary();
     loadSalespersonQuotations();
-  }, [selectedSpId, spStatus, spStartDate, spEndDate]);
+  }, [selectedSpId, spStatus, spStartDate, spEndDate, user]);
 
   // Generic Download Handler
   const handleDownload = async (
@@ -141,17 +167,32 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     const params = new URLSearchParams({ format, ...(customParams || {}) });
     if (token) params.set('token', token);
 
+    // If caller is a salesperson, STRICTLY scope exports to their own user id
+    if (isSalesperson && user?.id) {
+      params.set('sales_person_id', String(user.id));
+    }
+
     if (type === 'quotations' && !customParams) {
       if (qStatus) params.append('status', qStatus);
-      if (qSalespersonId) params.append('sales_person_id', qSalespersonId);
+      if (isSalesperson && user?.id) {
+        params.set('sales_person_id', String(user.id));
+      } else if (qSalespersonId) {
+        params.append('sales_person_id', qSalespersonId);
+      }
       if (qStartDate) params.append('start_date', qStartDate);
       if (qEndDate) params.append('end_date', qEndDate);
       if (qExportMode === 'encrypted') params.append('encrypted', 'true');
       if (qItemized) params.append('itemized', 'true');
     } else if (type === 'payments' && !customParams) {
+      if (isSalesperson && user?.id) {
+        params.set('sales_person_id', String(user.id));
+      }
       if (pStartDate) params.append('start_date', pStartDate);
       if (pEndDate) params.append('end_date', pEndDate);
     } else if (type === 'salespersons' && !customParams) {
+      if (isSalesperson && user?.id) {
+        params.set('sales_person_id', String(user.id));
+      }
       if (spStartDate) params.append('start_date', spStartDate);
       if (spEndDate) params.append('end_date', spEndDate);
     }
@@ -282,7 +323,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedSpId('');
+                    if (!isSalesperson) setSelectedSpId('');
                     setSpStatus('');
                     setSpStartDate('');
                     setSpEndDate('');
@@ -309,18 +350,24 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
               {/* Salesperson Select */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Sales Associate</label>
-                <select
-                  className="select select-sm w-full font-medium"
-                  value={selectedSpId}
-                  onChange={(e) => setSelectedSpId(e.target.value)}
-                >
-                  <option value="">All Sales Associates (Team View)</option>
-                  {salesTeam.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({u.role})
-                    </option>
-                  ))}
-                </select>
+                {isSalesperson ? (
+                  <div className="input input-sm w-full bg-slate-100 text-slate-800 font-bold flex items-center cursor-not-allowed select-none">
+                    {user?.full_name} (Restricted to My Account)
+                  </div>
+                ) : (
+                  <select
+                    className="select select-sm w-full font-medium"
+                    value={selectedSpId}
+                    onChange={(e) => setSelectedSpId(e.target.value)}
+                  >
+                    <option value="">All Sales Associates (Team View)</option>
+                    {salesTeam.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Status Filter */}
@@ -440,7 +487,9 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-sm tracking-tight text-white">
-                  {selectedSpId
+                  {isSalesperson
+                    ? `Export My Quotation Performance Report (${user?.full_name})`
+                    : selectedSpId
                     ? `Export ${salesTeam.find((u) => String(u.id) === String(selectedSpId))?.full_name}'s Quotation Report`
                     : 'Export Sales Team Quotation Performance Report'}
                 </span>
@@ -550,14 +599,14 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
             </div>
           </div>
 
-          {/* If No specific salesperson selected: Show Team Summary Matrix */}
-          {!selectedSpId && spSummary.length > 0 && (
+          {/* Show Matrix: For Manager/Admin (if no specific selected) OR for Salesperson (showing their own row) */}
+          {((!selectedSpId && spSummary.length > 0) || (isSalesperson && spSummary.length > 0)) && (
             <div className="card overflow-hidden">
               <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Award size={15} className="text-slate-700" />
                   <span className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                    Sales Associates Performance Matrix
+                    {isSalesperson ? 'My Sales Performance Matrix' : 'Sales Associates Performance Matrix'}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -565,7 +614,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                     type="button"
                     onClick={() => handleDownload('salespersons', 'pdf')}
                     className="btn btn-secondary btn-xs text-[10px] flex items-center space-x-1 border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100"
-                    title="Export Sales Associates Matrix as Landscape PDF"
+                    title="Export Performance Matrix as Landscape PDF"
                   >
                     <Printer size={11} className="text-rose-600" />
                     <span>Download PDF (.pdf)</span>
@@ -574,7 +623,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                     type="button"
                     onClick={() => handleDownload('salespersons', 'xlsx')}
                     className="btn btn-secondary btn-xs text-[10px] flex items-center space-x-1"
-                    title="Download Sales Associates Matrix as Excel Spreadsheet"
+                    title="Download Performance Matrix as Excel Spreadsheet"
                   >
                     <Download size={11} />
                     <span>Download Excel (.xlsx)</span>
@@ -647,7 +696,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                             onClick={() => setSelectedSpId(String(s.user_id))}
                             className="btn btn-secondary btn-xs text-[10px] px-2 py-0.5"
                           >
-                            <span>View Quotes →</span>
+                            <span>{isSalesperson ? 'My Ledger ↓' : 'View Quotes →'}</span>
                           </button>
                         </td>
                       </tr>
@@ -664,13 +713,15 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
               <div className="flex items-center space-x-2">
                 <FileSpreadsheet size={15} className="text-slate-700" />
                 <span className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                  {selectedSpId
+                  {isSalesperson
+                    ? `My Active Quotations Ledger (${user?.full_name})`
+                    : selectedSpId
                     ? `Quotations Ledger: ${salesTeam.find((u) => String(u.id) === String(selectedSpId))?.full_name}`
                     : 'All Active Quotations Ledger'}
                 </span>
                 <span className="badge badge-draft text-[10px]">{spQuotations.length} records</span>
               </div>
-              {selectedSpId && (
+              {selectedSpId && !isSalesperson && (
                 <button
                   type="button"
                   onClick={() => setSelectedSpId('')}
@@ -835,18 +886,24 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
               {/* Sales Associate Filter */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Filter by Sales Associate</label>
-                <select
-                  className="select select-sm w-full"
-                  value={qSalespersonId}
-                  onChange={(e) => setQSalespersonId(e.target.value)}
-                >
-                  <option value="">All Sales Associates</option>
-                  {salesTeam.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({u.role})
-                    </option>
-                  ))}
-                </select>
+                {isSalesperson ? (
+                  <div className="input input-sm w-full bg-slate-100 text-slate-800 font-bold flex items-center cursor-not-allowed select-none">
+                    {user?.full_name} (Restricted to My Account)
+                  </div>
+                ) : (
+                  <select
+                    className="select select-sm w-full"
+                    value={qSalespersonId}
+                    onChange={(e) => setQSalespersonId(e.target.value)}
+                  >
+                    <option value="">All Sales Associates</option>
+                    {salesTeam.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Status Filter */}

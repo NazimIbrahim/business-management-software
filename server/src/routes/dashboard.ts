@@ -8,7 +8,7 @@ dashboardRouter.use(authenticateToken);
 
 dashboardRouter.get('/summary', async (req: Request, res: Response) => {
   try {
-    const isSalesperson = req.user!.role === 'salesperson';
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
     const filterUser = isSalesperson
       ? `WHERE (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})`
       : '';
@@ -247,6 +247,24 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       ORDER BY q.id DESC
     `);
 
+    let personalAchievement: any = null;
+    if (isSalesperson) {
+      const userTargetRes = await query('SELECT monthly_target FROM users WHERE id = $1', [req.user!.id]);
+      const monthlyTarget = parseFloat(userTargetRes[0]?.monthly_target || '0');
+      const approvedCountRes = await query(
+        `SELECT count(*) as count FROM quotations WHERE LOWER(status) IN ('approved', 'closed') AND (sales_person_id = $1 OR assisted_sales_person_id = $1)`,
+        [req.user!.id]
+      );
+      const approvedOrdersCount = parseInt(approvedCountRes[0]?.count || '0', 10);
+      personalAchievement = {
+        monthlyTarget,
+        approvedRevenue,
+        approvedOrdersCount,
+        percentage: monthlyTarget > 0 ? parseFloat(((approvedRevenue / monthlyTarget) * 100).toFixed(1)) : 0,
+        difference: parseFloat((approvedRevenue - monthlyTarget).toFixed(2)),
+      };
+    }
+
     res.json({
       statusCounts,
       financials: {
@@ -257,6 +275,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       },
       recentQuotations,
       leaderboard,
+      personalAchievement,
       monthlyTrend,
       todaysDispatches,
     });

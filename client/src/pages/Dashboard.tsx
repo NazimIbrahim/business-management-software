@@ -94,6 +94,19 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
     return () => unsubscribe();
   }, [user]);
 
+  const isSalesperson = user?.role?.toLowerCase() === 'salesperson';
+
+  // Filter recent quotations for salespersons (safeguard)
+  const visibleRecentQuotations = (data?.recentQuotations || []).filter((q: any) => {
+    if (!isSalesperson) return true;
+    return (
+      q.sales_person_id === user?.id ||
+      q.assisted_sales_person_id === user?.id ||
+      q.sales_person_name === user?.full_name ||
+      q.assisted_sales_person_name === user?.full_name
+    );
+  });
+
   const formatCurrency = (val: number) => {
     return Number(val || 0).toLocaleString('en-IN', {
       maximumFractionDigits: 2,
@@ -453,10 +466,12 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
             <div className="flex justify-between items-center mb-3">
               <div>
                 <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Recent Quotation Activity
+                  {isSalesperson ? 'My Recent Quotations' : 'Recent Quotation Activity'}
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Latest updates from across the showroom network
+                  {isSalesperson
+                    ? 'Your latest customer proposals and status updates'
+                    : 'Latest updates from across the showroom network'}
                 </p>
               </div>
               <span className="text-[11px] text-emerald-600 font-medium flex items-center space-x-1">
@@ -478,8 +493,8 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E0E1DD]/60">
-                  {data?.recentQuotations && data.recentQuotations.length > 0 ? (
-                    data.recentQuotations.map((q: any) => (
+                  {visibleRecentQuotations && visibleRecentQuotations.length > 0 ? (
+                    visibleRecentQuotations.map((q: any) => (
                       <tr
                         key={q.id}
                         onClick={() => onSelectQuotation(q.id)}
@@ -577,14 +592,14 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
           </div>
         </div>
 
-        {/* Salesperson Performance Leaderboard (1 Col) */}
+        {/* Salesperson Performance Leaderboard / Personal Target & Achievement (1 Col) */}
         <div className="card p-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-2">
                 <Award size={16} className="text-amber-600" />
                 <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Sales Leaderboard
+                  {isSalesperson ? 'My Sales Milestone & Target' : 'Sales Leaderboard'}
                 </h2>
               </div>
               <span className="text-[10px] text-slate-400 uppercase font-semibold">
@@ -592,46 +607,123 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
               </span>
             </div>
 
-            <div className="space-y-2.5">
-              {data?.leaderboard && data.leaderboard.length > 0 ? (
-                data.leaderboard.map((item: any, idx: number) => (
-                  <div
-                    key={item.id}
-                    className="p-2.5 rounded-md border border-slate-100 bg-slate-50/70 flex items-center justify-between"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
-                          idx === 0
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : idx === 1
-                            ? 'bg-slate-200 text-slate-700 border border-slate-300'
-                            : 'bg-orange-100 text-orange-800 border border-orange-200'
-                        }`}
-                      >
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900">{item.full_name}</p>
-                        <p className="text-[10px] text-slate-500 tabular-nums">
-                          {item.total_quotations} quotes created
-                        </p>
+            {isSalesperson ? (
+              <div className="space-y-4">
+                {/* Target & Achieved Card */}
+                <div className="p-3.5 rounded-lg border border-teal-200 bg-teal-50/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-teal-900 uppercase tracking-wider">
+                      Target Progress
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-teal-200 text-teal-900">
+                      {Math.min(100, Math.round(data?.personalAchievement?.percentage || 0))}%
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-teal-200/60 rounded-full h-2.5 overflow-hidden mb-3">
+                    <div
+                      className="bg-teal-600 h-2.5 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, data?.personalAchievement?.percentage || 0))}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-teal-200/60">
+                    <div>
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Monthly Target</div>
+                      <div className="font-bold text-slate-800 tabular-nums">
+                        ₹ {formatCurrency(data?.personalAchievement?.monthlyTarget || 0)}
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-slate-900 tabular-nums">
-                        ₹ {formatCurrency(item.sales_achieved)}
-                      </p>
-                      <p className="text-[10px] text-emerald-700 font-medium">Approved / Closed</p>
+                      <div className="text-[10px] text-teal-700 font-semibold uppercase">Achieved (Approved)</div>
+                      <div className="font-bold text-teal-900 tabular-nums">
+                        ₹ {formatCurrency(data?.personalAchievement?.approvedRevenue || 0)}
+                      </div>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="py-8 text-center text-slate-400 text-xs">
-                  No salesperson performance data yet.
                 </div>
-              )}
-            </div>
+
+                {/* Approved Orders & Pipeline Stat */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="p-3 rounded-lg border border-emerald-100 bg-emerald-50/60">
+                    <div className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">
+                      Approved Orders
+                    </div>
+                    <div className="text-lg font-black text-emerald-950 mt-1 tabular-nums">
+                      {data?.personalAchievement?.approvedOrdersCount || 0}
+                    </div>
+                    <div className="text-[10px] text-emerald-700 mt-0.5">Execution Ready</div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                    <div className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">
+                      Active Quotes
+                    </div>
+                    <div className="text-lg font-black text-slate-900 mt-1 tabular-nums">
+                      {totalQuotesCount}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Customer Proposals</div>
+                  </div>
+                </div>
+
+                {/* Status difference pill */}
+                <div className="p-2.5 rounded-lg border border-slate-200/80 bg-white flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-medium text-[11px]">Monthly Variance:</span>
+                  {(data?.personalAchievement?.difference || 0) >= 0 ? (
+                    <span className="font-bold text-emerald-700">
+                      + ₹ {formatCurrency(data?.personalAchievement?.difference || 0)} Ahead
+                    </span>
+                  ) : (
+                    <span className="font-bold text-amber-700">
+                      - ₹ {formatCurrency(Math.abs(data?.personalAchievement?.difference || 0))} Shortfall
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {data?.leaderboard && data.leaderboard.length > 0 ? (
+                  data.leaderboard.map((item: any, idx: number) => (
+                    <div
+                      key={item.id}
+                      className="p-2.5 rounded-md border border-slate-100 bg-slate-50/70 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                            idx === 0
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : idx === 1
+                              ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                              : 'bg-orange-100 text-orange-800 border border-orange-200'
+                          }`}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900">{item.full_name}</p>
+                          <p className="text-[10px] text-slate-500 tabular-nums">
+                            {item.total_quotations} quotes created
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-slate-900 tabular-nums">
+                          ₹ {formatCurrency(item.sales_achieved)}
+                        </p>
+                        <p className="text-[10px] text-emerald-700 font-medium">Approved / Closed</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    No salesperson performance data yet.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

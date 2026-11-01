@@ -20,6 +20,8 @@ paymentsRouter.get('/:id/receipt', optionalAuthenticateToken, async (req: Reques
               q.customer_name,
               q.customer_phone,
               q.delivery_address,
+              q.sales_person_id,
+              q.assisted_sales_person_id,
               q.net_total as quotation_net_total,
               u.full_name as recorded_by_name
        FROM payments p
@@ -35,6 +37,15 @@ paymentsRouter.get('/:id/receipt', optionalAuthenticateToken, async (req: Reques
     }
 
     const payment = pRows[0];
+
+    if (
+      req.user?.role?.toLowerCase() === 'salesperson' &&
+      payment.sales_person_id !== req.user.id &&
+      payment.assisted_sales_person_id !== req.user.id
+    ) {
+      res.status(403).json({ error: 'Access denied: You can only view receipts for your own quotations.' });
+      return;
+    }
     const companyRows = await query('SELECT * FROM company_settings LIMIT 1');
     const company = companyRows[0] || {
       company_name: 'AMA Ceramics Pvt Ltd',
@@ -133,10 +144,17 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
     const quotationId = req.query.quotation_id ? parseInt(req.query.quotation_id as string, 10) : null;
     const paymentMode = req.query.payment_mode as string;
     const status = req.query.status as string;
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
 
     const whereClauses: string[] = ['1=1'];
     const params: any[] = [];
     let idx = 1;
+
+    if (isSalesperson) {
+      whereClauses.push(`(q.sales_person_id = $${idx} OR q.assisted_sales_person_id = $${idx})`);
+      params.push(req.user!.id);
+      idx++;
+    }
 
     if (quotationId) {
       whereClauses.push(`p.quotation_id = $${idx++}`);
@@ -154,7 +172,10 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
     const whereSql = whereClauses.join(' AND ');
 
     const countRes = await query<{ count: string; total_amount: string }>(
-      `SELECT count(*) as count, COALESCE(sum(amount), 0) as total_amount FROM payments p WHERE ${whereSql}`,
+      `SELECT count(*) as count, COALESCE(sum(p.amount), 0) as total_amount
+       FROM payments p
+       JOIN quotations q ON q.id = p.quotation_id
+       WHERE ${whereSql}`,
       params
     );
     const totalCount = parseInt(countRes[0].count, 10);

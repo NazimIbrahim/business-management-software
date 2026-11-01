@@ -26,8 +26,12 @@ export const TargetsManagement: React.FC = () => {
   const [editTargetValue, setEditTargetValue] = useState<string>('');
   const [savingTarget, setSavingTarget] = useState(false);
 
-  const isAdminOrManager = ['admin', 'manager'].includes(user?.role || '');
-  const isSalesperson = user?.role === 'salesperson';
+  const isAdminOrManager = ['admin', 'manager'].includes(user?.role?.toLowerCase() || '');
+  const isSalesperson = user?.role?.toLowerCase() === 'salesperson';
+
+  const visiblePerformance = isSalesperson
+    ? performance.filter((p) => p.salesperson?.id === user?.id)
+    : performance;
 
   const loadPerformance = async () => {
     setLoading(true);
@@ -212,14 +216,14 @@ export const TargetsManagement: React.FC = () => {
 
       {/* Performance Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
-        {loading && performance.length === 0 ? (
+        {loading && visiblePerformance.length === 0 ? (
           <div className="col-span-full text-center py-12 text-gray-400">Loading performance data...</div>
-        ) : performance.length === 0 ? (
+        ) : visiblePerformance.length === 0 ? (
           <div className="col-span-full text-center py-12 text-gray-400">
             {isSalesperson ? 'No performance targets assigned yet.' : 'No active salesperson targets found.'}
           </div>
         ) : (
-          performance.map((p) => {
+          visiblePerformance.map((p) => {
             const pct = Math.min(100, p.percentage);
             const isAhead = (p.difference ?? 0) >= 0;
 

@@ -1,6 +1,6 @@
 {
   "name": "ama-quotations-app",
-  "version": "2.4.21",
+  "version": "2.4.22",
   "description": "Lightweight Windows Quotation Management Desktop Client",
   "main": "dist-electron/main.js",
   "scripts": {

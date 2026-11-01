@@ -11,16 +11,36 @@ usersRouter.use(authenticateToken);
 // List all users
 usersRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const { role } = req.query;
+    const { role, for_quotation } = req.query;
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
     let sql = `SELECT id, username, full_name, role, email, phone, monthly_target, is_active, created_at, updated_at
                FROM users`;
     const params: any[] = [];
-    if (role) {
-      sql += ' WHERE role = $1';
+    let idx = 1;
+
+    // Salespersons can only view their own user record in user listings unless explicitly requesting quotation assignment list
+    if (isSalesperson && for_quotation !== 'true') {
+      sql += ` WHERE id = $${idx++}`;
+      params.push(req.user!.id);
+    } else if (role) {
+      sql += ` WHERE role = $${idx++}`;
       params.push(role);
     }
     sql += ' ORDER BY full_name ASC';
     const rows = await query(sql, params);
+    res.json({ users: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get sales team for quotation creation / assistance dropdowns
+usersRouter.get('/sales-team', async (req: Request, res: Response) => {
+  try {
+    const rows = await query(
+      `SELECT id, full_name, role FROM users WHERE is_active = true AND role IN ('salesperson', 'manager', 'admin') ORDER BY full_name ASC`
+    );
     res.json({ users: rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -191,6 +211,13 @@ usersRouter.post('/:id/reset-password', requireRole(['admin']), async (req: Requ
 usersRouter.get('/:id/stats', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id as string, 10);
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
+    if (isSalesperson && userId !== req.user!.id) {
+      res.status(403).json({ error: 'Access denied: Salespersons can only view their own performance statistics.' });
+      return;
+    }
+
     const userRows = await query(
       'SELECT id, username, full_name, role, email, phone, monthly_target, is_active FROM users WHERE id = $1',
       [userId]

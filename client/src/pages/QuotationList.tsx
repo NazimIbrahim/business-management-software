@@ -112,7 +112,11 @@ export const QuotationList: React.FC<Props> = ({
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (status) params.append('status', status);
       if (quotationTypeFilter !== 'all') params.append('quotation_type', quotationTypeFilter);
-      if (selectedSalesPersonId) params.append('sales_person_id', String(selectedSalesPersonId));
+      if (user?.role?.toLowerCase() === 'salesperson') {
+        params.append('sales_person_id', String(user.id));
+      } else if (selectedSalesPersonId) {
+        params.append('sales_person_id', String(selectedSalesPersonId));
+      }
 
       const res = await fetchApi<any>(`/api/quotations?${params.toString()}`);
       setQuotations(res.quotations || []);
@@ -197,7 +201,11 @@ export const QuotationList: React.FC<Props> = ({
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (status) params.append('status', status);
       if (quotationTypeFilter !== 'all') params.append('quotation_type', quotationTypeFilter);
-      if (selectedSalesPersonId) params.append('sales_person_id', String(selectedSalesPersonId));
+      if (user?.role?.toLowerCase() === 'salesperson') {
+        params.append('sales_person_id', String(user.id));
+      } else if (selectedSalesPersonId) {
+        params.append('sales_person_id', String(selectedSalesPersonId));
+      }
 
       const token = localStorage.getItem('ama_token');
       if (token) params.append('token', token);
@@ -380,41 +388,48 @@ export const QuotationList: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Sales Associate Filter Dropdown */}
-          <div className="relative min-w-[220px]">
-            <Users size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
-            <select
-              className={`select select-sm pl-8 pr-7 w-full text-xs font-medium cursor-pointer ${
-                selectedSalesPersonId
-                  ? 'border-indigo-500 bg-indigo-50/50 text-indigo-950 font-semibold'
-                  : 'text-slate-700'
-              }`}
-              value={selectedSalesPersonId || ''}
-              onChange={(e) => {
-                setSelectedSalesPersonId(e.target.value ? Number(e.target.value) : null);
-                setPage(1);
-              }}
-            >
-              <option value="">All Sales Associates</option>
-              {salesTeam.map((sp) => (
-                <option key={sp.id} value={sp.id}>
-                  {sp.full_name} ({sp.role})
-                </option>
-              ))}
-            </select>
-            {selectedSalesPersonId && (
-              <button
-                onClick={() => {
-                  setSelectedSalesPersonId(null);
+          {/* Sales Associate Filter Dropdown (Locked for salespersons) */}
+          {user?.role?.toLowerCase() === 'salesperson' ? (
+            <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-md text-xs font-semibold text-slate-800 select-none">
+              <Users size={13} className="text-slate-500" />
+              <span>Associate: {user?.full_name}</span>
+            </div>
+          ) : (
+            <div className="relative min-w-[220px]">
+              <Users size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+              <select
+                className={`select select-sm pl-8 pr-7 w-full text-xs font-medium cursor-pointer ${
+                  selectedSalesPersonId
+                    ? 'border-indigo-500 bg-indigo-50/50 text-indigo-950 font-semibold'
+                    : 'text-slate-700'
+                }`}
+                value={selectedSalesPersonId || ''}
+                onChange={(e) => {
+                  setSelectedSalesPersonId(e.target.value ? Number(e.target.value) : null);
                   setPage(1);
                 }}
-                className="absolute right-7 top-2 text-slate-400 hover:text-slate-600"
-                title="Clear sales associate filter"
               >
-                <X size={12} />
-              </button>
-            )}
-          </div>
+                <option value="">All Sales Associates</option>
+                {salesTeam.map((sp) => (
+                  <option key={sp.id} value={sp.id}>
+                    {sp.full_name} ({sp.role})
+                  </option>
+                ))}
+              </select>
+              {selectedSalesPersonId && (
+                <button
+                  onClick={() => {
+                    setSelectedSalesPersonId(null);
+                    setPage(1);
+                  }}
+                  className="absolute right-7 top-2 text-slate-400 hover:text-slate-600"
+                  title="Clear sales associate filter"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          )}
 
           <button
             onClick={loadQuotations}

@@ -30,12 +30,20 @@ quotationsRouter.get('/:id/pdf', optionalAuthenticateToken, async (req: Request,
 
     const quotation = qRows[0];
 
-    // Salespersons can only view/export/print approved or closed quotations
-    if (req.user?.role === 'salesperson' && !['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
-      res.status(403).json({
-        error: 'Quotation is awaiting Store Manager approval. PDF export and printing will be unlocked once approved.',
-      });
-      return;
+    // Salespersons can only view/export/print their own approved or closed quotations
+    if (req.user?.role?.toLowerCase() === 'salesperson') {
+      if (quotation.sales_person_id !== req.user.id && quotation.assisted_sales_person_id !== req.user.id) {
+        res.status(403).json({
+          error: 'Access denied: Salespersons can only view, export, and print their own quotations.',
+        });
+        return;
+      }
+      if (!['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
+        res.status(403).json({
+          error: 'Quotation is awaiting Store Manager approval. PDF export and printing will be unlocked once approved.',
+        });
+        return;
+      }
     }
     const areas = await query(
       'SELECT * FROM quotation_areas WHERE quotation_id = $1 ORDER BY display_order ASC',
@@ -131,7 +139,8 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
     }
 
     // Role-based scoping: Salespersons see quotations where they are primary or assisted
-    if (req.user!.role === 'salesperson') {
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    if (isSalesperson) {
       whereClauses.push(`(q.sales_person_id = $${idx} OR q.assisted_sales_person_id = $${idx})`);
       params.push(req.user!.id);
       idx++;
@@ -172,7 +181,7 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
     const whereSql = whereClauses.join(' AND ');
 
     // Total count and aggregate total (split-aware when filtering by salesperson)
-    const targetSpId = req.user!.role === 'salesperson' ? req.user!.id : (salesPersonId || null);
+    const targetSpId = isSalesperson ? req.user!.id : (salesPersonId || null);
     const countAmountExpr = targetSpId
       ? `COALESCE(SUM(
           CASE
@@ -297,7 +306,7 @@ quotationsRouter.get('/:id', async (req: Request, res: Response) => {
 
     // Enforce role scope: allow if salesperson is primary OR assisted
     if (
-      req.user!.role === 'salesperson' &&
+      req.user?.role?.toLowerCase() === 'salesperson' &&
       quotation.sales_person_id !== req.user!.id &&
       quotation.assisted_sales_person_id !== req.user!.id
     ) {
@@ -487,7 +496,7 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
       qType
     );
 
-    const isSalesperson = req.user!.role === 'salesperson';
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
     // Quotations created by salespersons enter review mode pending store manager approval
     const initialStatus = isSalesperson
       ? 'in_review'
@@ -790,6 +799,7 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
       // Optimistic concurrency check
       const current = await client.query(
         `SELECT version, status, quotation_type, quotation_number, customer_name,
+                sales_person_id, assisted_sales_person_id,
                 dispatch_status, expected_dispatch_date, dispatched_at, dispatched_by_id, dispatched_by_name,
                 has_dispatch_item_changes
          FROM quotations WHERE id = $1`,
@@ -797,6 +807,16 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
       );
       if (current.rows.length === 0) {
         throw new Error('Quotation not found');
+      }
+
+      if (
+        req.user?.role?.toLowerCase() === 'salesperson' &&
+        current.rows[0].sales_person_id !== req.user!.id &&
+        current.rows[0].assisted_sales_person_id !== req.user!.id
+      ) {
+        const forbiddenErr: any = new Error('Access denied: You can only edit your own quotations.');
+        forbiddenErr.statusCode = 403;
+        throw forbiddenErr;
       }
 
       // Fetch existing items before update to detect changes if dispatch status was previously set
@@ -860,7 +880,7 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
         }
       }
 
-      const isSalesperson = req.user!.role === 'salesperson';
+      const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
       // If edited by a salesperson, reset status to 'in_review' requiring Store Manager re-approval
       let nextStatus = current.rows[0].status;
       if (isSalesperson) {
@@ -1380,7 +1400,7 @@ quotationsRouter.get('/:id/versions', async (req: Request, res: Response) => {
     const currentQ = qRows[0];
 
     // Salesperson scoping check
-    if (req.user?.role === 'salesperson') {
+    if (req.user?.role?.toLowerCase() === 'salesperson') {
       const isOwner = currentQ.sales_person_id === req.user.id;
       const isAssisted = currentQ.assisted_sales_person_id === req.user.id;
       if (!isOwner && !isAssisted) {
@@ -1597,7 +1617,7 @@ quotationsRouter.get('/:id/versions/:versionNumber/pdf', optionalAuthenticateTok
     }
 
     // Salespersons can only view/export approved or closed quotations
-    if (req.user?.role === 'salesperson' && !['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
+    if (req.user?.role?.toLowerCase() === 'salesperson' && !['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
       res.status(403).json({
         error: 'Historical revision is awaiting Store Manager approval. PDF will unlock once approved.',
       });
@@ -1677,7 +1697,7 @@ quotationsRouter.post('/:id/versions/:versionNumber/restore', async (req: Reques
       if (cur.rows.length === 0) throw new Error('Quotation not found');
 
       const nextVer = cur.rows[0].version + 1;
-      const isSalesperson = req.user!.role === 'salesperson';
+      const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
       const newStatus = isSalesperson ? 'in_review' : (histQ.status || 'draft');
 
       // Update header
