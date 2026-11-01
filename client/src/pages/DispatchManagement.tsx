@@ -166,8 +166,7 @@ export const DispatchManagement: React.FC = () => {
       });
       setEditedItems(itemMap);
     } catch (err: any) {
-      alert(err.message || 'Failed to load quotation dispatch details');
-      setSelectedQuotationId(null);
+      setValidationError(err.message || 'Failed to load quotation dispatch details');
     } finally {
       setDetailLoading(false);
     }

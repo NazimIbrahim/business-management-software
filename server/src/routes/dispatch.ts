@@ -234,9 +234,10 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
         qi.dispatch_notes,
         qi.dispatched_at
        FROM quotation_items qi
-       JOIN quotation_areas qa ON qa.id = qi.area_id
+       JOIN quotations q ON q.id = qi.quotation_id
+       LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
        WHERE qi.quotation_id = $1
-       ORDER BY qa.display_order ASC, qi.sl_no ASC, qi.id ASC`,
+       ORDER BY COALESCE(qa.display_order, 0) ASC, qi.sl_no ASC, qi.id ASC`,
       [id]
     );
 
