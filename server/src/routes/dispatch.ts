@@ -28,10 +28,17 @@ function normalizeStatus(st?: string): string {
 // 1. Get Summary Stats for Dispatch Pipeline
 dispatchRouter.get('/stats', async (req: Request, res: Response) => {
   try {
-    const closedCountRes = await query(
-      `SELECT count(*) as total_closed FROM quotations WHERE status = 'closed'`
+    const ordersCountRes = await query(
+      `SELECT 
+         count(*) as total_orders,
+         COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
+         COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count
+       FROM quotations WHERE status IN ('approved', 'closed')`
     );
-    const totalClosed = parseInt(closedCountRes[0]?.total_closed || '0', 10);
+    const countRow = ordersCountRes[0] || {};
+    const totalOrders = parseInt(countRow.total_orders || '0', 10);
+    const approvedCount = parseInt(countRow.approved_count || '0', 10);
+    const closedCount = parseInt(countRow.closed_count || '0', 10);
 
     const itemsStatsRes = await query(`
       SELECT 
@@ -47,13 +54,16 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
           THEN 1 END) as overdue_count
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
-      WHERE q.status = 'closed'
+      WHERE q.status IN ('approved', 'closed')
     `);
 
     const stats = itemsStatsRes[0] || {};
 
     res.json({
-      total_closed_quotations: totalClosed,
+      total_orders: totalOrders,
+      total_closed_quotations: totalOrders,
+      approved_count: approvedCount,
+      closed_count: closedCount,
       total_items: parseInt(stats.total_items || '0', 10),
       ready_stock_count: parseInt(stats.ready_stock_count || '0', 10),
       local_arrange_count: parseInt(stats.local_arrange_count || '0', 10),
@@ -66,14 +76,22 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Get All Closed Quotations for Dispatch Management
+// 2. Get All Approved & Closed Quotations for Dispatch Management
 dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
   try {
-    const { search, dispatch_status, filter_date } = req.query;
+    const { search, dispatch_status, filter_date, quotation_status } = req.query;
 
-    const conditions: string[] = [`q.status = 'closed'`];
+    const conditions: string[] = [];
     const params: any[] = [];
     let pIdx = 1;
+
+    if (quotation_status === 'approved') {
+      conditions.push(`q.status = 'approved'`);
+    } else if (quotation_status === 'closed') {
+      conditions.push(`q.status = 'closed'`);
+    } else {
+      conditions.push(`q.status IN ('approved', 'closed')`);
+    }
 
     if (search && typeof search === 'string' && search.trim()) {
       conditions.push(
@@ -181,9 +199,9 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
     }
 
     const quotation = qRows[0];
-    if (quotation.status !== 'closed') {
+    if (!['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
       res.status(400).json({
-        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only closed quotations are managed in the Dispatch module.`,
+        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
       });
       return;
     }
@@ -287,6 +305,12 @@ dispatchRouter.put(
         res.status(404).json({ error: 'Quotation not found' });
         return;
       }
+      if (!['approved', 'closed'].includes(qCheck[0].status?.toLowerCase())) {
+        res.status(400).json({
+          error: `Quotation ${qCheck[0].quotation_number} is in '${qCheck[0].status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
+        });
+        return;
+      }
 
       const normalizedOverallStatus = dispatch_status ? normalizeStatus(dispatch_status) : null;
       const cleanExpectedDate = overallDateProvided ? expected_dispatch_date.trim() : null;
@@ -371,6 +395,7 @@ dispatchRouter.put(
                dispatched_by_id = $4,
                dispatched_by_name = $5,
                dispatched_at = CASE WHEN $6::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END,
+               status = CASE WHEN $6::boolean AND status = 'approved' THEN 'closed' ELSE status END,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $7`,
           [
