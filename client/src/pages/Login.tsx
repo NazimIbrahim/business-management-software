@@ -205,7 +205,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
         <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 flex justify-between">
           <span>Security: Direct LAN / Cloud Session</span>
-          <span>{company?.company_name ? `${company.company_name} • v2.4.15` : 'Quotation System v2.4.15'}</span>
+          <span>{company?.company_name ? `${company.company_name} • v2.4.16` : 'Quotation System v2.4.16'}</span>
         </div>
       </div>
     </div>
