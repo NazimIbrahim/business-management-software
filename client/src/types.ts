@@ -129,6 +129,11 @@ export interface QuotationItem {
   item_image?: string;
   mrp_price?: number;
   encrypted_code?: string;
+  dispatch_status?: 'Ready Stock' | 'Need to Arrange from Local' | 'Factory Order' | 'Dispatched' | string;
+  expected_dispatch_date?: string | null;
+  dispatch_notes?: string | null;
+  dispatched_at?: string | null;
+  area_name?: string;
   _itemBaseTotal?: number;
 }
 
@@ -180,6 +185,17 @@ export interface Quotation {
   round_off: number;
   net_total: number;
   special_notes?: string;
+  dispatch_status?: 'Ready Stock' | 'Need to Arrange from Local' | 'Factory Order' | 'Dispatched' | string;
+  expected_dispatch_date?: string | null;
+  dispatch_notes?: string | null;
+  dispatched_at?: string | null;
+  dispatched_by_id?: number | null;
+  dispatched_by_name?: string | null;
+  total_items?: number;
+  dispatched_items_count?: number;
+  ready_stock_items_count?: number;
+  local_arrange_items_count?: number;
+  factory_order_items_count?: number;
   version: number;
   created_at: string;
   total_paid?: number;

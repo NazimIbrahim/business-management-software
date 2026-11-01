@@ -19,6 +19,15 @@ export async function seedDatabase(): Promise<void> {
         phone: '+91 98250 00001',
         monthly_target: 0,
       },
+      {
+        username: 'dispatch',
+        password: 'dispatchpassword123',
+        full_name: 'Dispatch Team Coordinator',
+        role: 'dispatch',
+        email: 'dispatch@amaceramics.com',
+        phone: '+91 98250 00006',
+        monthly_target: 0,
+      },
     ];
 
     for (const u of users) {

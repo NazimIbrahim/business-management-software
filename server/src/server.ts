@@ -24,6 +24,7 @@ import { reportsRouter } from './routes/reports';
 import { backupRouter } from './routes/backup';
 import { sanitaryCatalogRouter } from './routes/sanitaryCatalog';
 import { rolesRouter, ensureRolesSchema } from './routes/roles';
+import { dispatchRouter } from './routes/dispatch';
 
 const app = express();
 const server = http.createServer(app);
@@ -78,6 +79,7 @@ app.use('/api/company', companyRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/dispatch', dispatchRouter);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -113,6 +115,10 @@ async function runAutoMigrations() {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS item_image TEXT;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS mrp_price NUMERIC(12, 2) DEFAULT 0.00;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS encrypted_code VARCHAR(100);
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Ready Stock';
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
 
       -- quotations columns
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
@@ -131,6 +137,12 @@ async function runAutoMigrations() {
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS round_off NUMERIC(12, 2) NOT NULL DEFAULT 0.00;
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS special_notes TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_status VARCHAR(50) DEFAULT 'Ready Stock';
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatched_by_name VARCHAR(120);
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 
       -- users columns

@@ -15,6 +15,7 @@ export interface WsEvent {
     | 'CUSTOMER_UPDATED'
     | 'TARGET_UPDATED'
     | 'SETTINGS_UPDATED'
+    | 'DISPATCH_UPDATED'
     | 'DASHBOARD_REFRESH';
   payload?: any;
   timestamp: string;

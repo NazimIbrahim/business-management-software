@@ -715,6 +715,22 @@ export const QuotationList: React.FC<Props> = ({
                           </button>
                         )}
 
+                        {q.status === 'approved' && canApprove && (
+                          <button
+                            onClick={() =>
+                              setStatusModal({
+                                id: q.id,
+                                currentStatus: q.status,
+                                targetStatus: 'closed',
+                              })
+                            }
+                            className="btn btn-xs px-2 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                            title="Close Deal and Send to Dispatch Pipeline"
+                          >
+                            Close & Dispatch
+                          </button>
+                        )}
+
                         {q.status === 'in_review' && canApprove && (
                           <div className="inline-flex space-x-1">
                             <button

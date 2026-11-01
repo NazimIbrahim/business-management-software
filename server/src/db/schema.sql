@@ -149,6 +149,12 @@ CREATE TABLE IF NOT EXISTS quotations (
     round_off NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     net_total NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     special_notes TEXT,
+    dispatch_status VARCHAR(50) DEFAULT 'Ready Stock',
+    expected_dispatch_date DATE,
+    dispatch_notes TEXT,
+    dispatched_at TIMESTAMPTZ,
+    dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    dispatched_by_name VARCHAR(120),
     version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -191,7 +197,11 @@ CREATE TABLE IF NOT EXISTS quotation_items (
     item_code VARCHAR(100),
     item_image TEXT,
     mrp_price NUMERIC(12, 2) DEFAULT 0.00,
-    encrypted_code VARCHAR(100)
+    encrypted_code VARCHAR(100),
+    dispatch_status VARCHAR(50) DEFAULT 'Ready Stock',
+    expected_dispatch_date DATE,
+    dispatch_notes TEXT,
+    dispatched_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items (quotation_id);
 CREATE INDEX IF NOT EXISTS idx_quotation_items_area ON quotation_items (area_id);

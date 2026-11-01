@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ServerProvider, useServer } from './context/ServerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
@@ -23,6 +23,7 @@ import { CompanySettingsPage } from './pages/CompanySettingsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { BackupRestorePage } from './pages/BackupRestorePage';
 import { AdminPanelPage } from './pages/AdminPanelPage';
+import { DispatchManagement } from './pages/DispatchManagement';
 
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -34,6 +35,12 @@ const AppContent: React.FC = () => {
   const [quotationType, setQuotationType] = useState<'tiles' | 'sanitary'>('tiles');
   const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user && (user.role === 'dispatch' || user.role === 'dispatch_team')) {
+      setActiveTab('dispatch');
+    }
+  }, [user]);
 
   if (isLoading) {
     return (
@@ -189,6 +196,8 @@ const AppContent: React.FC = () => {
             onCreateQuotation={(type) => handleCreateQuotation(type)}
           />
         );
+      case 'dispatch':
+        return <DispatchManagement />;
       case 'salespersons':
         return (
           <SalespersonDashboard

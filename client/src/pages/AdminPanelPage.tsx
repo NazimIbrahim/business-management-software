@@ -67,6 +67,13 @@ const PERMISSION_DEFINITIONS = [
     ],
   },
   {
+    category: 'Dispatch & Logistics',
+    permissions: [
+      { key: 'dispatch.view', label: 'View Dispatch Pipeline', description: 'Can view closed quotations and dispatch readiness pipeline' },
+      { key: 'dispatch.manage', label: 'Manage Dispatch Status', description: 'Can update stock readiness, factory orders, expected dates & dispatches' },
+    ],
+  },
+  {
     category: 'System & Administration',
     permissions: [
       { key: 'company.manage', label: 'Company Settings', description: 'Can update company profile, bank accounts, and GSTIN' },
@@ -550,6 +557,10 @@ export const AdminPanelPage: React.FC = () => {
                                   ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
                                   : u.role === 'manager'
                                   ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : u.role === 'dispatch' || u.role === 'dispatch_team'
+                                  ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                  : u.role === 'accounts'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
                                   : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               }`}
                             >

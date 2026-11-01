@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   History,
   Eye,
+  Truck,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
@@ -49,6 +50,7 @@ export const QuotationDetail: React.FC<Props> = ({
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
+  const [closingQuotation, setClosingQuotation] = useState(false);
   const [editWarningModal, setEditWarningModal] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyModalInitialVersion, setHistoryModalInitialVersion] = useState<number | null>(null);
@@ -151,6 +153,24 @@ export const QuotationDetail: React.FC<Props> = ({
       alert(err.message || 'Failed to approve quotation');
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleCloseQuotation = async () => {
+    if (!data) return;
+    if (window.confirm(`Mark quotation ${data.quotation.quotation_number} as CLOSED and move to Dispatch Pipeline?`)) {
+      setClosingQuotation(true);
+      try {
+        await fetchApi(`/api/quotations/${data.quotation.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: 'closed' }),
+        });
+        loadDetail();
+      } catch (err: any) {
+        alert(err.message || 'Failed to close quotation');
+      } finally {
+        setClosingQuotation(false);
+      }
     }
   };
 
@@ -362,7 +382,30 @@ export const QuotationDetail: React.FC<Props> = ({
               )}
             </div>
           </div>
-          <span className="badge badge-approved text-[10px] uppercase font-bold tracking-wider">Approved</span>
+          <div className="flex items-center space-x-2">
+            {quotation.status === 'closed' ? (
+              <span className="badge text-[10px] uppercase font-bold tracking-wider bg-teal-800 text-white flex items-center space-x-1 px-2.5 py-1 rounded shadow-xs">
+                <Truck size={12} className="mr-1" />
+                <span>Closed (In Dispatch)</span>
+              </span>
+            ) : (
+              <>
+                <span className="badge badge-approved text-[10px] uppercase font-bold tracking-wider">Approved</span>
+                {canApprove && (
+                  <button
+                    type="button"
+                    onClick={handleCloseQuotation}
+                    disabled={closingQuotation}
+                    className="btn btn-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center space-x-1 cursor-pointer shadow-xs px-2.5 py-1"
+                    title="Finalize Deal and Send to Dispatch Pipeline"
+                  >
+                    <Truck size={12} />
+                    <span>Close and Send to Dispatch</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
