@@ -239,7 +239,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
       FROM quotations q
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE q.status IN ('approved', 'closed')
+      WHERE LOWER(q.status) = 'closed'
         AND q.expected_dispatch_date = CURRENT_DATE
         AND COALESCE(q.dispatch_status, 'Ready Stock') != 'Dispatched'
         ${dispatchUserFilter}

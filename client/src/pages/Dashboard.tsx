@@ -80,10 +80,12 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
         loadDashboard();
       } else if (event.type === 'DISPATCH_UPDATED') {
         loadDashboard();
+        const role = (user?.role || '').toLowerCase();
         const isUserRelevant =
-          ['admin', 'manager'].includes(user?.role || '') ||
-          (user?.role === 'salesperson' &&
+          ['admin', 'manager', 'accounts', 'accountant'].includes(role) ||
+          (role === 'salesperson' &&
             (event.payload?.sales_person_id === user?.id ||
+              event.payload?.assisted_sales_person_id === user?.id ||
               event.payload?.sales_person_name === user?.full_name));
 
         if (isUserRelevant) {

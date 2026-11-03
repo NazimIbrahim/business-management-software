@@ -74,8 +74,11 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
   const isManager = user.role === 'manager';
   const isSalesperson = user.role === 'salesperson';
   const isDispatch = user.role === 'dispatch' || user.role === 'dispatch_team';
+  const isAccounts = user.role === 'accounts' || user.role === 'accountant';
   const canAudit = isAdmin || isManager;
-  const canDispatch = isAdmin || isManager || isDispatch || isSalesperson || user.role === 'accounts';
+  const canDispatch = isAdmin || isManager || isDispatch || isSalesperson || isAccounts;
+  const canSeeItemChangesNotice = isAdmin || isManager || isDispatch || isAccounts;
+  const isViewOnly = !isDispatch && !isAdmin;
 
   useEffect(() => {
     if (!canDispatch) return;
@@ -151,24 +154,23 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
           {canDispatch && (
             <button
               onClick={() => handleNavSelect('dispatch')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
                 activeTab === 'dispatch' ? 'sidebar-nav-active' : 'sidebar-nav-item'
               }`}
             >
-              <div className="flex items-center space-x-2.5">
+              <div className="flex items-center space-x-2.5 min-w-0">
                 <Truck size={16} className={activeTab === 'dispatch' ? 'text-teal-300' : 'nav-icon'} />
-                <span className="tracking-wide font-semibold">Dispatch Management</span>
+                <span className="tracking-wide font-semibold truncate">Dispatch Management</span>
               </div>
-              <div className="flex items-center space-x-1">
-                {dispatchChangesCount > 0 && (
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-extrabold animate-pulse shadow-xs">
-                    {dispatchChangesCount} changed
-                  </span>
-                )}
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
-                  {isDispatch || isAdmin ? 'Orders' : 'View Only'}
+              {canSeeItemChangesNotice && dispatchChangesCount > 0 ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-extrabold shadow-xs shrink-0 ml-1.5">
+                  {dispatchChangesCount}
                 </span>
-              </div>
+              ) : isViewOnly ? (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20 shrink-0 ml-1.5">
+                  View
+                </span>
+              ) : null}
             </button>
           )}
 
@@ -391,7 +393,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       </div>
       <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
         <span>App Build:</span>
-        <span className="font-mono text-[#E0E1DD]/80">v2.4.25</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.26</span>
       </div>
     </div>
   );

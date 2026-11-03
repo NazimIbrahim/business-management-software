@@ -82,6 +82,8 @@ export const DispatchManagement: React.FC = () => {
 
   const canEditDispatch = ['admin', 'dispatch', 'dispatch_team'].includes(user?.role || '');
   const isViewOnly = !canEditDispatch;
+  const userRole = (user?.role || '').toLowerCase();
+  const canSeeModifiedItemsAlert = ['admin', 'manager', 'dispatch', 'dispatch_team', 'accounts', 'accountant'].includes(userRole);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -167,8 +169,12 @@ export const DispatchManagement: React.FC = () => {
           loadQuotationDetail(selectedQuotationId);
         }
       } else if (event.type === 'DISPATCH_ITEM_CHANGED') {
-        loadData();
-        setItemChangedAlert(event.payload);
+        if (canSeeModifiedItemsAlert) {
+          loadData();
+          setItemChangedAlert(event.payload);
+        } else {
+          loadData();
+        }
       }
     });
     return () => unsubscribe();
@@ -720,15 +726,15 @@ export const DispatchManagement: React.FC = () => {
       </div>
 
       {/* REAL-TIME TOAST ALERT FOR DISPATCH ITEM CHANGES */}
-      {itemChangedAlert && (
-        <div className="dispatch-notice-banner-dark animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3.5">
+      {canSeeModifiedItemsAlert && itemChangedAlert && (
+        <div className="dispatch-notice-banner-dark animate-fade-in" style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
                   background: 'rgba(239, 68, 68, 0.2)',
                   border: '1px solid rgba(239, 68, 68, 0.4)',
                   color: '#F87171',
@@ -736,13 +742,14 @@ export const DispatchManagement: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
+                  marginTop: '2px',
                 }}
               >
-                <AlertTriangle size={20} />
+                <AlertTriangle size={18} />
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                     Quotation Items Modified in Live Session
                   </span>
                   <span
@@ -750,7 +757,7 @@ export const DispatchManagement: React.FC = () => {
                       background: 'rgba(255, 255, 255, 0.15)',
                       color: '#FFFFFF',
                       fontWeight: 800,
-                      fontSize: '11px',
+                      fontSize: '10px',
                       padding: '2px 8px',
                       borderRadius: '6px',
                       fontFamily: 'monospace',
@@ -764,12 +771,12 @@ export const DispatchManagement: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: '12px', color: '#CBD5E1', marginTop: '3px', lineHeight: '1.4' }}>
+                <p style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '3px', lineHeight: '1.4' }}>
                   Item quantities or products were revised after material availability was configured. Click to inspect changes diff.
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={() => {
@@ -787,9 +794,9 @@ export const DispatchManagement: React.FC = () => {
                   setItemChangedAlert(null);
                 }}
                 className="dispatch-action-btn-danger"
-                style={{ padding: '6px 14px', fontSize: '12px' }}
+                style={{ padding: '6px 14px', fontSize: '11px' }}
               >
-                <Eye size={13} />
+                <Eye size={12} />
                 <span>See Changes Diff</span>
               </button>
               <button
@@ -807,7 +814,7 @@ export const DispatchManagement: React.FC = () => {
                 }}
                 title="Dismiss alert"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
@@ -816,28 +823,29 @@ export const DispatchManagement: React.FC = () => {
 
       {/* TODAY'S PLANNED DISPATCHES POPUP BANNER */}
       {stats?.todays_dispatches && stats.todays_dispatches.length > 0 && !isTodayBannerDismissed && (
-        <div className="dispatch-notice-banner-emerald animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3.5">
+        <div className="dispatch-notice-banner-emerald animate-fade-in" style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
                   background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  boxShadow: '0 4px 12px rgba(5, 150, 105, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#FFFFFF',
                   flexShrink: 0,
+                  marginTop: '2px',
                 }}
               >
-                <Truck size={20} />
+                <Truck size={18} />
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#064E3B', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#064E3B', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                     Today's Planned Dispatches
                   </span>
                   <span
@@ -845,29 +853,29 @@ export const DispatchManagement: React.FC = () => {
                       background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
                       color: '#FFFFFF',
                       fontWeight: 800,
-                      fontSize: '11px',
-                      padding: '3px 10px',
+                      fontSize: '10px',
+                      padding: '2px 8px',
                       borderRadius: '9999px',
-                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                      boxShadow: '0 2px 5px rgba(5, 150, 105, 0.25)',
                     }}
                   >
                     {stats.todays_dispatches.length} Order{stats.todays_dispatches.length > 1 ? 's' : ''} Scheduled Today
                   </span>
                 </div>
-                <p style={{ fontSize: '12px', color: '#065F46', marginTop: '3px', lineHeight: '1.4' }}>
+                <p style={{ fontSize: '11px', color: '#065F46', marginTop: '3px', lineHeight: '1.4' }}>
                   Stock readiness and delivery checklist scheduled for today ({new Date().toLocaleDateString('en-GB')}). Review status and mark dispatched.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={() => setDateFilter(dateFilter === 'today' ? 'all' : 'today')}
                 className="dispatch-action-btn-emerald"
-                style={{ padding: '6px 14px', fontSize: '12px' }}
+                style={{ padding: '6px 14px', fontSize: '11px' }}
               >
-                <Filter size={13} />
+                <Filter size={12} />
                 <span>{dateFilter === 'today' ? 'Showing Today Only' : 'Filter Table to Today'}</span>
               </button>
               <button
@@ -876,7 +884,7 @@ export const DispatchManagement: React.FC = () => {
                 style={{
                   color: '#065F46',
                   padding: '6px',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   background: 'transparent',
                   border: 'none',
@@ -885,13 +893,13 @@ export const DispatchManagement: React.FC = () => {
                 }}
                 title="Dismiss today's banner"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
 
           {/* Quick interactive order chips */}
-          <div className="flex flex-wrap gap-2.5 pt-3">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', paddingTop: '2px' }}>
             {stats.todays_dispatches.map((td: any) => (
               <button
                 type="button"
@@ -935,54 +943,53 @@ export const DispatchManagement: React.FC = () => {
       )}
 
       {/* PERSISTENT NOTIFICATION BANNER: ORDER ITEMS MODIFIED AFTER DISPATCH UPDATE */}
-      {stats?.changed_quotations && stats.changed_quotations.length > 0 && (
-        <div className="dispatch-notice-banner-amber animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3.5">
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                  boxShadow: '0 4px 14px rgba(217, 119, 6, 0.35)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#FFFFFF',
-                  flexShrink: 0,
-                }}
-              >
-                <Bell size={20} className="animate-pulse" />
+      {canSeeModifiedItemsAlert && stats?.changed_quotations && stats.changed_quotations.length > 0 && (
+        <div className="dispatch-notice-banner-amber animate-fade-in" style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '12px' }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                boxShadow: '0 4px 12px rgba(217, 119, 6, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                flexShrink: 0,
+                marginTop: '2px',
+              }}
+            >
+              <Bell size={18} className="animate-pulse" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#78350F', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                  Attention: Order Items Modified After Dispatch Update
+                </span>
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                    color: '#FFFFFF',
+                    fontWeight: 800,
+                    fontSize: '10px',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    boxShadow: '0 2px 5px rgba(220, 38, 38, 0.25)',
+                  }}
+                >
+                  {stats.changed_quotations.length} Order{stats.changed_quotations.length > 1 ? 's' : ''} Need Review
+                </span>
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#78350F', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
-                    Attention: Order Items Modified After Dispatch Update
-                  </span>
-                  <span
-                    style={{
-                      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
-                      color: '#FFFFFF',
-                      fontWeight: 800,
-                      fontSize: '11px',
-                      padding: '3px 10px',
-                      borderRadius: '9999px',
-                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
-                    }}
-                  >
-                    {stats.changed_quotations.length} Order{stats.changed_quotations.length > 1 ? 's' : ''} Need Review
-                  </span>
-                </div>
-                <p style={{ fontSize: '12px', color: '#92400E', marginTop: '3px', lineHeight: '1.4' }}>
-                  The sales team updated item quantities or descriptions after material availability was set. Click an order to inspect and acknowledge changes.
-                </p>
-              </div>
+              <p style={{ fontSize: '11px', color: '#92400E', marginTop: '3px', lineHeight: '1.4' }}>
+                The sales team updated item quantities or descriptions after material availability was set. Click an order to inspect and acknowledge changes.
+              </p>
             </div>
           </div>
 
           {/* Quick interactive order chips with 'Click to See Changes' */}
-          <div className="flex flex-wrap gap-2.5 pt-3">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', paddingTop: '2px' }}>
             {stats.changed_quotations.map((cq) => (
               <button
                 type="button"
@@ -1147,19 +1154,23 @@ export const DispatchManagement: React.FC = () => {
 
                         {/* 5. Order Status */}
                         <td className="py-3 px-3 text-center align-middle whitespace-nowrap">
-                          {isApproved ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              Approved
-                            </span>
-                          ) : isClosed ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-100 border border-slate-700">
-                              Closed
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-300 capitalize">
-                              {q.status}
-                            </span>
-                          )}
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 9px',
+                              borderRadius: '9999px',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              backgroundColor: '#0D1B2A',
+                              color: '#FFFFFF',
+                              border: '1px solid #1B263B',
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                              letterSpacing: '0.02em',
+                            }}
+                          >
+                            Closed
+                          </span>
                         </td>
 
                         {/* 6. Dispatch Stage */}

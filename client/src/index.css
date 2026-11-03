@@ -1500,4 +1500,14 @@ table tbody tr:hover {
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.40) !important;
 }
 
+.text-slate-100 {
+  color: #F1F5F9 !important;
+}
+.text-slate-200 {
+  color: #E2E8F0 !important;
+}
+.text-slate-300 {
+  color: #CBD5E1 !important;
+}
+
 

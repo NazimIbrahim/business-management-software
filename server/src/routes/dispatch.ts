@@ -80,7 +80,13 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
     const countRow = ordersCountRes[0] || {};
     const totalOrders = parseInt(countRow.total_orders || '0', 10);
     const closedCount = parseInt(countRow.closed_count || '0', 10);
-    const pendingItemChangesCount = parseInt(countRow.pending_item_changes_count || '0', 10);
+
+    const userRole = (req.user?.role || '').toLowerCase();
+    const canSeeModifiedItemsAlert = ['admin', 'manager', 'dispatch', 'dispatch_team', 'accounts', 'accountant'].includes(userRole);
+
+    const pendingItemChangesCount = canSeeModifiedItemsAlert
+      ? parseInt(countRow.pending_item_changes_count || '0', 10)
+      : 0;
 
     const itemsStatsRes = await query(
       `SELECT 
@@ -129,25 +135,27 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       userParams
     );
 
-    const changedQuotationsRes = await query(
-      `SELECT 
-        q.id,
-        q.quotation_number,
-        q.customer_name,
-        q.customer_phone,
-        q.site_location,
-        q.sales_person_name,
-        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
-        q.expected_dispatch_date,
-        q.dispatch_change_summary,
-        q.updated_at
-      FROM quotations q
-      WHERE LOWER(q.status) = 'closed'
-        AND q.has_dispatch_item_changes = true
-        ${userFilter}
-      ORDER BY q.updated_at DESC`,
-      userParams
-    );
+    const changedQuotationsRes = canSeeModifiedItemsAlert
+      ? await query(
+          `SELECT 
+            q.id,
+            q.quotation_number,
+            q.customer_name,
+            q.customer_phone,
+            q.site_location,
+            q.sales_person_name,
+            COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+            q.expected_dispatch_date,
+            q.dispatch_change_summary,
+            q.updated_at
+          FROM quotations q
+          WHERE LOWER(q.status) = 'closed'
+            AND q.has_dispatch_item_changes = true
+            ${userFilter}
+          ORDER BY q.updated_at DESC`,
+          userParams
+        )
+      : [];
 
     res.json({
       total_orders: closedCount,
