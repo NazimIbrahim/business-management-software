@@ -485,7 +485,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             <ShieldCheck size={12} style={{ color: '#059669' }} />
             <span>Secure Enterprise Session</span>
           </span>
-          <span>{company?.company_name ? `${company.company_name} • v2.4.24` : 'Quotation System v2.4.24'}</span>
+          <span>{company?.company_name ? `${company.company_name} • v2.4.25` : 'Quotation System v2.4.25'}</span>
         </div>
       </div>
     </div>

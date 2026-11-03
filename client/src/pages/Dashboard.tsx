@@ -184,88 +184,154 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
 
       {/* Real-time Dispatch Update Popup Banner */}
       {dispatchAlert && (
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-3.5 sm:p-4 rounded-xl shadow-lg border border-teal-500/40 flex items-start sm:items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-start sm:items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-400/30 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-              <Truck size={17} />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
-                <span>Dispatch Status Updated</span>
-                <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-teal-400/20 text-teal-200 border border-teal-400/30">
-                  {dispatchAlert.dispatch_status || 'Ready Stock'}
-                </span>
-                {dispatchAlert.updated_by && (
-                  <span className="text-[10px] text-slate-400 font-normal">
-                    by {dispatchAlert.updated_by}
-                  </span>
-                )}
+        <div className="dispatch-notice-banner-dark animate-fade-in" style={{ marginBottom: '1rem' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3.5">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'rgba(56, 189, 248, 0.2)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  color: '#38BDF8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Truck size={20} />
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Quotation <strong className="text-white">{dispatchAlert.quotation_number}</strong>
-                {dispatchAlert.customer_name ? ` for ${dispatchAlert.customer_name}` : ''} — Expected Dispatch Date:{' '}
-                <strong className="text-teal-300 font-mono">
-                  {dispatchAlert.expected_dispatch_date
-                    ? new Date(dispatchAlert.expected_dispatch_date).toLocaleDateString('en-GB')
-                    : 'Not Specified'}
-                </strong>
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Dispatch Status Updated
+                  </span>
+                  <span
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.25)',
+                      color: '#7DD3FC',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                    }}
+                  >
+                    {dispatchAlert.dispatch_status || 'Ready Stock'}
+                  </span>
+                  {dispatchAlert.updated_by && (
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                      by {dispatchAlert.updated_by}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '12px', color: '#CBD5E1', marginTop: '3px', lineHeight: '1.4' }}>
+                  Quotation <strong style={{ color: '#FFFFFF' }}>{dispatchAlert.quotation_number}</strong>
+                  {dispatchAlert.customer_name ? ` for ${dispatchAlert.customer_name}` : ''} &bull; Expected Dispatch Date:{' '}
+                  <strong style={{ color: '#38BDF8', fontFamily: 'monospace' }}>
+                    {dispatchAlert.expected_dispatch_date
+                      ? new Date(dispatchAlert.expected_dispatch_date).toLocaleDateString('en-GB')
+                      : 'Not Specified'}
+                  </strong>
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
-            <button
-              onClick={() => onSelectQuotation(dispatchAlert.quotation_id)}
-              className="btn btn-xs bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg border-none shadow-xs cursor-pointer"
-            >
-              View Order
-            </button>
-            <button
-              onClick={() => setDispatchAlert(null)}
-              className="text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
-              title="Dismiss alert"
-            >
-              <X size={15} />
-            </button>
+            <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+              <button
+                onClick={() => onSelectQuotation(dispatchAlert.quotation_id)}
+                className="dispatch-action-btn-emerald"
+                style={{ padding: '6px 14px', fontSize: '12px' }}
+              >
+                View Order
+              </button>
+              <button
+                onClick={() => setDispatchAlert(null)}
+                style={{
+                  color: '#94A3B8',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+                title="Dismiss alert"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Items Dispatching Today Banner */}
       {data?.todaysDispatches && data.todaysDispatches.length > 0 && (
-        <div className="bg-amber-50 border-2 border-amber-300/80 rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-start sm:items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
-              <Truck size={17} />
-            </div>
-            <div>
-              <div className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
-                <span>Items Dispatching Today</span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
-                  {data.todaysDispatches.length} Order{data.todaysDispatches.length > 1 ? 's' : ''}
-                </span>
+        <div className="dispatch-notice-banner-emerald animate-fade-in" style={{ marginBottom: '1rem' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3.5">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  boxShadow: '0 4px 12px rgba(5, 150, 105, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
+                <Truck size={20} />
               </div>
-              <div className="text-[11px] text-amber-900/90 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
-                {data.todaysDispatches.map((d: any) => (
-                  <span
-                    key={d.id}
-                    onClick={() => onSelectQuotation(d.id)}
-                    className="inline-flex items-center space-x-1 cursor-pointer hover:underline"
-                  >
-                    <strong>{d.quotation_number}</strong>
-                    <span>({d.customer_name} • {d.total_items} items • {d.dispatch_status})</span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#064E3B', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Items Dispatching Today
                   </span>
-                ))}
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                    }}
+                  >
+                    {data.todaysDispatches.length} Order{data.todaysDispatches.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#065F46', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {data.todaysDispatches.map((d: any) => (
+                    <button
+                      key={d.id}
+                      onClick={() => onSelectQuotation(d.id)}
+                      className="dispatch-notice-chip dispatch-notice-chip-emerald"
+                      style={{ padding: '4px 10px', fontSize: '11px' }}
+                    >
+                      <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{d.quotation_number}</strong>
+                      <span style={{ color: '#334155' }}>({d.customer_name} &bull; {d.total_items} items &bull; {d.dispatch_status})</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          <button
-            onClick={() => onSelectQuotation(data.todaysDispatches[0].id)}
-            className="btn btn-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg border-none shadow-xs self-start sm:self-auto cursor-pointer whitespace-nowrap"
-          >
-            View Details
-          </button>
+            <button
+              onClick={() => onSelectQuotation(data.todaysDispatches[0].id)}
+              className="dispatch-action-btn-emerald"
+              style={{ padding: '6px 14px', fontSize: '12px', alignSelf: 'flex-start' }}
+            >
+              View First Order &rarr;
+            </button>
+          </div>
         </div>
       )}
 

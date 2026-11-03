@@ -71,16 +71,14 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
     const ordersCountRes = await query(
       `SELECT 
          count(*) as total_orders,
-         COUNT(CASE WHEN LOWER(q.status) = 'approved' THEN 1 END) as approved_count,
          COUNT(CASE WHEN LOWER(q.status) = 'closed' THEN 1 END) as closed_count,
          COUNT(CASE WHEN q.has_dispatch_item_changes = true THEN 1 END) as pending_item_changes_count
        FROM quotations q
-       WHERE LOWER(q.status) IN ('approved', 'closed') ${userFilter}`,
+       WHERE LOWER(q.status) = 'closed' ${userFilter}`,
       userParams
     );
     const countRow = ordersCountRes[0] || {};
     const totalOrders = parseInt(countRow.total_orders || '0', 10);
-    const approvedCount = parseInt(countRow.approved_count || '0', 10);
     const closedCount = parseInt(countRow.closed_count || '0', 10);
     const pendingItemChangesCount = parseInt(countRow.pending_item_changes_count || '0', 10);
 
@@ -99,7 +97,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
           THEN 1 END) as overdue_count
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
-      WHERE LOWER(q.status) IN ('approved', 'closed') ${userFilter}`,
+      WHERE LOWER(q.status) = 'closed' ${userFilter}`,
       userParams
     );
 
@@ -122,7 +120,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
       FROM quotations q
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE LOWER(q.status) IN ('approved', 'closed')
+      WHERE LOWER(q.status) = 'closed'
         AND q.expected_dispatch_date = CURRENT_DATE
         AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
         ${userFilter}
@@ -144,7 +142,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         q.dispatch_change_summary,
         q.updated_at
       FROM quotations q
-      WHERE LOWER(q.status) IN ('approved', 'closed')
+      WHERE LOWER(q.status) = 'closed'
         AND q.has_dispatch_item_changes = true
         ${userFilter}
       ORDER BY q.updated_at DESC`,
@@ -152,9 +150,9 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
     );
 
     res.json({
-      total_orders: totalOrders,
-      total_closed_quotations: totalOrders,
-      approved_count: approvedCount,
+      total_orders: closedCount,
+      total_closed_quotations: closedCount,
+      approved_count: 0,
       closed_count: closedCount,
       pending_item_changes_count: pendingItemChangesCount,
       changed_quotations: changedQuotationsRes.map((cq: any) => ({
@@ -181,12 +179,12 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Get All Approved & Closed Quotations for Dispatch Management
+// 2. Get All Closed Quotations for Dispatch Management
 dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
   try {
     await ensureDispatchSchema();
 
-    const { search, dispatch_status, filter_date, quotation_status } = req.query;
+    const { search, dispatch_status, filter_date } = req.query;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -200,13 +198,8 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       pIdx++;
     }
 
-    if (quotation_status === 'approved') {
-      conditions.push(`LOWER(q.status) = 'approved'`);
-    } else if (quotation_status === 'closed') {
-      conditions.push(`LOWER(q.status) = 'closed'`);
-    } else {
-      conditions.push(`LOWER(q.status) IN ('approved', 'closed')`);
-    }
+    // Only Closed quotations are displayed and tracked in Dispatch Management
+    conditions.push(`LOWER(q.status) = 'closed'`);
 
     if (search && typeof search === 'string' && search.trim()) {
       conditions.push(
@@ -325,9 +318,9 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
     }
 
     const quotation = qRows[0];
-    if (!['approved', 'closed'].includes(quotation.status?.toLowerCase())) {
+    if (quotation.status?.toLowerCase() !== 'closed') {
       res.status(400).json({
-        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
+        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only closed quotations are managed in the Dispatch module.`,
       });
       return;
     }
@@ -447,9 +440,9 @@ dispatchRouter.put(
         res.status(404).json({ error: 'Quotation not found' });
         return;
       }
-      if (!['approved', 'closed'].includes(qCheck[0].status?.toLowerCase())) {
+      if (qCheck[0].status?.toLowerCase() !== 'closed') {
         res.status(400).json({
-          error: `Quotation ${qCheck[0].quotation_number} is in '${qCheck[0].status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
+          error: `Quotation ${qCheck[0].quotation_number} is in '${qCheck[0].status}' status. Only closed quotations are managed in the Dispatch module.`,
         });
         return;
       }

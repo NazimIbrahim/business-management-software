@@ -90,7 +90,6 @@ export const DispatchManagement: React.FC = () => {
   // Filters
   const [search, setSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-  const [quotationStatusFilter, setQuotationStatusFilter] = useState<'all' | 'approved' | 'closed'>('all');
   const [dispatchStatusFilter, setDispatchStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'overdue'>('all');
 
@@ -134,7 +133,6 @@ export const DispatchManagement: React.FC = () => {
       setLoading(true);
       const params = new URLSearchParams();
       if (debouncedSearch) params.append('search', debouncedSearch);
-      if (quotationStatusFilter !== 'all') params.append('quotation_status', quotationStatusFilter);
       if (dispatchStatusFilter !== 'all') params.append('dispatch_status', dispatchStatusFilter);
       if (dateFilter !== 'all') params.append('filter_date', dateFilter);
 
@@ -154,7 +152,7 @@ export const DispatchManagement: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [debouncedSearch, quotationStatusFilter, dispatchStatusFilter, dateFilter]);
+  }, [debouncedSearch, dispatchStatusFilter, dateFilter]);
 
   // Real-time synchronization
   useEffect(() => {
@@ -451,14 +449,12 @@ export const DispatchManagement: React.FC = () => {
 
   const hasActiveFilters =
     Boolean(search) ||
-    quotationStatusFilter !== 'all' ||
     dispatchStatusFilter !== 'all' ||
     dateFilter !== 'all';
 
   const handleClearFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setQuotationStatusFilter('all');
     setDispatchStatusFilter('all');
     setDateFilter('all');
   };
@@ -497,7 +493,7 @@ export const DispatchManagement: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5 truncate">
-              Order Fulfillment & Delivery Tracking • Approved & Closed Quotations Pipeline
+              Order Fulfillment & Delivery Tracking • Closed Quotations Pipeline
             </p>
           </div>
         </div>
@@ -517,7 +513,7 @@ export const DispatchManagement: React.FC = () => {
 
       {/* Formal KPI Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
-        {/* Total Orders */}
+        {/* Closed Orders */}
         <div className="card p-3 bg-white border border-slate-200 shadow-xs border-l-4 border-l-slate-700 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -527,10 +523,10 @@ export const DispatchManagement: React.FC = () => {
           </div>
           <div className="mt-2">
             <div className="text-2xl font-black text-slate-900 leading-tight">
-              {totalOrdersCount}
+              {stats?.closed_count || totalOrdersCount}
             </div>
             <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
-              {stats?.approved_count || 0} Appr • {stats?.closed_count || 0} Closed
+              {stats?.closed_count || totalOrdersCount} Closed Orders
             </div>
           </div>
         </div>
@@ -670,23 +666,6 @@ export const DispatchManagement: React.FC = () => {
 
           {/* Formally aligned filter dropdowns */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Quotation Workflow Status Filter */}
-            <div className="w-full sm:w-48">
-              <select
-                value={quotationStatusFilter}
-                onChange={(e) => setQuotationStatusFilter(e.target.value as any)}
-                className={`select select-sm w-full text-xs font-semibold cursor-pointer ${
-                  quotationStatusFilter !== 'all'
-                    ? 'border-indigo-500 bg-indigo-50/50 text-indigo-950 font-bold'
-                    : 'text-slate-700'
-                }`}
-              >
-                <option value="all">All Orders (Approved & Closed)</option>
-                <option value="approved">Approved Orders Only</option>
-                <option value="closed">Closed Orders Only</option>
-              </select>
-            </div>
-
             {/* Dispatch Stage Filter */}
             <div className="w-full sm:w-48">
               <select
@@ -742,97 +721,212 @@ export const DispatchManagement: React.FC = () => {
 
       {/* REAL-TIME TOAST ALERT FOR DISPATCH ITEM CHANGES */}
       {itemChangedAlert && (
-        <div className="bg-gradient-to-r from-amber-600 via-rose-600 to-amber-700 text-white p-3.5 sm:p-4 rounded-xl shadow-lg border border-amber-300 flex items-start sm:items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-start sm:items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-              <AlertTriangle size={18} />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
-                <span>Quotation Items Modified</span>
-                <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-white/25 text-white">
-                  {itemChangedAlert.quotation_number}
-                </span>
-                {itemChangedAlert.changed_by && (
-                  <span className="text-[10px] text-amber-100 font-normal">
-                    by {itemChangedAlert.changed_by}
-                  </span>
-                )}
+        <div className="dispatch-notice-banner-dark animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3.5">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#F87171',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={20} />
               </div>
-              <p className="text-[11px] text-amber-100 mt-0.5">
-                Item quantities or products were revised after material availability was configured. Please review the changes.
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Quotation Items Modified in Live Session
+                  </span>
+                  <span
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {itemChangedAlert.quotation_number}
+                  </span>
+                  {itemChangedAlert.changed_by && (
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                      by {itemChangedAlert.changed_by}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '12px', color: '#CBD5E1', marginTop: '3px', lineHeight: '1.4' }}>
+                  Item quantities or products were revised after material availability was configured. Click to inspect changes diff.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => {
-                const matched = quotations.find((q) => q.id === itemChangedAlert.quotation_id) || {
-                  id: itemChangedAlert.quotation_id,
-                  quotation_number: itemChangedAlert.quotation_number,
-                  customer_name: itemChangedAlert.customer_name,
-                  parsedSummary: {
-                    changed_by: itemChangedAlert.changed_by,
-                    changed_at: itemChangedAlert.changed_at,
-                    diffs: itemChangedAlert.diffs,
-                  },
-                };
-                handleOpenReviewModal(matched);
-                setItemChangedAlert(null);
-              }}
-              className="btn btn-xs bg-white hover:bg-amber-100 text-amber-950 font-bold px-3 py-1.5 rounded-lg border-none shadow-xs cursor-pointer"
-            >
-              See Changes
-            </button>
-            <button
-              type="button"
-              onClick={() => setItemChangedAlert(null)}
-              className="text-amber-200 hover:text-white p-1 rounded cursor-pointer"
-              title="Dismiss toast"
-            >
-              <X size={15} />
-            </button>
+            <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  const matched = quotations.find((q) => q.id === itemChangedAlert.quotation_id) || {
+                    id: itemChangedAlert.quotation_id,
+                    quotation_number: itemChangedAlert.quotation_number,
+                    customer_name: itemChangedAlert.customer_name,
+                    parsedSummary: {
+                      changed_by: itemChangedAlert.changed_by,
+                      changed_at: itemChangedAlert.changed_at,
+                      diffs: itemChangedAlert.diffs,
+                    },
+                  };
+                  handleOpenReviewModal(matched);
+                  setItemChangedAlert(null);
+                }}
+                className="dispatch-action-btn-danger"
+                style={{ padding: '6px 14px', fontSize: '12px' }}
+              >
+                <Eye size={13} />
+                <span>See Changes Diff</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setItemChangedAlert(null)}
+                style={{
+                  color: '#94A3B8',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+                title="Dismiss alert"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* PERSISTENT NOTIFICATION BANNER: ORDER ITEMS MODIFIED AFTER DISPATCH UPDATE */}
-      {stats?.changed_quotations && stats.changed_quotations.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/10 border-2 border-amber-400 rounded-xl p-3.5 sm:p-4 shadow-sm space-y-2.5 animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-start sm:items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
-                <Bell size={18} className="animate-pulse" />
+      {/* TODAY'S PLANNED DISPATCHES POPUP BANNER */}
+      {stats?.todays_dispatches && stats.todays_dispatches.length > 0 && !isTodayBannerDismissed && (
+        <div className="dispatch-notice-banner-emerald animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3.5">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
+                <Truck size={20} />
               </div>
               <div>
-                <h3 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5 uppercase tracking-wide">
-                  <span>Attention: Order Items Modified After Dispatch Update</span>
-                  <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-2xs">
-                    {stats.changed_quotations.length} Order{stats.changed_quotations.length > 1 ? 's' : ''} Need Review
+                <div className="flex flex-wrap items-center gap-2">
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#064E3B', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Today's Planned Dispatches
                   </span>
-                </h3>
-                <p className="text-[11px] text-amber-900/90 mt-0.5">
-                  The sales team updated item quantities or descriptions after material availability was set. Click an order to inspect the changes.
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '3px 10px',
+                      borderRadius: '9999px',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                    }}
+                  >
+                    {stats.todays_dispatches.length} Order{stats.todays_dispatches.length > 1 ? 's' : ''} Scheduled Today
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#065F46', marginTop: '3px', lineHeight: '1.4' }}>
+                  Stock readiness and delivery checklist scheduled for today ({new Date().toLocaleDateString('en-GB')}). Review status and mark dispatched.
                 </p>
               </div>
             </div>
-          </div>
 
-          {/* Quick interactive order chips with 'Click to See Changes' */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {stats.changed_quotations.map((cq) => (
+            <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
               <button
                 type="button"
-                key={cq.id}
-                onClick={() => handleOpenReviewModal(cq)}
-                className="bg-white hover:bg-amber-50/90 border border-amber-300 hover:border-amber-500 rounded-lg px-3 py-1.5 text-left shadow-2xs flex items-center space-x-2 cursor-pointer transition-all"
+                onClick={() => setDateFilter(dateFilter === 'today' ? 'all' : 'today')}
+                className="dispatch-action-btn-emerald"
+                style={{ padding: '6px 14px', fontSize: '12px' }}
               >
-                <span className="font-mono font-bold text-xs text-slate-900">{cq.quotation_number}</span>
-                <span className="text-[11px] font-semibold text-slate-700">{cq.customer_name}</span>
-                <span className="text-[10px] text-rose-800 font-extrabold bg-rose-100 px-2 py-0.5 rounded border border-rose-200 flex items-center gap-1">
-                  <Eye size={10} />
-                  <span>Click to See Changes</span>
+                <Filter size={13} />
+                <span>{dateFilter === 'today' ? 'Showing Today Only' : 'Filter Table to Today'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTodayBannerDismissed(true)}
+                style={{
+                  color: '#065F46',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+                title="Dismiss today's banner"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick interactive order chips */}
+          <div className="flex flex-wrap gap-2.5 pt-3">
+            {stats.todays_dispatches.map((td: any) => (
+              <button
+                type="button"
+                key={td.id}
+                onClick={() => handleToggleRow(td)}
+                className="dispatch-notice-chip dispatch-notice-chip-emerald"
+              >
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    color: '#0F172A',
+                    background: '#F1F5F9',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {td.quotation_number}
+                </span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                  {td.customer_name}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#065F46',
+                    background: '#D1FAE5',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #A7F3D0',
+                  }}
+                >
+                  {td.total_items} items &bull; {td.dispatch_status}
                 </span>
               </button>
             ))}
@@ -840,63 +934,81 @@ export const DispatchManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TODAY'S PLANNED DISPATCHES POPUP BANNER */}
-      {stats?.todays_dispatches && stats.todays_dispatches.length > 0 && !isTodayBannerDismissed && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border-2 border-amber-300/90 rounded-xl p-3.5 shadow-xs space-y-2.5 animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Truck size={17} />
+      {/* PERSISTENT NOTIFICATION BANNER: ORDER ITEMS MODIFIED AFTER DISPATCH UPDATE */}
+      {stats?.changed_quotations && stats.changed_quotations.length > 0 && (
+        <div className="dispatch-notice-banner-amber animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3.5">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                  boxShadow: '0 4px 14px rgba(217, 119, 6, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
+                <Bell size={20} className="animate-pulse" />
               </div>
               <div>
-                <h3 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5">
-                  <span>Today's Planned Dispatches</span>
-                  <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-amber-200 text-amber-950 border border-amber-300">
-                    {stats.todays_dispatches.length} Order{stats.todays_dispatches.length > 1 ? 's' : ''} Due Today
+                <div className="flex flex-wrap items-center gap-2">
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#78350F', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Attention: Order Items Modified After Dispatch Update
                   </span>
-                </h3>
-                <p className="text-[11px] text-amber-900/80">
-                  Stock readiness and delivery checklist scheduled for today ({new Date().toLocaleDateString('en-GB')}).
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '3px 10px',
+                      borderRadius: '9999px',
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
+                    }}
+                  >
+                    {stats.changed_quotations.length} Order{stats.changed_quotations.length > 1 ? 's' : ''} Need Review
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#92400E', marginTop: '3px', lineHeight: '1.4' }}>
+                  The sales team updated item quantities or descriptions after material availability was set. Click an order to inspect and acknowledge changes.
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center space-x-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setDateFilter('today')}
-                className={`btn btn-xs font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
-                  dateFilter === 'today'
-                    ? 'bg-amber-700 text-white border-amber-800'
-                    : 'bg-amber-600 hover:bg-amber-700 text-white border-transparent'
-                }`}
-              >
-                {dateFilter === 'today' ? 'Showing Today' : 'Filter Table to Today'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsTodayBannerDismissed(true)}
-                className="text-amber-700 hover:text-amber-950 p-1 rounded cursor-pointer"
-                title="Dismiss today's banner"
-              >
-                <X size={15} />
-              </button>
-            </div>
           </div>
 
-          {/* Quick interactive order chips */}
-          <div className="flex flex-wrap gap-2 pt-0.5">
-            {stats.todays_dispatches.map((td: any) => (
+          {/* Quick interactive order chips with 'Click to See Changes' */}
+          <div className="flex flex-wrap gap-2.5 pt-3">
+            {stats.changed_quotations.map((cq) => (
               <button
                 type="button"
-                key={td.id}
-                onClick={() => handleToggleRow(td)}
-                className="bg-white hover:bg-amber-50/80 border border-amber-300 hover:border-amber-400 rounded-lg px-2.5 py-1.5 text-left shadow-2xs flex items-center space-x-2 cursor-pointer transition-all"
+                key={cq.id}
+                onClick={() => handleOpenReviewModal(cq)}
+                className="dispatch-notice-chip dispatch-notice-chip-amber"
               >
-                <span className="font-mono font-bold text-xs text-slate-900">{td.quotation_number}</span>
-                <span className="text-[11px] font-semibold text-slate-700">{td.customer_name}</span>
-                <span className="text-[10px] text-amber-900 font-extrabold bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">
-                  {td.total_items} items • {td.dispatch_status}
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    color: '#0F172A',
+                    background: '#F1F5F9',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {cq.quotation_number}
+                </span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                  {cq.customer_name}
+                </span>
+                <span className="dispatch-action-btn-danger">
+                  <Eye size={12} />
+                  <span>Review Changes &rarr;</span>
                 </span>
               </button>
             ))}
@@ -933,9 +1045,9 @@ export const DispatchManagement: React.FC = () => {
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Truck size={36} className="mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-semibold text-slate-700">No Quotation Orders for Dispatch Found</p>
+                    <p className="text-sm font-semibold text-slate-700">No Closed Quotations for Dispatch Found</p>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                      When a quotation is Approved by the Store Manager or Closed, it will immediately appear here for dispatch tracking, stock readiness, and delivery scheduling.
+                      When a quotation is Closed, it will immediately appear here for dispatch tracking, stock readiness, and delivery scheduling.
                     </p>
                   </td>
                 </tr>

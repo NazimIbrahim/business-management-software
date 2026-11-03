@@ -7,7 +7,7 @@
 !include "FileFunc.nsh"
 
 Name "AMA Ceramics Quotation Host Server"
-OutFile "..\client\release\AMA-Ceramics-Host-Server-Setup-2.4.24.exe"
+OutFile "..\client\release\AMA-Ceramics-Host-Server-Setup-2.4.25.exe"
 InstallDir "C:\AMA-Ceramics-Host-Server"
 InstallDirRegKey HKLM "Software\AMACeramics\HostServer" "Install_Dir"
 RequestExecutionLevel admin
