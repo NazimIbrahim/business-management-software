@@ -252,6 +252,29 @@ export const DispatchManagement: React.FC = () => {
     }
   };
 
+  // Helper to compute overall dispatch status from item states
+  const computeOverallDispatchStatus = (
+    items: QuotationItem[],
+    itemMap: Record<number, any>
+  ): DispatchStatusType => {
+    if (!items || items.length === 0) return 'Yet to Update';
+    const statuses = items.map((it) => {
+      const state = it.id ? itemMap[it.id] : null;
+      return (state?.status || it.dispatch_status || 'Yet to Update') as DispatchStatusType;
+    });
+    const total = statuses.length;
+    const dispatched = statuses.filter((s) => s === 'Dispatched').length;
+    const factory = statuses.filter((s) => s === 'Factory Order').length;
+    const local = statuses.filter((s) => s === 'Need to Arrange from Local').length;
+    const ready = statuses.filter((s) => s === 'Ready Stock').length;
+
+    if (total > 0 && dispatched === total) return 'Dispatched';
+    if (factory > 0) return 'Factory Order';
+    if (local > 0) return 'Need to Arrange from Local';
+    if (ready > 0) return 'Ready Stock';
+    return 'Yet to Update';
+  };
+
   // Load single quotation detail for editing
   const loadQuotationDetail = async (id: number) => {
     try {
@@ -264,15 +287,11 @@ export const DispatchManagement: React.FC = () => {
       const itemsList: QuotationItem[] = res.items || [];
       setActiveItems(itemsList);
 
-      const qStatus = res.quotation?.dispatch_status || 'Yet to Update';
+      const qStatus = (res.quotation?.dispatch_status || 'Yet to Update') as DispatchStatusType;
       const qDate = res.quotation?.expected_dispatch_date
         ? String(res.quotation.expected_dispatch_date).split('T')[0]
         : '';
       const qNotes = res.quotation?.dispatch_notes || '';
-
-      setOverallStatus(qStatus);
-      setOverallDate(qDate);
-      setOverallNotes(qNotes);
 
       // Initialize item form states
       const itemMap: Record<
@@ -307,6 +326,21 @@ export const DispatchManagement: React.FC = () => {
         }
       });
       setEditedItems(itemMap);
+
+      // Dynamically compute and sync overall dispatch status from the loaded items
+      const computedFromItems = computeOverallDispatchStatus(itemsList, itemMap);
+      const effectiveOverallStatus = computedFromItems !== 'Yet to Update' ? computedFromItems : qStatus;
+
+      setOverallStatus(effectiveOverallStatus);
+      setOverallDate(qDate);
+      setOverallNotes(qNotes);
+
+      // Instantly sync the parent table row's dispatch stage badge if out of sync
+      if (effectiveOverallStatus !== qStatus) {
+        setQuotations((prev) =>
+          prev.map((q) => (q.id === id ? { ...q, dispatch_status: effectiveOverallStatus as any } : q))
+        );
+      }
     } catch (err: any) {
       setValidationError(err.message || 'Failed to load quotation dispatch details');
     } finally {
@@ -365,6 +399,12 @@ export const DispatchManagement: React.FC = () => {
       });
       return updated;
     });
+
+    if (selectedQuotationId) {
+      setQuotations((prev) =>
+        prev.map((q) => (q.id === selectedQuotationId ? { ...q, dispatch_status: status as any } : q))
+      );
+    }
   };
 
   // Save dispatch changes with validation
@@ -409,13 +449,16 @@ export const DispatchManagement: React.FC = () => {
       };
     });
 
+    const computedOverall = computeOverallDispatchStatus(activeItems, editedItems);
+    const finalStatusToSend = overallStatus !== 'Yet to Update' ? overallStatus : computedOverall;
+
     try {
       setSaving(true);
       await fetchApi(`/api/dispatch/quotations/${selectedQuotationId}`, {
         method: 'PUT',
         body: JSON.stringify({
           expected_dispatch_date: overallDate,
-          dispatch_status: overallStatus,
+          dispatch_status: finalStatusToSend,
           dispatch_notes: overallNotes,
           items: payloadItems,
         }),
@@ -1607,7 +1650,15 @@ export const DispatchManagement: React.FC = () => {
                                       <select
                                         value={overallStatus}
                                         disabled={isViewOnly}
-                                        onChange={(e) => setOverallStatus(e.target.value)}
+                                        onChange={(e) => {
+                                          const newStatus = e.target.value;
+                                          setOverallStatus(newStatus);
+                                          if (selectedQuotationId) {
+                                            setQuotations((prev) =>
+                                              prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newStatus as any } : quot))
+                                            );
+                                          }
+                                        }}
                                         className={`select select-sm text-xs font-semibold w-full ${
                                           isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'cursor-pointer'
                                         }`}
@@ -1845,7 +1896,7 @@ export const DispatchManagement: React.FC = () => {
                                                     disabled={isViewOnly}
                                                     onChange={(e) => {
                                                       if (isViewOnly) return;
-                                                      const newStatus = e.target.value;
+                                                      const newStatus = e.target.value as DispatchStatusType;
                                                       let autoDispQty = itemState.dispatched_quantity;
                                                       if (
                                                         newStatus === 'Dispatched' &&
@@ -1853,14 +1904,24 @@ export const DispatchManagement: React.FC = () => {
                                                       ) {
                                                         autoDispQty = totalItemQty;
                                                       }
-                                                      setEditedItems((prev) => ({
-                                                        ...prev,
+                                                      const nextEdited = {
+                                                        ...editedItems,
                                                         [itemId]: {
                                                           ...itemState,
                                                           status: newStatus,
                                                           dispatched_quantity: autoDispQty,
                                                         },
-                                                      }));
+                                                      };
+                                                      setEditedItems(nextEdited);
+
+                                                      // Automatically recalculate and update overall dispatch stage
+                                                      const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
+                                                      setOverallStatus(newOverall);
+                                                      if (selectedQuotationId) {
+                                                        setQuotations((prev) =>
+                                                          prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
+                                                        );
+                                                      }
                                                     }}
                                                     className={`select select-sm text-xs font-semibold w-full focus:outline-none focus:ring-1 focus:ring-teal-400 ${
                                                       isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
@@ -2030,13 +2091,23 @@ export const DispatchManagement: React.FC = () => {
                                                           <button
                                                             type="button"
                                                             onClick={() => {
-                                                              setEditedItems((prev) => ({
-                                                                ...prev,
+                                                              const nextEdited = {
+                                                                ...editedItems,
                                                                 [itemId]: {
                                                                   ...itemState,
-                                                                  status: 'Ready Stock',
+                                                                  status: 'Ready Stock' as DispatchStatusType,
                                                                 },
-                                                              }));
+                                                              };
+                                                              setEditedItems(nextEdited);
+
+                                                              // Recalculate and update overall dispatch status immediately
+                                                              const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
+                                                              setOverallStatus(newOverall);
+                                                              if (selectedQuotationId) {
+                                                                setQuotations((prev) =>
+                                                                  prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
+                                                                );
+                                                              }
                                                             }}
                                                             className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-none shrink-0 shadow-xs cursor-pointer flex items-center space-x-1"
                                                             title="Item arrived in godown! Set dispatch status to Ready Stock"

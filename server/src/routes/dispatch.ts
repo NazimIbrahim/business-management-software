@@ -37,6 +37,25 @@ export async function ensureDispatchSchema(): Promise<void> {
       ALTER TABLE quotation_items ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
       UPDATE quotations SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
       UPDATE quotation_items SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
+
+      -- Sync quotation dispatch_status from items whenever items have updated stock availability
+      UPDATE quotations q
+      SET dispatch_status = sub.computed_status
+      FROM (
+        SELECT 
+          quotation_id,
+          CASE
+            WHEN count(*) > 0 AND count(CASE WHEN dispatch_status = 'Dispatched' THEN 1 END) = count(*) THEN 'Dispatched'
+            WHEN count(CASE WHEN dispatch_status = 'Factory Order' THEN 1 END) > 0 THEN 'Factory Order'
+            WHEN count(CASE WHEN dispatch_status = 'Need to Arrange from Local' THEN 1 END) > 0 THEN 'Need to Arrange from Local'
+            WHEN count(CASE WHEN dispatch_status = 'Ready Stock' THEN 1 END) > 0 THEN 'Ready Stock'
+            ELSE 'Yet to Update'
+          END as computed_status
+        FROM quotation_items
+        GROUP BY quotation_id
+      ) sub
+      WHERE q.id = sub.quotation_id
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != sub.computed_status;
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -584,46 +603,44 @@ dispatchRouter.put(
           }
         }
 
-        // 2. Compute aggregate quotation dispatch status if not explicitly overridden
-        let finalQuotationStatus = normalizedOverallStatus;
-        if (!finalQuotationStatus) {
-          const itemStatusRows = await client.query(
-            `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
-            [id]
-          );
-          const totalRows = await client.query(
-            `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
-            [id]
-          );
-          const total = parseInt(totalRows.rows[0]?.count || '0', 10);
-          const dispatched = parseInt(
-            itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0',
-            10
-          );
-          const factory = parseInt(
-            itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0',
-            10
-          );
-          const local = parseInt(
-            itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
-            10
-          );
-          const ready = parseInt(
-            itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
-            10
-          );
+        // 2. Compute aggregate quotation dispatch status from items
+        const itemStatusRows = await client.query(
+          `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
+          [id]
+        );
+        const totalRows = await client.query(
+          `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
+          [id]
+        );
+        const total = parseInt(totalRows.rows[0]?.count || '0', 10);
+        const dispatched = parseInt(
+          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0',
+          10
+        );
+        const factory = parseInt(
+          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0',
+          10
+        );
+        const local = parseInt(
+          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
+          10
+        );
+        const ready = parseInt(
+          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
+          10
+        );
 
-          if (total > 0 && dispatched === total) {
-            finalQuotationStatus = 'Dispatched';
-          } else if (factory > 0) {
-            finalQuotationStatus = 'Factory Order';
-          } else if (local > 0) {
-            finalQuotationStatus = 'Need to Arrange from Local';
-          } else if (ready > 0) {
-            finalQuotationStatus = 'Ready Stock';
-          } else {
-            finalQuotationStatus = 'Yet to Update';
-          }
+        let finalQuotationStatus = 'Yet to Update';
+        if (total > 0 && dispatched === total) {
+          finalQuotationStatus = 'Dispatched';
+        } else if (factory > 0) {
+          finalQuotationStatus = 'Factory Order';
+        } else if (local > 0) {
+          finalQuotationStatus = 'Need to Arrange from Local';
+        } else if (ready > 0) {
+          finalQuotationStatus = 'Ready Stock';
+        } else if (normalizedOverallStatus && normalizedOverallStatus !== 'Yet to Update') {
+          finalQuotationStatus = normalizedOverallStatus;
         }
 
         // Determine earliest or default expected date for the quotation
