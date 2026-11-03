@@ -1412,18 +1412,18 @@ export const DispatchManagement: React.FC = () => {
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              padding: '2px 9px',
+                              padding: '2.5px 10px',
                               borderRadius: '9999px',
                               fontSize: '10px',
-                              fontWeight: 700,
-                              backgroundColor: '#0D1B2A',
-                              color: '#FFFFFF',
-                              border: '1px solid #1B263B',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                              fontWeight: 800,
+                              backgroundColor: isApproved ? '#ECFDF5' : '#0D1B2A',
+                              color: isApproved ? '#065F46' : '#FFFFFF',
+                              border: isApproved ? '1px solid #6EE7B7' : '1px solid #1B263B',
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12)',
                               letterSpacing: '0.02em',
                             }}
                           >
-                            Closed
+                            {isApproved ? 'Approved' : 'Closed'}
                           </span>
                         </td>
 
@@ -1862,17 +1862,17 @@ export const DispatchManagement: React.FC = () => {
                                                         },
                                                       }));
                                                     }}
-                                                    className={`select select-sm text-xs font-semibold w-full ${
+                                                    className={`select select-sm text-xs font-semibold w-full focus:outline-none focus:ring-1 focus:ring-teal-400 ${
                                                       isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
                                                     } ${
                                                       itemState.status === 'Yet to Update'
                                                         ? 'text-slate-700 bg-slate-50 border-slate-300'
                                                         : itemState.status === 'Ready Stock'
-                                                        ? 'text-emerald-700 bg-emerald-50/50 border-emerald-200'
+                                                        ? 'text-emerald-700 bg-emerald-50/50 border-emerald-300'
                                                         : itemState.status === 'Need to Arrange from Local'
-                                                        ? 'text-amber-800 bg-amber-50/50 border-amber-200'
+                                                        ? 'text-amber-800 bg-amber-50/50 border-amber-300'
                                                         : itemState.status === 'Factory Order'
-                                                        ? 'text-indigo-800 bg-indigo-50/50 border-indigo-200'
+                                                        ? 'text-indigo-800 bg-indigo-50/50 border-indigo-300'
                                                         : 'text-teal-900 bg-teal-50 border-teal-300'
                                                     }`}
                                                   >

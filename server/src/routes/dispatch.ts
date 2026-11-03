@@ -577,7 +577,7 @@ dispatchRouter.put(
                    dispatched_quantity = $5,
                    procurement_status = $6,
                    procurement_notes = $7,
-                   procurement_updated_at = CASE WHEN $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END
+                   procurement_updated_at = CASE WHEN $6::varchar IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END
                WHERE id = $8 AND quotation_id = $9`,
               [itStatus, itDate, it.dispatch_notes || null, isItemDispatched, itDispatchedQty, itProcurementStatus, itProcurementNotes, it.id, id]
             );
@@ -643,8 +643,8 @@ dispatchRouter.put(
         await client.query(
           `UPDATE quotations
            SET dispatch_status = $1,
-               expected_dispatch_date = COALESCE($2, expected_dispatch_date),
-               dispatch_notes = COALESCE($3, dispatch_notes),
+               expected_dispatch_date = COALESCE($2::date, expected_dispatch_date),
+               dispatch_notes = COALESCE($3::text, dispatch_notes),
                dispatched_by_id = $4,
                dispatched_by_name = $5,
                dispatched_at = CASE WHEN $6::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END,
