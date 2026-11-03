@@ -55,7 +55,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.26',
+    version: '2.4.27',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -119,6 +119,10 @@ async function runAutoMigrations() {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_quantity NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_status VARCHAR(60) DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_notes TEXT DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_updated_at TIMESTAMPTZ DEFAULT NULL;
 
       -- quotations columns
       ALTER TABLE quotations ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;

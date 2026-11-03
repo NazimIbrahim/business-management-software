@@ -133,6 +133,10 @@ export interface QuotationItem {
   expected_dispatch_date?: string | null;
   dispatch_notes?: string | null;
   dispatched_at?: string | null;
+  dispatched_quantity?: number | string | null;
+  procurement_status?: string | null;
+  procurement_notes?: string | null;
+  procurement_updated_at?: string | null;
   area_name?: string;
   _itemBaseTotal?: number;
 }
@@ -199,6 +203,9 @@ export interface Quotation {
   ready_stock_items_count?: number;
   local_arrange_items_count?: number;
   factory_order_items_count?: number;
+  total_procurement_items?: number;
+  proc_reached_godown_count?: number;
+  proc_on_the_way_count?: number;
   version: number;
   created_at: string;
   total_paid?: number;

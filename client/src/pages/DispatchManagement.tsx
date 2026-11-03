@@ -59,6 +59,25 @@ export interface ChangedQuotationSummary {
   updated_at: string;
 }
 
+export const VALID_PROCUREMENT_STATUSES = [
+  'Availability Confirmed',
+  'Payment Done',
+  'Dispatched',
+  'On the Way',
+  'Reached to Godown',
+] as const;
+
+export type ProcurementStatusType = (typeof VALID_PROCUREMENT_STATUSES)[number];
+
+interface ProcurementStats {
+  total_procurement_items: number;
+  avail_confirmed: number;
+  payment_done: number;
+  supplier_dispatched: number;
+  on_the_way: number;
+  reached_godown: number;
+}
+
 interface DispatchStats {
   total_orders?: number;
   total_closed_quotations: number;
@@ -74,6 +93,8 @@ interface DispatchStats {
   dispatched_count: number;
   overdue_count: number;
   todays_dispatches?: Quotation[];
+  tomorrows_dispatches?: Quotation[];
+  procurement_stats?: ProcurementStats;
 }
 
 export const DispatchManagement: React.FC = () => {
@@ -93,10 +114,12 @@ export const DispatchManagement: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [dispatchStatusFilter, setDispatchStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'overdue'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'this_week' | 'overdue'>('all');
+  const [procurementFilter, setProcurementFilter] = useState<string>('all');
 
-  // Today's dispatches popup banner dismiss state
+  // Dispatches popup banner dismiss states
   const [isTodayBannerDismissed, setIsTodayBannerDismissed] = useState<boolean>(false);
+  const [isTomorrowBannerDismissed, setIsTomorrowBannerDismissed] = useState<boolean>(false);
 
   // Active / Selected Quotation for Editing
   const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
@@ -108,7 +131,19 @@ export const DispatchManagement: React.FC = () => {
   const [overallStatus, setOverallStatus] = useState<string>('Yet to Update');
   const [overallDate, setOverallDate] = useState<string>('');
   const [overallNotes, setOverallNotes] = useState<string>('');
-  const [editedItems, setEditedItems] = useState<Record<number, { status: string; date: string; notes: string }>>({});
+  const [editedItems, setEditedItems] = useState<
+    Record<
+      number,
+      {
+        status: string;
+        date: string;
+        notes: string;
+        dispatched_quantity?: number | string;
+        procurement_status?: string;
+        procurement_notes?: string;
+      }
+    >
+  >({});
   const [saving, setSaving] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
@@ -137,6 +172,7 @@ export const DispatchManagement: React.FC = () => {
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (dispatchStatusFilter !== 'all') params.append('dispatch_status', dispatchStatusFilter);
       if (dateFilter !== 'all') params.append('filter_date', dateFilter);
+      if (procurementFilter !== 'all') params.append('procurement_status', procurementFilter);
 
       const [quotesRes, statsRes] = await Promise.all([
         fetchApi<any>(`/api/dispatch/quotations?${params.toString()}`),
@@ -154,7 +190,7 @@ export const DispatchManagement: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [debouncedSearch, dispatchStatusFilter, dateFilter]);
+  }, [debouncedSearch, dispatchStatusFilter, dateFilter, procurementFilter]);
 
   // Real-time synchronization
   useEffect(() => {
@@ -239,15 +275,34 @@ export const DispatchManagement: React.FC = () => {
       setOverallNotes(qNotes);
 
       // Initialize item form states
-      const itemMap: Record<number, { status: string; date: string; notes: string }> = {};
+      const itemMap: Record<
+        number,
+        {
+          status: string;
+          date: string;
+          notes: string;
+          dispatched_quantity?: number | string;
+          procurement_status?: string;
+          procurement_notes?: string;
+        }
+      > = {};
       itemsList.forEach((it) => {
         if (it.id) {
+          const totalQty = it.quantity_boxes > 0 ? it.quantity_boxes : it.quantity_sqft > 0 ? it.quantity_sqft : 1;
+          const initialDispQty =
+            it.dispatched_quantity !== undefined && it.dispatched_quantity !== null
+              ? it.dispatched_quantity
+              : (it.dispatch_status === 'Dispatched' ? totalQty : 0);
+
           itemMap[it.id] = {
             status: it.dispatch_status || qStatus || 'Yet to Update',
             date: it.expected_dispatch_date
               ? String(it.expected_dispatch_date).split('T')[0]
               : qDate,
             notes: it.dispatch_notes || '',
+            dispatched_quantity: initialDispQty,
+            procurement_status: it.procurement_status || '',
+            procurement_notes: it.procurement_notes || '',
           };
         }
       });
@@ -296,9 +351,16 @@ export const DispatchManagement: React.FC = () => {
       const updated = { ...prev };
       Object.keys(updated).forEach((k) => {
         const numKey = Number(k);
+        const itemObj = activeItems.find((it) => it.id === numKey);
+        const totalQty = itemObj ? (itemObj.quantity_boxes > 0 ? itemObj.quantity_boxes : itemObj.quantity_sqft > 0 ? itemObj.quantity_sqft : 1) : 0;
+        let newDispQty = updated[numKey]?.dispatched_quantity;
+        if (status === 'Dispatched' && (!newDispQty || Number(newDispQty) === 0)) {
+          newDispQty = totalQty;
+        }
         updated[numKey] = {
           ...updated[numKey],
           status,
+          dispatched_quantity: newDispQty,
         };
       });
       return updated;
@@ -329,11 +391,21 @@ export const DispatchManagement: React.FC = () => {
 
     const payloadItems = activeItems.map((it) => {
       const state = it.id ? editedItems[it.id] : null;
+      const itStatus = state?.status || overallStatus;
+      const totalQty = it.quantity_boxes > 0 ? it.quantity_boxes : it.quantity_sqft > 0 ? it.quantity_sqft : 1;
+      const dispQty =
+        state?.dispatched_quantity !== undefined && state?.dispatched_quantity !== null && state?.dispatched_quantity !== ''
+          ? state.dispatched_quantity
+          : (itStatus === 'Dispatched' ? totalQty : 0);
+
       return {
         id: it.id,
-        dispatch_status: state?.status || overallStatus,
+        dispatch_status: itStatus,
         expected_dispatch_date: state?.date || overallDate,
         dispatch_notes: state?.notes || '',
+        dispatched_quantity: dispQty,
+        procurement_status: state?.procurement_status || '',
+        procurement_notes: state?.procurement_notes || '',
       };
     });
 
@@ -445,6 +517,18 @@ export const DispatchManagement: React.FC = () => {
       );
     }
 
+    const dTomorrow = new Date();
+    dTomorrow.setDate(dTomorrow.getDate() + 1);
+    const tomorrow = dTomorrow.toISOString().split('T')[0];
+    if (dateStr === tomorrow) {
+      return (
+        <span className="text-indigo-800 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-bold inline-flex items-center space-x-1">
+          <Calendar size={11} className="text-indigo-600" />
+          <span>Due Tomorrow</span>
+        </span>
+      );
+    }
+
     return (
       <span className="text-slate-600 text-[11px] font-medium inline-flex items-center space-x-1">
         <Calendar size={11} className="text-slate-400" />
@@ -456,13 +540,15 @@ export const DispatchManagement: React.FC = () => {
   const hasActiveFilters =
     Boolean(search) ||
     dispatchStatusFilter !== 'all' ||
-    dateFilter !== 'all';
+    dateFilter !== 'all' ||
+    procurementFilter !== 'all';
 
   const handleClearFilters = () => {
     setSearch('');
     setDebouncedSearch('');
     setDispatchStatusFilter('all');
     setDateFilter('all');
+    setProcurementFilter('all');
   };
 
   const totalOrdersCount = stats?.total_orders ?? stats?.total_closed_quotations ?? quotations.length;
@@ -693,7 +779,7 @@ export const DispatchManagement: React.FC = () => {
             </div>
 
             {/* Date Filter */}
-            <div className="w-full sm:w-36">
+            <div className="w-full sm:w-40">
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value as any)}
@@ -705,8 +791,29 @@ export const DispatchManagement: React.FC = () => {
               >
                 <option value="all">All Dates</option>
                 <option value="today">Due Today</option>
+                <option value="tomorrow">Due Tomorrow</option>
                 <option value="this_week">Due This Week</option>
                 <option value="overdue">Overdue</option>
+              </select>
+            </div>
+
+            {/* Procurement / Purchase Stage Filter */}
+            <div className="w-full sm:w-52">
+              <select
+                value={procurementFilter}
+                onChange={(e) => setProcurementFilter(e.target.value)}
+                className={`select select-sm w-full text-xs font-semibold cursor-pointer ${
+                  procurementFilter !== 'all'
+                    ? 'border-amber-500 bg-amber-50/50 text-amber-950 font-bold'
+                    : 'text-slate-700'
+                }`}
+              >
+                <option value="all">All Purchase Stages</option>
+                {VALID_PROCUREMENT_STATUSES.map((ps) => (
+                  <option key={ps} value={ps}>
+                    {ps}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -932,6 +1039,153 @@ export const DispatchManagement: React.FC = () => {
                     padding: '3px 8px',
                     borderRadius: '6px',
                     border: '1px solid #A7F3D0',
+                  }}
+                >
+                  {td.total_items} items &bull; {td.dispatch_status}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TOMORROW'S PLANNED DISPATCHES POPUP BANNER */}
+      {stats?.tomorrows_dispatches && stats.tomorrows_dispatches.length > 0 && !isTomorrowBannerDismissed && (
+        <div
+          className="animate-fade-in"
+          style={{
+            marginBottom: '1rem',
+            backgroundColor: '#EEF2FF',
+            border: '1px solid #C7D2FE',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 8px rgba(79, 70, 229, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)',
+                  boxShadow: '0 4px 12px rgba(67, 56, 202, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                }}
+              >
+                <Calendar size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#312E81', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    Tomorrow's Planned Dispatches
+                  </span>
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                    }}
+                  >
+                    {stats.tomorrows_dispatches.length} Order{stats.tomorrows_dispatches.length > 1 ? 's' : ''} Scheduled Tomorrow
+                  </span>
+                </div>
+                <p style={{ fontSize: '11px', color: '#4338CA', marginTop: '3px', lineHeight: '1.4' }}>
+                  Scheduled for tomorrow ({new Date(Date.now() + 86400000).toLocaleDateString('en-GB')}). Review readiness or inspect order details below.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setDateFilter(dateFilter === 'tomorrow' ? 'all' : 'tomorrow')}
+                className="btn btn-xs font-bold cursor-pointer"
+                style={{
+                  backgroundColor: dateFilter === 'tomorrow' ? '#312E81' : '#4338CA',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                }}
+              >
+                {dateFilter === 'tomorrow' ? 'Clear Filter' : 'Filter Tomorrow’s Orders →'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTomorrowBannerDismissed(true)}
+                style={{
+                  color: '#4338CA',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+                title="Dismiss tomorrow's banner"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick interactive order chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', paddingTop: '2px' }}>
+            {stats.tomorrows_dispatches.map((td: any) => (
+              <button
+                type="button"
+                key={td.id}
+                onClick={() => handleToggleRow(td)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #C7D2FE',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    color: '#312E81',
+                    background: '#EEF2FF',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {td.quotation_number}
+                </span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                  {td.customer_name}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4338CA',
+                    background: '#E0E7FF',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #C7D2FE',
                   }}
                 >
                   {td.total_items} items &bull; {td.dispatch_status}
@@ -1176,6 +1430,20 @@ export const DispatchManagement: React.FC = () => {
                         {/* 6. Dispatch Stage */}
                         <td className="py-3 px-3 text-center align-middle whitespace-nowrap">
                           {renderDispatchBadge(q.dispatch_status)}
+                          {Boolean(q.total_procurement_items && q.total_procurement_items > 0) && (
+                            <div className="mt-1 flex items-center justify-center">
+                              <span className="text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md inline-flex items-center space-x-1">
+                                <Package size={10} className="text-amber-700" />
+                                <span>
+                                  {q.proc_reached_godown_count && q.proc_reached_godown_count > 0
+                                    ? `${q.proc_reached_godown_count}/${q.total_procurement_items} In Godown`
+                                    : q.proc_on_the_way_count && q.proc_on_the_way_count > 0
+                                    ? `${q.proc_on_the_way_count} In Transit`
+                                    : `${q.total_procurement_items} Sourcing`}
+                                </span>
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         {/* 7. Expected Date */}
@@ -1446,159 +1714,372 @@ export const DispatchManagement: React.FC = () => {
                                       <thead>
                                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold text-[10px] uppercase tracking-wider">
                                           <th className="py-2.5 px-3 w-10 text-center">#</th>
-                                          <th className="py-2.5 px-3 min-w-[220px]">Item Description</th>
+                                          <th className="py-2.5 px-3 min-w-[200px]">Item Description</th>
                                           <th className="py-2.5 px-3 w-28">Area / Section</th>
-                                          <th className="py-2.5 px-3 w-24 text-right">Quantity</th>
+                                          <th className="py-2.5 px-3 w-24 text-right">Order Qty</th>
+                                          <th className="py-2.5 px-3 w-32 text-right">Dispatched Qty</th>
                                           <th className="py-2.5 px-3 w-48">Status *</th>
-                                          <th className="py-2.5 px-3 w-40">Expected Date *</th>
-                                          <th className="py-2.5 px-3 min-w-[170px]">Location / Supplier Remarks (Optional)</th>
+                                          <th className="py-2.5 px-3 w-36">Expected Date *</th>
+                                          <th className="py-2.5 px-3 min-w-[160px]">Location / Remarks (Optional)</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
                                         {activeItems.map((item, idx) => {
                                           const itemId = item.id || idx;
+                                          const totalItemQty =
+                                            item.quantity_boxes > 0
+                                              ? item.quantity_boxes
+                                              : item.quantity_sqft > 0
+                                              ? item.quantity_sqft
+                                              : 1;
+                                          const unitLabel =
+                                            item.quantity_boxes > 0 ? 'boxes' : item.quantity_sqft > 0 ? 'sqft' : 'nos';
+
                                           const itemState = editedItems[itemId] || {
                                             status: item.dispatch_status || 'Ready Stock',
                                             date: item.expected_dispatch_date
                                               ? String(item.expected_dispatch_date).split('T')[0]
                                               : overallDate,
                                             notes: item.dispatch_notes || '',
+                                            dispatched_quantity:
+                                              item.dispatched_quantity !== undefined && item.dispatched_quantity !== null
+                                                ? item.dispatched_quantity
+                                                : (item.dispatch_status === 'Dispatched' ? totalItemQty : 0),
+                                            procurement_status: item.procurement_status || '',
+                                            procurement_notes: item.procurement_notes || '',
                                           };
 
                                           const isItemMissingDate = !itemState.date && !overallDate;
 
                                           return (
-                                            <tr key={itemId} className="hover:bg-slate-50/80 transition-colors">
-                                              <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                                                {idx + 1}
-                                              </td>
-                                              <td className="py-2.5 px-3">
-                                                <div className="flex items-start space-x-2.5">
-                                                  {item.item_image ? (
-                                                    <img
-                                                      src={item.item_image}
-                                                      alt={item.description}
-                                                      className="w-9 h-9 object-cover rounded-md border border-slate-200 shrink-0 bg-slate-50"
-                                                    />
-                                                  ) : (
-                                                    <div className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400">
-                                                      <Package size={14} />
-                                                    </div>
-                                                  )}
-                                                  <div>
-                                                    <div className="font-bold text-slate-800 text-xs">
-                                                      {item.description}
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2">
-                                                      {item.item_code && (
-                                                        <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1 rounded">
-                                                          {item.item_code}
-                                                        </span>
-                                                      )}
-                                                      {item.brand && <span>Brand: {item.brand}</span>}
-                                                      {item.size && <span>Size: {item.size}</span>}
+                                            <React.Fragment key={itemId}>
+                                              <tr className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                                                  {idx + 1}
+                                                </td>
+                                                <td className="py-2.5 px-3">
+                                                  <div className="flex items-start space-x-2.5">
+                                                    {item.item_image ? (
+                                                      <img
+                                                        src={item.item_image}
+                                                        alt={item.description}
+                                                        className="w-9 h-9 object-cover rounded-md border border-slate-200 shrink-0 bg-slate-50"
+                                                      />
+                                                    ) : (
+                                                      <div className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400">
+                                                        <Package size={14} />
+                                                      </div>
+                                                    )}
+                                                    <div>
+                                                      <div className="font-bold text-slate-800 text-xs">
+                                                        {item.description}
+                                                      </div>
+                                                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2">
+                                                        {item.item_code && (
+                                                          <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1 rounded">
+                                                            {item.item_code}
+                                                          </span>
+                                                        )}
+                                                        {item.brand && <span>Brand: {item.brand}</span>}
+                                                        {item.size && <span>Size: {item.size}</span>}
+                                                      </div>
                                                     </div>
                                                   </div>
-                                                </div>
-                                              </td>
-                                              <td className="py-2.5 px-3 text-slate-600 font-medium text-xs">
-                                                {item.area_name || 'General Area'}
-                                              </td>
-                                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                                                {item.quantity_boxes > 0
-                                                  ? `${item.quantity_boxes} boxes`
-                                                  : item.quantity_sqft > 0
-                                                  ? `${item.quantity_sqft} sqft`
-                                                  : '1 nos'}
-                                              </td>
-                                              <td className="py-2.5 px-3">
-                                                <select
-                                                  value={itemState.status}
-                                                  disabled={isViewOnly}
-                                                  onChange={(e) => {
-                                                    if (isViewOnly) return;
-                                                    const newStatus = e.target.value;
-                                                    setEditedItems((prev) => ({
-                                                      ...prev,
-                                                      [itemId]: {
-                                                        ...itemState,
-                                                        status: newStatus,
-                                                      },
-                                                    }));
-                                                  }}
-                                                  className={`select select-sm text-xs font-semibold w-full ${
-                                                    isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
-                                                  } ${
-                                                    itemState.status === 'Yet to Update'
-                                                      ? 'text-slate-700 bg-slate-50 border-slate-300'
-                                                      : itemState.status === 'Ready Stock'
-                                                      ? 'text-emerald-700 bg-emerald-50/50 border-emerald-200'
-                                                      : itemState.status === 'Need to Arrange from Local'
-                                                      ? 'text-amber-800 bg-amber-50/50 border-amber-200'
-                                                      : itemState.status === 'Factory Order'
-                                                      ? 'text-indigo-800 bg-indigo-50/50 border-indigo-200'
-                                                      : 'text-teal-900 bg-teal-50 border-teal-300'
-                                                  }`}
-                                                >
-                                                  {DISPATCH_STATUS_OPTIONS.map((opt) => (
-                                                    <option key={opt} value={opt}>
-                                                      {opt}
-                                                    </option>
-                                                  ))}
-                                                </select>
-                                              </td>
-                                              <td className="py-2.5 px-3">
-                                                <input
-                                                  type="date"
-                                                  value={itemState.date || overallDate}
-                                                  disabled={isViewOnly}
-                                                  readOnly={isViewOnly}
-                                                  onChange={(e) => {
-                                                    if (isViewOnly) return;
-                                                    const newDate = e.target.value;
-                                                    setEditedItems((prev) => ({
-                                                      ...prev,
-                                                      [itemId]: {
-                                                        ...itemState,
-                                                        date: newDate,
-                                                      },
-                                                    }));
-                                                    setValidationError(null);
-                                                  }}
-                                                  className={`input input-sm text-xs font-mono w-full ${
-                                                    isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
-                                                  } ${
-                                                    !isViewOnly && isItemMissingDate && validationError
-                                                      ? 'border-rose-400 ring-2 ring-rose-200'
-                                                      : ''
-                                                  }`}
-                                                  required={!isViewOnly}
-                                                />
-                                              </td>
-                                              <td className="py-2.5 px-3">
-                                                <input
-                                                  type="text"
-                                                  placeholder={isViewOnly ? 'None' : 'Optional rack, supplier, or notes...'}
-                                                  value={itemState.notes}
-                                                  disabled={isViewOnly}
-                                                  readOnly={isViewOnly}
-                                                  onChange={(e) => {
-                                                    if (isViewOnly) return;
-                                                    const newNotes = e.target.value;
-                                                    setEditedItems((prev) => ({
-                                                      ...prev,
-                                                      [itemId]: {
-                                                        ...itemState,
-                                                        notes: newNotes,
-                                                      },
-                                                    }));
-                                                  }}
-                                                  className={`input input-sm text-xs w-full ${
-                                                    isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
-                                                  }`}
-                                                />
-                                              </td>
-                                            </tr>
+                                                </td>
+                                                <td className="py-2.5 px-3 text-slate-600 font-medium text-xs">
+                                                  {item.area_name || 'General Area'}
+                                                </td>
+                                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                                                  {item.quantity_boxes > 0
+                                                    ? `${item.quantity_boxes} boxes`
+                                                    : item.quantity_sqft > 0
+                                                    ? `${item.quantity_sqft} sqft`
+                                                    : '1 nos'}
+                                                </td>
+                                                <td className="py-2.5 px-3 text-right">
+                                                  <div className="flex items-center space-x-1 justify-end">
+                                                    <input
+                                                      type="number"
+                                                      step="any"
+                                                      min="0"
+                                                      disabled={isViewOnly}
+                                                      readOnly={isViewOnly}
+                                                      value={
+                                                        itemState.dispatched_quantity !== undefined &&
+                                                        itemState.dispatched_quantity !== null
+                                                          ? itemState.dispatched_quantity
+                                                          : ''
+                                                      }
+                                                      placeholder={itemState.status === 'Dispatched' ? String(totalItemQty) : '0'}
+                                                      onChange={(e) => {
+                                                        if (isViewOnly) return;
+                                                        const val = e.target.value;
+                                                        setEditedItems((prev) => ({
+                                                          ...prev,
+                                                          [itemId]: {
+                                                            ...itemState,
+                                                            dispatched_quantity:
+                                                              val === '' ? '' : Math.max(0, parseFloat(val) || 0),
+                                                          },
+                                                        }));
+                                                      }}
+                                                      className={`input input-sm text-xs font-mono font-bold w-20 text-right ${
+                                                        isViewOnly
+                                                          ? 'bg-slate-100 text-slate-600 cursor-not-allowed'
+                                                          : 'bg-white'
+                                                      } ${
+                                                        itemState.status === 'Dispatched'
+                                                          ? 'border-teal-500 text-teal-950 bg-teal-50/40 ring-1 ring-teal-200'
+                                                          : 'border-slate-300 text-slate-800'
+                                                      }`}
+                                                      title="Mention dispatched quantity for this specific item"
+                                                    />
+                                                    <span className="text-[10px] text-slate-500 font-semibold whitespace-nowrap">
+                                                      {unitLabel}
+                                                    </span>
+                                                  </div>
+                                                </td>
+                                                <td className="py-2.5 px-3">
+                                                  <select
+                                                    value={itemState.status}
+                                                    disabled={isViewOnly}
+                                                    onChange={(e) => {
+                                                      if (isViewOnly) return;
+                                                      const newStatus = e.target.value;
+                                                      let autoDispQty = itemState.dispatched_quantity;
+                                                      if (
+                                                        newStatus === 'Dispatched' &&
+                                                        (!autoDispQty || Number(autoDispQty) === 0)
+                                                      ) {
+                                                        autoDispQty = totalItemQty;
+                                                      }
+                                                      setEditedItems((prev) => ({
+                                                        ...prev,
+                                                        [itemId]: {
+                                                          ...itemState,
+                                                          status: newStatus,
+                                                          dispatched_quantity: autoDispQty,
+                                                        },
+                                                      }));
+                                                    }}
+                                                    className={`select select-sm text-xs font-semibold w-full ${
+                                                      isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
+                                                    } ${
+                                                      itemState.status === 'Yet to Update'
+                                                        ? 'text-slate-700 bg-slate-50 border-slate-300'
+                                                        : itemState.status === 'Ready Stock'
+                                                        ? 'text-emerald-700 bg-emerald-50/50 border-emerald-200'
+                                                        : itemState.status === 'Need to Arrange from Local'
+                                                        ? 'text-amber-800 bg-amber-50/50 border-amber-200'
+                                                        : itemState.status === 'Factory Order'
+                                                        ? 'text-indigo-800 bg-indigo-50/50 border-indigo-200'
+                                                        : 'text-teal-900 bg-teal-50 border-teal-300'
+                                                    }`}
+                                                  >
+                                                    {DISPATCH_STATUS_OPTIONS.map((opt) => (
+                                                      <option key={opt} value={opt}>
+                                                        {opt}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                </td>
+                                                <td className="py-2.5 px-3">
+                                                  <input
+                                                    type="date"
+                                                    value={itemState.date || overallDate}
+                                                    disabled={isViewOnly}
+                                                    readOnly={isViewOnly}
+                                                    onChange={(e) => {
+                                                      if (isViewOnly) return;
+                                                      const newDate = e.target.value;
+                                                      setEditedItems((prev) => ({
+                                                        ...prev,
+                                                        [itemId]: {
+                                                          ...itemState,
+                                                          date: newDate,
+                                                        },
+                                                      }));
+                                                      setValidationError(null);
+                                                    }}
+                                                    className={`input input-sm text-xs font-mono w-full ${
+                                                      isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                                    } ${
+                                                      !isViewOnly && isItemMissingDate && validationError
+                                                        ? 'border-rose-400 ring-2 ring-rose-200'
+                                                        : ''
+                                                    }`}
+                                                    required={!isViewOnly}
+                                                  />
+                                                </td>
+                                                <td className="py-2.5 px-3">
+                                                  <input
+                                                    type="text"
+                                                    placeholder={isViewOnly ? 'None' : 'Optional rack, supplier, or notes...'}
+                                                    value={itemState.notes}
+                                                    disabled={isViewOnly}
+                                                    readOnly={isViewOnly}
+                                                    onChange={(e) => {
+                                                      if (isViewOnly) return;
+                                                      const newNotes = e.target.value;
+                                                      setEditedItems((prev) => ({
+                                                        ...prev,
+                                                        [itemId]: {
+                                                          ...itemState,
+                                                          notes: newNotes,
+                                                        },
+                                                      }));
+                                                    }}
+                                                    className={`input input-sm text-xs w-full ${
+                                                      isViewOnly ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''
+                                                    }`}
+                                                  />
+                                                </td>
+                                              </tr>
+
+                                              {/* Interactive Purchase / Sourcing Tracker for Local & Factory Orders */}
+                                              {(itemState.status === 'Need to Arrange from Local' ||
+                                                itemState.status === 'Factory Order' ||
+                                                Boolean(itemState.procurement_status)) && (
+                                                <tr className="bg-gradient-to-r from-amber-50/70 via-indigo-50/50 to-slate-50 border-b border-slate-200">
+                                                  <td colSpan={8} className="px-4 py-2.5">
+                                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/95 p-3 rounded-lg border border-amber-200 shadow-2xs">
+                                                      <div className="flex items-center space-x-2 shrink-0">
+                                                        <span
+                                                          className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider ${
+                                                            itemState.status === 'Factory Order'
+                                                              ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                                              : 'bg-amber-100 text-amber-900 border border-amber-200'
+                                                          }`}
+                                                        >
+                                                          {itemState.status === 'Factory Order' ? (
+                                                            <Factory size={12} className="mr-1" />
+                                                          ) : (
+                                                            <Package size={12} className="mr-1" />
+                                                          )}
+                                                          <span>
+                                                            {itemState.status === 'Factory Order'
+                                                              ? 'Factory Sourcing'
+                                                              : 'Local Purchase'}
+                                                          </span>
+                                                        </span>
+                                                        <span className="text-[11px] font-bold text-slate-700">
+                                                          Procurement Progress:
+                                                        </span>
+                                                      </div>
+
+                                                      <div className="flex items-center flex-wrap gap-1.5 flex-1">
+                                                        {VALID_PROCUREMENT_STATUSES.map((procStage, sIdx) => {
+                                                          const isCurrent = itemState.procurement_status === procStage;
+                                                          const currentIdx = VALID_PROCUREMENT_STATUSES.indexOf(
+                                                            itemState.procurement_status as any
+                                                          );
+                                                          const isCompleted = currentIdx >= 0 && sIdx <= currentIdx;
+
+                                                          return (
+                                                            <button
+                                                              key={procStage}
+                                                              type="button"
+                                                              disabled={isViewOnly}
+                                                              onClick={() => {
+                                                                if (isViewOnly) return;
+                                                                setEditedItems((prev) => ({
+                                                                  ...prev,
+                                                                  [itemId]: {
+                                                                    ...itemState,
+                                                                    procurement_status: procStage,
+                                                                  },
+                                                                }));
+                                                              }}
+                                                              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                                isViewOnly
+                                                                  ? 'cursor-default'
+                                                                  : 'cursor-pointer hover:shadow-xs'
+                                                              } ${
+                                                                isCurrent
+                                                                  ? 'bg-slate-900 text-white shadow-xs scale-102 ring-2 ring-slate-800'
+                                                                  : isCompleted
+                                                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                                                  : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                              }`}
+                                                              title={`Click to set stage: ${procStage}`}
+                                                            >
+                                                              <span
+                                                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${
+                                                                  isCurrent
+                                                                    ? 'bg-amber-400 text-slate-950'
+                                                                    : isCompleted
+                                                                    ? 'bg-emerald-600 text-white'
+                                                                    : 'bg-slate-300 text-slate-700'
+                                                                }`}
+                                                              >
+                                                                {isCompleted && !isCurrent ? (
+                                                                  <Check size={9} strokeWidth={3} />
+                                                                ) : (
+                                                                  sIdx + 1
+                                                                )}
+                                                              </span>
+                                                              <span>{procStage}</span>
+                                                            </button>
+                                                          );
+                                                        })}
+                                                      </div>
+
+                                                      {itemState.procurement_status === 'Reached to Godown' &&
+                                                        itemState.status !== 'Ready Stock' &&
+                                                        !isViewOnly && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setEditedItems((prev) => ({
+                                                                ...prev,
+                                                                [itemId]: {
+                                                                  ...itemState,
+                                                                  status: 'Ready Stock',
+                                                                },
+                                                              }));
+                                                            }}
+                                                            className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-none shrink-0 shadow-xs cursor-pointer flex items-center space-x-1"
+                                                            title="Item arrived in godown! Set dispatch status to Ready Stock"
+                                                          >
+                                                            <CheckCircle2 size={12} />
+                                                            <span>Mark Ready Stock</span>
+                                                          </button>
+                                                        )}
+
+                                                      <div className="w-full lg:w-64 shrink-0">
+                                                        <input
+                                                          type="text"
+                                                          placeholder={
+                                                            isViewOnly
+                                                              ? 'No procurement notes'
+                                                              : 'Supplier / LR # / Payment details...'
+                                                          }
+                                                          value={itemState.procurement_notes || ''}
+                                                          disabled={isViewOnly}
+                                                          readOnly={isViewOnly}
+                                                          onChange={(e) => {
+                                                            if (isViewOnly) return;
+                                                            const val = e.target.value;
+                                                            setEditedItems((prev) => ({
+                                                              ...prev,
+                                                              [itemId]: {
+                                                                ...itemState,
+                                                                procurement_notes: val,
+                                                              },
+                                                            }));
+                                                          }}
+                                                          className={`input input-xs text-[11px] w-full ${
+                                                            isViewOnly
+                                                              ? 'bg-slate-100 text-slate-600 cursor-not-allowed'
+                                                              : 'bg-white border-slate-300'
+                                                          }`}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </React.Fragment>
                                           );
                                         })}
                                       </tbody>

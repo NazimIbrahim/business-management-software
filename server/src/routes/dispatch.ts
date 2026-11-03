@@ -28,6 +28,10 @@ export async function ensureDispatchSchema(): Promise<void> {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS expected_dispatch_date DATE;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatch_notes TEXT;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS dispatched_quantity NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_status VARCHAR(60) DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_notes TEXT DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_updated_at TIMESTAMPTZ DEFAULT NULL;
 
       ALTER TABLE quotations ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
       ALTER TABLE quotation_items ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
@@ -40,13 +44,23 @@ export async function ensureDispatchSchema(): Promise<void> {
   }
 }
 
-const VALID_DISPATCH_STATUSES = [
+export const VALID_DISPATCH_STATUSES = [
   'Yet to Update',
   'Ready Stock',
   'Need to Arrange from Local',
   'Factory Order',
   'Dispatched',
 ];
+
+export const VALID_PROCUREMENT_STATUSES = [
+  'Availability Confirmed',
+  'Payment Done',
+  'Dispatched',
+  'On the Way',
+  'Reached to Godown',
+] as const;
+
+export type ProcurementStatusType = (typeof VALID_PROCUREMENT_STATUSES)[number];
 
 // Helper to normalize status strings
 function normalizeStatus(st?: string): string {
@@ -135,6 +149,47 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       userParams
     );
 
+    const tomorrowsDispatchesRes = await query(
+      `SELECT 
+        q.id,
+        q.quotation_number,
+        q.quotation_date,
+        q.quotation_type,
+        q.status,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_name,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+        q.expected_dispatch_date,
+        COUNT(qi.id) as total_items,
+        COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
+      FROM quotations q
+      LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+      WHERE LOWER(q.status) = 'closed'
+        AND q.expected_dispatch_date = CURRENT_DATE + INTERVAL '1 day'
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+        ${userFilter}
+      GROUP BY q.id
+      ORDER BY q.id DESC`,
+      userParams
+    );
+
+    const procurementStatsRes = await query(
+      `SELECT 
+        COUNT(CASE WHEN qi.dispatch_status IN ('Need to Arrange from Local', 'Factory Order') THEN 1 END) as total_procurement_items,
+        COUNT(CASE WHEN qi.procurement_status = 'Availability Confirmed' THEN 1 END) as proc_avail_confirmed,
+        COUNT(CASE WHEN qi.procurement_status = 'Payment Done' THEN 1 END) as proc_payment_done,
+        COUNT(CASE WHEN qi.procurement_status = 'Dispatched' THEN 1 END) as proc_dispatched,
+        COUNT(CASE WHEN qi.procurement_status = 'On the Way' THEN 1 END) as proc_on_the_way,
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as proc_reached_godown
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      WHERE LOWER(q.status) = 'closed' ${userFilter}`,
+      userParams
+    );
+    const procStats = procurementStatsRes[0] || {};
+
     const changedQuotationsRes = canSeeModifiedItemsAlert
       ? await query(
           `SELECT 
@@ -181,6 +236,19 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         total_items: parseInt(r.total_items || '0', 10),
         dispatched_items_count: parseInt(r.dispatched_items_count || '0', 10),
       })),
+      tomorrows_dispatches: tomorrowsDispatchesRes.map((r: any) => ({
+        ...r,
+        total_items: parseInt(r.total_items || '0', 10),
+        dispatched_items_count: parseInt(r.dispatched_items_count || '0', 10),
+      })),
+      procurement_stats: {
+        total_procurement_items: parseInt(procStats.total_procurement_items || '0', 10),
+        avail_confirmed: parseInt(procStats.proc_avail_confirmed || '0', 10),
+        payment_done: parseInt(procStats.proc_payment_done || '0', 10),
+        supplier_dispatched: parseInt(procStats.proc_dispatched || '0', 10),
+        on_the_way: parseInt(procStats.proc_on_the_way || '0', 10),
+        reached_godown: parseInt(procStats.proc_reached_godown || '0', 10),
+      },
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -192,7 +260,7 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
   try {
     await ensureDispatchSchema();
 
-    const { search, dispatch_status, filter_date } = req.query;
+    const { search, dispatch_status, filter_date, procurement_status } = req.query;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -225,6 +293,8 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
 
     if (filter_date === 'today') {
       conditions.push(`q.expected_dispatch_date = CURRENT_DATE`);
+    } else if (filter_date === 'tomorrow') {
+      conditions.push(`q.expected_dispatch_date = CURRENT_DATE + INTERVAL '1 day'`);
     } else if (filter_date === 'this_week') {
       conditions.push(
         `q.expected_dispatch_date >= CURRENT_DATE AND q.expected_dispatch_date <= CURRENT_DATE + INTERVAL '7 days'`
@@ -233,6 +303,16 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       conditions.push(
         `q.expected_dispatch_date < CURRENT_DATE AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'`
       );
+    }
+
+    if (procurement_status && typeof procurement_status === 'string' && procurement_status !== 'all') {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM quotation_items qi_p 
+        WHERE qi_p.quotation_id = q.id 
+          AND qi_p.procurement_status = $${pIdx}
+      )`);
+      params.push(procurement_status.trim());
+      pIdx++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -275,7 +355,10 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
         COUNT(CASE WHEN COALESCE(qi.dispatch_status, 'Yet to Update') = 'Yet to Update' THEN 1 END) as yet_to_update_items_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Ready Stock' THEN 1 END) as ready_stock_items_count,
         COUNT(CASE WHEN qi.dispatch_status = 'Need to Arrange from Local' THEN 1 END) as local_arrange_items_count,
-        COUNT(CASE WHEN qi.dispatch_status = 'Factory Order' THEN 1 END) as factory_order_items_count
+        COUNT(CASE WHEN qi.dispatch_status = 'Factory Order' THEN 1 END) as factory_order_items_count,
+        COUNT(CASE WHEN qi.dispatch_status IN ('Need to Arrange from Local', 'Factory Order') THEN 1 END) as total_procurement_items,
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as proc_reached_godown_count,
+        COUNT(CASE WHEN qi.procurement_status = 'On the Way' THEN 1 END) as proc_on_the_way_count
       FROM quotations q
       LEFT JOIN users u_app ON u_app.id = q.approved_by_id
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
@@ -298,6 +381,9 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       ready_stock_items_count: parseInt(r.ready_stock_items_count || '0', 10),
       local_arrange_items_count: parseInt(r.local_arrange_items_count || '0', 10),
       factory_order_items_count: parseInt(r.factory_order_items_count || '0', 10),
+      total_procurement_items: parseInt(r.total_procurement_items || '0', 10),
+      proc_reached_godown_count: parseInt(r.proc_reached_godown_count || '0', 10),
+      proc_on_the_way_count: parseInt(r.proc_on_the_way_count || '0', 10),
     }));
 
     res.json({ quotations });
@@ -372,7 +458,11 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
         COALESCE(qi.dispatch_status, 'Yet to Update') as dispatch_status,
         COALESCE(qi.expected_dispatch_date, q.expected_dispatch_date) as expected_dispatch_date,
         qi.dispatch_notes,
-        qi.dispatched_at
+        qi.dispatched_at,
+        COALESCE(qi.dispatched_quantity, 0) as dispatched_quantity,
+        qi.procurement_status,
+        qi.procurement_notes,
+        qi.procurement_updated_at
        FROM quotation_items qi
        JOIN quotations q ON q.id = qi.quotation_id
        LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
@@ -468,15 +558,28 @@ dispatchRouter.put(
                 ? String(it.expected_dispatch_date).trim()
                 : cleanExpectedDate;
             const isItemDispatched = itStatus === 'Dispatched';
+            const itDispatchedQty =
+              it.dispatched_quantity !== undefined && it.dispatched_quantity !== null && it.dispatched_quantity !== ''
+                ? Math.max(0, parseFloat(it.dispatched_quantity) || 0)
+                : (isItemDispatched ? (parseFloat(it.quantity_boxes) || parseFloat(it.quantity_sqft) || 1) : 0);
+            const itProcurementStatus =
+              it.procurement_status && typeof it.procurement_status === 'string' && it.procurement_status.trim()
+                ? it.procurement_status.trim()
+                : null;
+            const itProcurementNotes = it.procurement_notes || null;
 
             await client.query(
               `UPDATE quotation_items
                SET dispatch_status = $1,
                    expected_dispatch_date = $2,
                    dispatch_notes = $3,
-                   dispatched_at = CASE WHEN $4::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END
-               WHERE id = $5 AND quotation_id = $6`,
-              [itStatus, itDate, it.dispatch_notes || null, isItemDispatched, it.id, id]
+                   dispatched_at = CASE WHEN $4::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END,
+                   dispatched_quantity = $5,
+                   procurement_status = $6,
+                   procurement_notes = $7,
+                   procurement_updated_at = CASE WHEN $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END
+               WHERE id = $8 AND quotation_id = $9`,
+              [itStatus, itDate, it.dispatch_notes || null, isItemDispatched, itDispatchedQty, itProcurementStatus, itProcurementNotes, it.id, id]
             );
           }
         }
