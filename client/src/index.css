@@ -713,6 +713,7 @@ table tbody tr:hover {
 
 .idcard-login-viewport {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   background-color: #050608;
   background-image: 
@@ -721,10 +722,14 @@ table tbody tr:hover {
   background-size: 100% 100%, 32px 32px;
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   color: #FFFFFF;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* Lanyard Ribbon & Clasp Assembly */
@@ -996,6 +1001,111 @@ table tbody tr:hover {
   gap: 4px;
   opacity: 0.7;
   margin-top: 10px;
+}
+
+/* Card Body Container */
+.idcard-card-body {
+  padding: 0.5rem 1.75rem 1.5rem 1.75rem;
+  position: relative;
+  z-index: 5;
+}
+
+/* Card Header Titles */
+.idcard-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.idcard-subtitle {
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+/* Mobile Responsive Optimization & Safari Anti-Zoom Rules */
+@media (max-width: 640px) {
+  .idcard-badge-plate {
+    max-width: min(348px, calc(100vw - 28px));
+    margin-top: -16px;
+    border-radius: 18px;
+  }
+
+  .idcard-card-body {
+    padding: 0.4rem 1.15rem 1.15rem 1.15rem;
+  }
+
+  /* CRITICAL FOR IOS SAFARI: font-size >= 16px disables mobile Safari auto-zoom on focus */
+  .idcard-input-box {
+    font-size: 16px !important;
+    height: 42px !important;
+    padding-left: 2.4rem;
+    padding-right: 0.85rem;
+    border-radius: 8px;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .idcard-btn-white {
+    height: 42px !important;
+    font-size: 13px !important;
+    border-radius: 8px;
+  }
+
+  .idcard-ribbon {
+    width: 28px !important;
+  }
+
+  .idcard-metal-crimp {
+    width: 36px !important;
+    height: 11px !important;
+  }
+
+  .idcard-swivel-loop {
+    width: 14px !important;
+    height: 10px !important;
+  }
+
+  .idcard-clip-body {
+    width: 36px !important;
+    height: 30px !important;
+    padding: 3px 3px !important;
+  }
+
+  .idcard-clip-screw {
+    width: 8px !important;
+    height: 8px !important;
+  }
+
+  .idcard-clip-jaw {
+    width: 20px !important;
+    height: 7px !important;
+  }
+
+  .idcard-punch-hole {
+    width: 42px !important;
+    height: 9px !important;
+    margin: 10px auto 8px auto !important;
+  }
+
+  .idcard-title {
+    font-size: 1.125rem !important;
+    line-height: 1.3 !important;
+    font-weight: 700 !important;
+    text-wrap: balance;
+  }
+
+  .idcard-subtitle {
+    font-size: 10px !important;
+  }
+
+  .idcard-smart-chip {
+    width: 30px !important;
+    height: 24px !important;
+  }
 }
 
 /* Animated Login Background & Random Floating Particles */

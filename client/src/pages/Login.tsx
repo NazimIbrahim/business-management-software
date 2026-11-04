@@ -48,25 +48,15 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
   return (
     <div className="idcard-login-viewport">
-      {/* Top Minimal Navigation Bar (Monochrome Black, Grey, White) */}
-      <header
-        style={{
-          width: '100%',
-          padding: '1.25rem 2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'relative',
-          zIndex: 40,
-        }}
-      >
+      {/* Sleek Top Navigation Header */}
+      <header className="w-full px-3.5 py-2.5 sm:px-8 sm:py-5 flex items-center justify-between relative z-40">
         {/* Brand identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
+              width: '30px',
+              height: '30px',
+              borderRadius: '7px',
               background: '#161922',
               border: '1px solid rgba(255, 255, 255, 0.16)',
               display: 'flex',
@@ -74,17 +64,18 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               justifyContent: 'center',
               color: '#FFFFFF',
               fontWeight: 800,
-              fontSize: '12px',
+              fontSize: '11px',
               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.5)',
+              flexShrink: 0,
             }}
           >
             {(company?.company_name || 'AMA').slice(0, 3).toUpperCase()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: '#FFFFFF', fontWeight: 800, fontSize: '13px', letterSpacing: '0.04em' }}>
+            <span style={{ color: '#FFFFFF', fontWeight: 800, fontSize: '12px', letterSpacing: '0.04em' }}>
               {company?.company_name || 'AMA CERAMICS'}
             </span>
-            <span style={{ color: '#64748B', fontSize: '10px', fontWeight: 500 }}>
+            <span className="hidden sm:inline" style={{ color: '#64748B', fontSize: '10px', fontWeight: 500 }}>
               Commercial Quotation & Dispatch Portal
             </span>
           </div>
@@ -111,13 +102,13 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         </nav>
 
         {/* Right server status pill & settings trigger */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.3rem 0.75rem',
+              gap: '0.4rem',
+              padding: '0.28rem 0.65rem',
               borderRadius: '9999px',
               backgroundColor: '#12151C',
               border: '1px solid rgba(255, 255, 255, 0.14)',
@@ -128,14 +119,16 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           >
             <span
               style={{
-                width: '7px',
-                height: '7px',
+                width: '6.5px',
+                height: '6.5px',
                 borderRadius: '50%',
                 backgroundColor: status === 'connected' ? '#10B981' : '#EF4444',
                 boxShadow: status === 'connected' ? '0 0 6px rgba(16, 185, 129, 0.6)' : '0 0 6px rgba(239, 68, 68, 0.6)',
+                flexShrink: 0,
               }}
             />
-            <span>{status === 'connected' ? 'Server Connected' : 'Server Offline'}</span>
+            <span className="hidden sm:inline">{status === 'connected' ? 'Server Connected' : 'Server Offline'}</span>
+            <span className="sm:hidden text-[10px]">{status === 'connected' ? 'Online' : 'Offline'}</span>
           </div>
 
           <button
@@ -144,8 +137,8 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.35rem 0.85rem',
+              gap: '0.35rem',
+              padding: '0.28rem 0.65rem',
               borderRadius: '8px',
               backgroundColor: '#12151C',
               border: '1px solid rgba(255, 255, 255, 0.16)',
@@ -165,24 +158,13 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             }}
           >
             <Server size={12} className="text-gray-300" />
-            <span>Configure</span>
+            <span className="hidden sm:inline">Configure</span>
           </button>
         </div>
       </header>
 
       {/* Main Centerpiece: Hanging Physical ID Access Pass */}
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 1rem 2rem 1rem',
-          position: 'relative',
-          zIndex: 20,
-        }}
-      >
+      <main className="w-full flex-1 flex flex-col items-center justify-center px-3.5 pb-6 sm:px-4 sm:pb-8 relative z-20">
         {/* Realistic Lanyard Ribbon & Chrome Clasp Assembly */}
         <div className="idcard-lanyard-assembly">
           {/* Woven Fabric Ribbon */}
@@ -210,7 +192,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           <div className="idcard-punch-hole" />
 
           {/* Card Body */}
-          <div style={{ padding: '0.5rem 1.75rem 1.5rem 1.75rem', position: 'relative', zIndex: 5 }}>
+          <div className="idcard-card-body">
             {/* Top Micro-Security Header */}
             <div
               style={{
@@ -292,26 +274,10 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
             {/* Card Title & Welcome */}
             <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-              <h1
-                style={{
-                  fontSize: '1.35rem',
-                  fontWeight: 800,
-                  color: '#FFFFFF',
-                  letterSpacing: '-0.02em',
-                  margin: '0 0 0.25rem 0',
-                  lineHeight: 1.2,
-                }}
-              >
+              <h1 className="idcard-title">
                 Welcome to {company?.company_name || 'AMA Ceramics'}
               </h1>
-              <p
-                style={{
-                  fontSize: '11px',
-                  color: '#94A3B8',
-                  margin: 0,
-                  fontWeight: 500,
-                }}
-              >
+              <p className="idcard-subtitle" style={{ margin: '0.35rem 0 0 0' }}>
                 Commercial Quotation & Dispatch Management
               </p>
             </div>
@@ -547,21 +513,8 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
       </main>
 
       {/* Minimal Monochrome Footer */}
-      <footer
-        style={{
-          width: '100%',
-          padding: '1.25rem 2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '11px',
-          color: '#475569',
-          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-          position: 'relative',
-          zIndex: 40,
-        }}
-      >
-        <span>
+      <footer className="w-full px-4 py-3 sm:px-8 sm:py-5 flex flex-col xs:flex-row items-center justify-between text-[10px] sm:text-[11px] text-[#475569] gap-1.5 sm:gap-0 border-t border-white/[0.05] relative z-40">
+        <span className="text-center xs:text-left">
           © {new Date().getFullYear()} {company?.company_name || 'AMA Ceramics Pvt Ltd'}. All rights reserved.
         </span>
 
