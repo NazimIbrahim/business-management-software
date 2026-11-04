@@ -707,6 +707,211 @@ table tbody tr:hover {
   }
 }
 
+/* Stream / Access Pass Lanyard ID Badge Login Theme (v2.4.30) */
+.badge-login-viewport {
+  min-height: 100vh;
+  width: 100%;
+  background-color: #03050d;
+  background-image: 
+    radial-gradient(ellipse at 50% 28%, rgba(67, 56, 202, 0.22) 0%, rgba(99, 102, 241, 0.10) 35%, transparent 70%),
+    radial-gradient(ellipse at 85% 85%, rgba(88, 28, 135, 0.15) 0%, transparent 55%),
+    radial-gradient(ellipse at 15% 75%, rgba(14, 165, 233, 0.08) 0%, transparent 45%),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px;
+  position: relative;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Lanyard Suspender & Metallic Clip */
+.badge-lanyard-hanger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 20;
+  margin-top: -12px;
+}
+
+.badge-lanyard-strap {
+  width: 34px;
+  height: 52px;
+  background: linear-gradient(90deg, #090d16 0%, #1e293b 35%, #0f172a 65%, #060911 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
+  position: relative;
+}
+
+.badge-lanyard-strap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.15) 0px,
+    rgba(255, 255, 255, 0.15) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.badge-clip-clasp {
+  width: 46px;
+  height: 24px;
+  background: linear-gradient(180deg, #4b5563 0%, #1f2937 45%, #111827 100%);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 25;
+  margin-top: -3px;
+}
+
+.badge-clip-ring {
+  width: 14px;
+  height: 18px;
+  border: 2.5px solid #94a3b8;
+  border-radius: 4px;
+  margin-top: 10px;
+  background: transparent;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+
+/* Glass Badge Card */
+.badge-glass-card {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  border-radius: 28px;
+  background: linear-gradient(165deg, rgba(16, 22, 38, 0.82) 0%, rgba(8, 12, 22, 0.94) 100%);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 
+    0 30px 80px -15px rgba(0, 0, 0, 0.92),
+    0 0 65px -10px rgba(79, 70, 229, 0.32),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+  z-index: 10;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.badge-glass-card:hover {
+  box-shadow: 
+    0 35px 90px -15px rgba(0, 0, 0, 0.96),
+    0 0 85px -8px rgba(99, 102, 241, 0.42),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+/* Hologram Light Ray Angle */
+.badge-hologram-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    130deg,
+    rgba(168, 85, 247, 0.30) 0%,
+    rgba(99, 102, 241, 0.25) 28%,
+    rgba(56, 189, 248, 0.12) 48%,
+    rgba(255, 255, 255, 0.02) 65%,
+    transparent 80%
+  );
+  border-radius: inherit;
+  z-index: 1;
+}
+
+/* Top Slot Cutout */
+.badge-slot-punch {
+  width: 58px;
+  height: 12px;
+  margin: 18px auto 6px auto;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85), 0 1px 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 2;
+}
+
+/* Glass Inputs */
+.badge-input-wrapper {
+  position: relative;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.badge-input-wrapper:focus-within {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.85);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.28), 0 0 18px rgba(99, 102, 241, 0.2);
+}
+
+.badge-input {
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 13px;
+  padding: 0 1rem 0 2.5rem;
+  border-radius: 12px;
+  outline: none;
+}
+
+.badge-input::placeholder {
+  color: #64748B;
+  font-size: 12px;
+}
+
+/* Electric Gradient Sign In Button */
+.badge-signin-btn {
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 45%, #7c3aed 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  box-shadow: 0 6px 24px -3px rgba(99, 102, 241, 0.52), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.badge-signin-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1.5px);
+  box-shadow: 0 10px 30px -3px rgba(99, 102, 241, 0.68), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+}
+
+.badge-signin-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 3px 12px -2px rgba(99, 102, 241, 0.4);
+}
+
+.badge-signin-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
 /* Animated Login Background & Random Floating Particles */
 .login-universe-bg {
   min-height: 100vh;
