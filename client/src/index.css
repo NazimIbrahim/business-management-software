@@ -707,209 +707,290 @@ table tbody tr:hover {
   }
 }
 
-/* Stream / Access Pass Lanyard ID Badge Login Theme (v2.4.30) */
-.badge-login-viewport {
+/* ==========================================================================
+   REALISTIC PHYSICAL ID CARD LANYARD LOGIN THEME (Black, Grey, White)
+   ========================================================================== */
+
+.idcard-login-viewport {
   min-height: 100vh;
   width: 100%;
-  background-color: #03050d;
+  background-color: #050608;
   background-image: 
-    radial-gradient(ellipse at 50% 28%, rgba(67, 56, 202, 0.22) 0%, rgba(99, 102, 241, 0.10) 35%, transparent 70%),
-    radial-gradient(ellipse at 85% 85%, rgba(88, 28, 135, 0.15) 0%, transparent 55%),
-    radial-gradient(ellipse at 15% 75%, rgba(14, 165, 233, 0.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 22%, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 35%, transparent 65%),
     radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px;
+  background-size: 100% 100%, 32px 32px;
   position: relative;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  color: #FFFFFF;
 }
 
-/* Lanyard Suspender & Metallic Clip */
-.badge-lanyard-hanger {
+/* Lanyard Ribbon & Clasp Assembly */
+.idcard-lanyard-assembly {
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
-  z-index: 20;
-  margin-top: -12px;
+  z-index: 35;
 }
 
-.badge-lanyard-strap {
-  width: 34px;
-  height: 52px;
-  background: linear-gradient(90deg, #090d16 0%, #1e293b 35%, #0f172a 65%, #060911 100%);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
+/* Realistic Woven Fabric Ribbon */
+.idcard-ribbon {
+  width: 36px;
+  height: 60px;
+  background: 
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 2px,
+      transparent 2px,
+      transparent 4px
+    ),
+    linear-gradient(90deg, #0e1014 0%, #1f232b 30%, #14171d 50%, #1f232b 70%, #0e1014 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.85);
   position: relative;
 }
 
-.badge-lanyard-strap::after {
+.idcard-ribbon::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 2px;
+  width: 1px;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.15) 0px,
-    rgba(255, 255, 255, 0.15) 4px,
+    rgba(255, 255, 255, 0.28) 0px,
+    rgba(255, 255, 255, 0.28) 4px,
     transparent 4px,
     transparent 8px
   );
 }
 
-.badge-clip-clasp {
-  width: 46px;
-  height: 24px;
-  background: linear-gradient(180deg, #4b5563 0%, #1f2937 45%, #111827 100%);
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+/* Metal Crimp Band */
+.idcard-metal-crimp {
+  width: 44px;
+  height: 13px;
+  background: linear-gradient(180deg, #e5e7eb 0%, #9ca3af 25%, #4b5563 50%, #9ca3af 75%, #f3f4f6 100%);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.75), inset 0 1px 0 #FFFFFF;
   position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 25;
-  margin-top: -3px;
+  z-index: 36;
+  margin-top: -1px;
 }
 
-.badge-clip-ring {
-  width: 14px;
-  height: 18px;
-  border: 2.5px solid #94a3b8;
-  border-radius: 4px;
-  margin-top: 10px;
+/* Swivel Ring */
+.idcard-swivel-loop {
+  width: 16px;
+  height: 12px;
+  border: 2.5px solid #d1d5db;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  margin-top: -1px;
   background: transparent;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
-/* Glass Badge Card */
-.badge-glass-card {
+/* Chrome Alligator / Badge Clip Body Overlapping Card */
+.idcard-clip-body {
+  width: 44px;
+  height: 38px;
+  background: linear-gradient(135deg, #ffffff 0%, #d1d5db 25%, #6b7280 55%, #374151 75%, #9ca3af 100%);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    0 10px 22px rgba(0, 0, 0, 0.9),
+    inset 0 1px 1px #FFFFFF,
+    inset 0 -1px 2px rgba(0, 0, 0, 0.8);
+  position: relative;
+  z-index: 40;
+  margin-top: -2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 4px 3px 4px;
+}
+
+.idcard-clip-screw {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1f2937 25%, #9ca3af 80%, #e5e7eb 100%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.idcard-clip-jaw {
+  width: 26px;
+  height: 10px;
+  background: linear-gradient(180deg, #6b7280 0%, #1f2937 60%, #111827 100%);
+  border-radius: 2px 2px 4px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.85);
+}
+
+/* Realistic Matte Black PVC Card */
+.idcard-badge-plate {
   position: relative;
   width: 100%;
-  max-width: 430px;
-  margin: 0 auto;
-  border-radius: 28px;
-  background: linear-gradient(165deg, rgba(16, 22, 38, 0.82) 0%, rgba(8, 12, 22, 0.94) 100%);
-  backdrop-filter: blur(32px) saturate(200%);
-  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  max-width: 420px;
+  margin: -20px auto 0 auto;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #12141a 0%, #080a0e 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 
-    0 30px 80px -15px rgba(0, 0, 0, 0.92),
-    0 0 65px -10px rgba(79, 70, 229, 0.32),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.3);
+    0 35px 85px -15px rgba(0, 0, 0, 0.98),
+    0 0 0 1px rgba(0, 0, 0, 0.9),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.8);
   overflow: hidden;
-  z-index: 10;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  z-index: 20;
 }
 
-.badge-glass-card:hover {
-  box-shadow: 
-    0 35px 90px -15px rgba(0, 0, 0, 0.96),
-    0 0 85px -8px rgba(99, 102, 241, 0.42),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.38);
-}
-
-/* Hologram Light Ray Angle */
-.badge-hologram-sheen {
+/* Specular Glare Reflection across card */
+.idcard-sheen-glare {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
   background: linear-gradient(
-    130deg,
-    rgba(168, 85, 247, 0.30) 0%,
-    rgba(99, 102, 241, 0.25) 28%,
-    rgba(56, 189, 248, 0.12) 48%,
-    rgba(255, 255, 255, 0.02) 65%,
-    transparent 80%
+    135deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.025) 30%,
+    rgba(255, 255, 255, 0.005) 55%,
+    transparent 100%
   );
+  pointer-events: none;
   border-radius: inherit;
   z-index: 1;
 }
 
-/* Top Slot Cutout */
-.badge-slot-punch {
-  width: 58px;
-  height: 12px;
-  margin: 18px auto 6px auto;
+/* Physical Punch Hole Cutout */
+.idcard-punch-hole {
+  width: 52px;
+  height: 11px;
   border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1.5px solid rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85), 0 1px 1px rgba(255, 255, 255, 0.1);
+  background: #050608;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.1);
+  margin: 14px auto 12px auto;
   position: relative;
   z-index: 2;
 }
 
-/* Glass Inputs */
-.badge-input-wrapper {
+/* Smart IC Chip Graphic */
+.idcard-smart-chip {
+  width: 36px;
+  height: 28px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #d4d4d8 0%, #a1a1aa 50%, #71717a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 1px #FFFFFF, 0 2px 4px rgba(0,0,0,0.5);
   position: relative;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.badge-input-wrapper:focus-within {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(99, 102, 241, 0.85);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.28), 0 0 18px rgba(99, 102, 241, 0.2);
+.idcard-smart-chip::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.4);
+  top: 50%;
 }
 
-.badge-input {
+.idcard-smart-chip::after {
+  content: '';
+  position: absolute;
+  height: 100%;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.4);
+  left: 50%;
+}
+
+/* Black/Grey/White Inputs */
+.idcard-input-box {
   width: 100%;
   height: 44px;
-  background: transparent;
-  border: none;
+  border-radius: 10px;
+  background: #151820;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #FFFFFF;
-  font-size: 13px;
   padding: 0 1rem 0 2.5rem;
-  border-radius: 12px;
+  font-size: 13px;
   outline: none;
+  transition: all 0.2s ease;
 }
 
-.badge-input::placeholder {
+.idcard-input-box:focus {
+  border-color: #FFFFFF;
+  background: #1b1f2b;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+}
+
+.idcard-input-box::placeholder {
   color: #64748B;
   font-size: 12px;
 }
 
-/* Electric Gradient Sign In Button */
-.badge-signin-btn {
+/* High Contrast Pure White Button with Black Text */
+.idcard-btn-white {
   width: 100%;
-  height: 46px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 45%, #7c3aed 100%);
-  color: #FFFFFF;
-  font-weight: 700;
+  height: 44px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  color: #0A0A0A;
   font-size: 13px;
-  letter-spacing: 0.01em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  border: none;
   cursor: pointer;
-  box-shadow: 0 6px 24px -3px rgba(99, 102, 241, 0.52), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.16), 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.badge-signin-btn:hover:not(:disabled) {
-  filter: brightness(1.12);
-  transform: translateY(-1.5px);
-  box-shadow: 0 10px 30px -3px rgba(99, 102, 241, 0.68), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+.idcard-btn-white:hover:not(:disabled) {
+  background: #E2E8F0;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.28), 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
-.badge-signin-btn:active:not(:disabled) {
+.idcard-btn-white:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 3px 12px -2px rgba(99, 102, 241, 0.4);
+  background: #CBD5E1;
 }
 
-.badge-signin-btn:disabled {
-  opacity: 0.75;
+.idcard-btn-white:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Realistic Barcode Strips */
+.idcard-barcode-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.7;
+  margin-top: 10px;
 }
 
 /* Animated Login Background & Random Floating Particles */

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import {
@@ -8,12 +8,10 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Sparkles,
   LogIn,
   RefreshCw,
   ShieldCheck,
-  CheckCircle2,
-  Radio,
+  Cpu,
 } from 'lucide-react';
 
 interface Props {
@@ -29,35 +27,6 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Soft micro-particles in deep space background
-  const particles = useMemo(() => {
-    const colors = [
-      'rgba(99, 102, 241, 0.7)',   // indigo
-      'rgba(168, 85, 247, 0.7)',   // purple
-      'rgba(56, 189, 248, 0.65)',  // sky
-      'rgba(255, 255, 255, 0.75)',  // star
-    ];
-
-    return Array.from({ length: 28 }, (_, i) => {
-      const left = ((i * 19 + 7) % 94) + 3;
-      const top = ((i * 29 + 11) % 94) + 3;
-      const size = (i % 3) + 2;
-      const duration = 10 + (i % 6) * 3;
-      const delay = -((i * 2.1) % 10);
-      const color = colors[i % colors.length];
-
-      return {
-        id: i,
-        left: `${left}%`,
-        top: `${top}%`,
-        size,
-        duration: `${duration}s`,
-        delay: `${delay}s`,
-        color,
-      };
-    });
-  }, []);
 
   const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,29 +47,8 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   };
 
   return (
-    <div className="badge-login-viewport">
-      {/* Background Soft Particles & Ambient Nebulae */}
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className="login-particle"
-          style={{
-            left: p.left,
-            top: p.top,
-            width: `${p.size}px`,
-            height: `${p.size}px`,
-            backgroundColor: p.color,
-            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-            animationDuration: p.duration,
-            animationDelay: p.delay,
-          }}
-        />
-      ))}
-      <div className="login-nebula-1" />
-      <div className="login-nebula-2" />
-      <div className="login-nebula-3" />
-
-      {/* Top Navigation Bar */}
+    <div className="idcard-login-viewport">
+      {/* Top Minimal Navigation Bar (Monochrome Black, Grey, White) */}
       <header
         style={{
           width: '100%',
@@ -109,7 +57,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           alignItems: 'center',
           justifyContent: 'space-between',
           position: 'relative',
-          zIndex: 30,
+          zIndex: 40,
         }}
       >
         {/* Brand identity */}
@@ -119,14 +67,15 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              background: '#161922',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#FFFFFF',
-              fontWeight: 900,
-              fontSize: '13px',
-              boxShadow: '0 0 16px rgba(99, 102, 241, 0.45)',
+              fontWeight: 800,
+              fontSize: '12px',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.5)',
             }}
           >
             {(company?.company_name || 'AMA').slice(0, 3).toUpperCase()}
@@ -136,7 +85,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               {company?.company_name || 'AMA CERAMICS'}
             </span>
             <span style={{ color: '#64748B', fontSize: '10px', fontWeight: 500 }}>
-              Quotation & Dispatch Portal
+              Commercial Quotation & Dispatch Portal
             </span>
           </div>
         </div>
@@ -147,15 +96,17 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           style={{
             alignItems: 'center',
             gap: '1.75rem',
-            fontSize: '12px',
-            color: '#94A3B8',
-            fontWeight: 500,
+            fontSize: '11px',
+            color: '#64748B',
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
           }}
         >
           <span style={{ color: '#E2E8F0', cursor: 'default' }}>Portal Access</span>
-          <span style={{ cursor: 'default', opacity: 0.7 }}>Quotation Workflow</span>
-          <span style={{ cursor: 'default', opacity: 0.7 }}>Dispatch Management</span>
-          <span style={{ cursor: 'default', opacity: 0.7 }}>Encrypted Ledger</span>
+          <span style={{ cursor: 'default', opacity: 0.6 }}>Quotation Network</span>
+          <span style={{ cursor: 'default', opacity: 0.6 }}>Dispatch Manager</span>
+          <span style={{ cursor: 'default', opacity: 0.6 }}>Security Clearance</span>
         </nav>
 
         {/* Right server status pill & settings trigger */}
@@ -167,11 +118,11 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               gap: '0.45rem',
               padding: '0.3rem 0.75rem',
               borderRadius: '9999px',
-              backgroundColor: status === 'connected' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-              border: `1px solid ${status === 'connected' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              backgroundColor: '#12151C',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
               fontSize: '11px',
               fontWeight: 600,
-              color: status === 'connected' ? '#34D399' : '#F87171',
+              color: '#E2E8F0',
             }}
           >
             <span
@@ -180,7 +131,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                 height: '7px',
                 borderRadius: '50%',
                 backgroundColor: status === 'connected' ? '#10B981' : '#EF4444',
-                boxShadow: status === 'connected' ? '0 0 8px #10B981' : 'none',
+                boxShadow: status === 'connected' ? '0 0 6px rgba(16, 185, 129, 0.6)' : '0 0 6px rgba(239, 68, 68, 0.6)',
               }}
             />
             <span>{status === 'connected' ? 'Server Connected' : 'Server Offline'}</span>
@@ -194,25 +145,31 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               alignItems: 'center',
               gap: '0.4rem',
               padding: '0.35rem 0.85rem',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              backgroundColor: '#12151C',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
               color: '#E2E8F0',
               fontSize: '11px',
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#1C212D';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#12151C';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)';
+            }}
           >
-            <Server size={12} className="text-indigo-400" />
+            <Server size={12} className="text-gray-300" />
             <span>Configure</span>
           </button>
         </div>
       </header>
 
-      {/* Main Center Stage: Suspended Lanyard & ID Pass Badge */}
+      {/* Main Centerpiece: Hanging Physical ID Access Pass */}
       <main
         style={{
           flex: 1,
@@ -222,71 +179,125 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           justifyContent: 'center',
           padding: '0 1rem 2rem 1rem',
           position: 'relative',
-          zIndex: 10,
+          zIndex: 20,
         }}
       >
-        {/* Lanyard Suspender descending to card */}
-        <div className="badge-lanyard-hanger">
-          <div className="badge-lanyard-strap" />
-          <div className="badge-clip-clasp">
-            <div className="badge-clip-ring" />
+        {/* Realistic Lanyard Ribbon & Chrome Clasp Assembly */}
+        <div className="idcard-lanyard-assembly">
+          {/* Woven Fabric Ribbon */}
+          <div className="idcard-ribbon" />
+
+          {/* Metal Crimp Band */}
+          <div className="idcard-metal-crimp" />
+
+          {/* Swivel Loop Ring */}
+          <div className="idcard-swivel-loop" />
+
+          {/* Alligator / Badge Clip Body overlapping the card */}
+          <div className="idcard-clip-body">
+            <div className="idcard-clip-screw" />
+            <div className="idcard-clip-jaw" />
           </div>
         </div>
 
-        {/* Suspended ID Badge Card */}
-        <div className="badge-glass-card animate-page-enter" style={{ marginTop: '-4px' }}>
-          {/* Iridescent Holographic Sheen */}
-          <div className="badge-hologram-sheen" />
+        {/* Realistic Matte Black PVC Card */}
+        <div className="idcard-badge-plate animate-page-enter">
+          {/* Specular Glare Reflection across card */}
+          <div className="idcard-sheen-glare" />
 
-          {/* Punch Slot Hole */}
-          <div className="badge-slot-punch" />
+          {/* Physical Punch Hole Cutout (clamped by clip above) */}
+          <div className="idcard-punch-hole" />
 
-          {/* Card Content Container */}
-          <div style={{ padding: '1.25rem 2rem 2rem 2rem', position: 'relative', zIndex: 5 }}>
-            {/* Logo / Monogram Display */}
-            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+          {/* Card Body */}
+          <div style={{ padding: '0.5rem 1.75rem 1.5rem 1.75rem', position: 'relative', zIndex: 5 }}>
+            {/* Top Micro-Security Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                paddingBottom: '0.6rem',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.15em',
+                  color: '#94A3B8',
+                  textTransform: 'uppercase',
+                  fontFamily: 'monospace',
+                }}
+              >
+                CORPORATE ACCESS PASS
+              </span>
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.12em',
+                  color: '#64748B',
+                  textTransform: 'uppercase',
+                  fontFamily: 'monospace',
+                }}
+              >
+                SEC-ID // LEVEL 4
+              </span>
+            </div>
+
+            {/* Smart Chip & Brand Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1rem',
+              }}
+            >
+              {/* Smart Card IC Contact Pad */}
+              <div className="idcard-smart-chip" title="RFID & Smartcard Security Contact">
+                <Cpu size={14} style={{ color: '#374151', position: 'relative', zIndex: 2 }} />
+              </div>
+
+              {/* Company Logo / Monogram */}
               {company?.logo_base64 ? (
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                  <img
-                    src={company.logo_base64}
-                    alt={company.company_name || 'Logo'}
-                    style={{
-                      maxHeight: '62px',
-                      maxWidth: '220px',
-                      width: 'auto',
-                      objectFit: 'contain',
-                      display: 'block',
-                      filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6))',
-                    }}
-                  />
-                </div>
+                <img
+                  src={company.logo_base64}
+                  alt={company.company_name || 'Logo'}
+                  style={{
+                    maxHeight: '44px',
+                    maxWidth: '180px',
+                    width: 'auto',
+                    objectFit: 'contain',
+                    display: 'block',
+                    filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7))',
+                  }}
+                />
               ) : (
                 <div
                   style={{
-                    width: '54px',
-                    height: '54px',
-                    borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.3) 0%, rgba(124, 58, 237, 0.3) 100%)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 0.75rem auto',
-                    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3)',
+                    fontSize: '14px',
+                    fontWeight: 900,
+                    letterSpacing: '0.06em',
+                    color: '#FFFFFF',
                   }}
                 >
-                  <Sparkles size={24} style={{ color: '#818CF8' }} />
+                  {(company?.company_name || 'AMA CERAMICS').toUpperCase()}
                 </div>
               )}
+            </div>
 
-              {/* Title & Welcome */}
+            {/* Card Title & Welcome */}
+            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
               <h1
                 style={{
-                  fontSize: '1.5rem',
+                  fontSize: '1.35rem',
                   fontWeight: 800,
                   color: '#FFFFFF',
-                  letterSpacing: '-0.025em',
-                  margin: '0 0 0.3rem 0',
+                  letterSpacing: '-0.02em',
+                  margin: '0 0 0.25rem 0',
                   lineHeight: 1.2,
                 }}
               >
@@ -294,13 +305,13 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               </h1>
               <p
                 style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
                   color: '#94A3B8',
                   margin: 0,
                   fontWeight: 500,
                 }}
               >
-                Commercial Quotation & Dispatch Portal
+                Commercial Quotation & Dispatch Management
               </p>
             </div>
 
@@ -308,12 +319,12 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             {status !== 'connected' && (
               <div
                 style={{
-                  marginBottom: '1.25rem',
-                  padding: '0.65rem 0.9rem',
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  marginBottom: '1rem',
+                  padding: '0.6rem 0.85rem',
+                  backgroundColor: '#1E1416',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
                   color: '#FCA5A5',
-                  borderRadius: '12px',
+                  borderRadius: '10px',
                   fontSize: '11px',
                   display: 'flex',
                   alignItems: 'center',
@@ -321,23 +332,23 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                   gap: '0.5rem',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                  <AlertCircle size={15} style={{ color: '#EF4444', flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 }}>
+                  <AlertCircle size={14} style={{ color: '#EF4444', flexShrink: 0 }} />
                   <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Server is offline or unreachable
+                    Server Offline / Unreachable
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={onOpenServerSettings}
                   style={{
-                    backgroundColor: '#EF4444',
-                    color: '#FFFFFF',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0A0A0A',
                     border: 'none',
-                    padding: '0.25rem 0.6rem',
-                    borderRadius: '6px',
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '5px',
                     fontSize: '10px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     cursor: 'pointer',
                     flexShrink: 0,
                   }}
@@ -351,25 +362,25 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             {error && (
               <div
                 style={{
-                  marginBottom: '1.25rem',
-                  padding: '0.75rem 0.9rem',
-                  backgroundColor: 'rgba(239, 68, 68, 0.14)',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  marginBottom: '1rem',
+                  padding: '0.65rem 0.85rem',
+                  backgroundColor: '#1E1416',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
                   color: '#FCA5A5',
-                  borderRadius: '12px',
+                  borderRadius: '10px',
                   fontSize: '11px',
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '0.5rem',
                 }}
               >
-                <AlertCircle size={15} style={{ color: '#EF4444', marginTop: '2px', flexShrink: 0 }} />
+                <AlertCircle size={14} style={{ color: '#EF4444', marginTop: '2px', flexShrink: 0 }} />
                 <span style={{ fontWeight: 500, whiteSpace: 'pre-wrap' }}>{error}</span>
               </div>
             )}
 
-            {/* Login Form */}
-            <form onSubmit={handleCredentialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+            {/* Login Form (Black, Grey, White) */}
+            <form onSubmit={handleCredentialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Username Field */}
               <div>
                 <label
@@ -378,13 +389,13 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                     fontSize: '11px',
                     fontWeight: 600,
                     color: '#94A3B8',
-                    marginBottom: '0.45rem',
+                    marginBottom: '0.4rem',
                     letterSpacing: '0.02em',
                   }}
                 >
                   Email or Username
                 </label>
-                <div className="badge-input-wrapper">
+                <div style={{ position: 'relative' }}>
                   <div
                     style={{
                       position: 'absolute',
@@ -395,14 +406,14 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                       display: 'flex',
                       alignItems: 'center',
                       pointerEvents: 'none',
-                      color: '#818CF8',
+                      color: '#94A3B8',
                     }}
                   >
-                    <UserIcon size={16} />
+                    <UserIcon size={15} />
                   </div>
                   <input
                     type="text"
-                    className="badge-input font-medium"
+                    className="idcard-input-box font-medium"
                     placeholder="Enter your username or email..."
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -421,13 +432,13 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                     fontSize: '11px',
                     fontWeight: 600,
                     color: '#94A3B8',
-                    marginBottom: '0.45rem',
+                    marginBottom: '0.4rem',
                     letterSpacing: '0.02em',
                   }}
                 >
                   Password
                 </label>
-                <div className="badge-input-wrapper">
+                <div style={{ position: 'relative' }}>
                   <div
                     style={{
                       position: 'absolute',
@@ -438,14 +449,14 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                       display: 'flex',
                       alignItems: 'center',
                       pointerEvents: 'none',
-                      color: '#818CF8',
+                      color: '#94A3B8',
                     }}
                   >
-                    <Lock size={16} />
+                    <Lock size={15} />
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    className="badge-input font-mono"
+                    className="idcard-input-box font-mono"
                     style={{ paddingRight: '2.5rem' }}
                     placeholder="Enter your password..."
                     value={password}
@@ -470,56 +481,71 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                       cursor: 'pointer',
                       transition: 'color 0.15s ease',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = '#C7D2FE')}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#FFFFFF')}
                     onMouseLeave={(e) => (e.currentTarget.style.color = '#64748B')}
                     tabIndex={-1}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
 
-              {/* Sign In CTA */}
+              {/* High Contrast Pure White Action Button with Black Text */}
               <button
                 type="submit"
                 disabled={loading}
-                className="badge-signin-btn"
-                style={{ marginTop: '0.5rem' }}
+                className="idcard-btn-white"
+                style={{ marginTop: '0.35rem' }}
               >
                 {loading ? (
                   <>
-                    <RefreshCw size={16} className="animate-spin text-white" />
+                    <RefreshCw size={15} className="animate-spin text-black" />
                     <span>Authenticating...</span>
                   </>
                 ) : (
                   <>
-                    <LogIn size={16} className="text-white" />
+                    <LogIn size={15} className="text-black" />
                     <span>Sign In</span>
                   </>
                 )}
               </button>
 
-              {/* Security Tag */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.4rem',
-                  fontSize: '11px',
-                  color: '#64748B',
-                  marginTop: '0.25rem',
-                }}
-              >
-                <ShieldCheck size={13} style={{ color: '#10B981' }} />
-                <span>Secure 256-Bit SSL Enterprise Session</span>
+              {/* Realistic Security Barcode & Serial Identification */}
+              <div className="idcard-barcode-strip">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: '20px' }}>
+                  {[2, 1, 3, 1, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 2, 4, 1, 3, 2, 1, 3, 2, 4, 1, 2, 1, 3, 1, 2, 3, 1].map((w, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: `${w}px`,
+                        height: idx % 6 === 0 ? '20px' : '15px',
+                        backgroundColor: idx % 2 === 0 ? '#E2E8F0' : '#475569',
+                        borderRadius: '0.5px',
+                      }}
+                    />
+                  ))}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '9px',
+                    fontFamily: 'monospace',
+                    color: '#64748B',
+                    letterSpacing: '0.1em',
+                  }}
+                >
+                  <ShieldCheck size={11} style={{ color: '#94A3B8' }} />
+                  <span>AMA-AUTH-SECURE // 256-BIT ENCRYPTION</span>
+                </div>
               </div>
             </form>
           </div>
         </div>
       </main>
 
-      {/* Minimal Footer matching reference image */}
+      {/* Minimal Monochrome Footer */}
       <footer
         style={{
           width: '100%',
@@ -531,7 +557,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           color: '#475569',
           borderTop: '1px solid rgba(255, 255, 255, 0.05)',
           position: 'relative',
-          zIndex: 30,
+          zIndex: 40,
         }}
       >
         <span>
