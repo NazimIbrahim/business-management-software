@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import {
@@ -8,10 +8,10 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Sparkles,
   LogIn,
   RefreshCw,
   ShieldCheck,
-  Cpu,
 } from 'lucide-react';
 
 interface Props {
@@ -27,6 +27,37 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Generate 40 deterministic pseudo-random floating particles across the black background
+  const particles = useMemo(() => {
+    const colors = [
+      'rgba(56, 189, 248, 0.85)',  // cyan
+      'rgba(99, 102, 241, 0.85)',  // indigo
+      'rgba(168, 85, 247, 0.85)',  // purple
+      'rgba(52, 211, 153, 0.85)',  // emerald
+      'rgba(251, 191, 36, 0.8)',   // amber
+      'rgba(255, 255, 255, 0.9)',  // white star
+    ];
+
+    return Array.from({ length: 42 }, (_, i) => {
+      const left = ((i * 19 + 7) % 94) + 3; // 3% to 97%
+      const top = ((i * 29 + 11) % 94) + 3; // 3% to 97%
+      const size = (i % 4) + 2.5;           // 2.5px to 5.5px
+      const duration = 6 + (i % 8) * 2;     // 6s to 20s
+      const delay = -((i * 1.7) % 12);      // -0s to -12s
+      const color = colors[i % colors.length];
+
+      return {
+        id: i,
+        left: `${left}%`,
+        top: `${top}%`,
+        size,
+        duration: `${duration}s`,
+        delay: `${delay}s`,
+        color,
+      };
+    });
+  }, []);
 
   const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,482 +78,416 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   };
 
   return (
-    <div className="idcard-login-viewport">
-      {/* Sleek Top Navigation Header */}
-      <header className="w-full px-3.5 py-2.5 sm:px-8 sm:py-5 flex items-center justify-between relative z-40">
-        {/* Brand identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <div
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '7px',
-              background: '#161922',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '11px',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.5)',
-              flexShrink: 0,
-            }}
-          >
-            {(company?.company_name || 'AMA').slice(0, 3).toUpperCase()}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: '#FFFFFF', fontWeight: 800, fontSize: '12px', letterSpacing: '0.04em' }}>
-              {company?.company_name || 'AMA CERAMICS'}
-            </span>
-            <span className="hidden sm:inline" style={{ color: '#64748B', fontSize: '10px', fontWeight: 500 }}>
-              Commercial Quotation & Dispatch Portal
-            </span>
-          </div>
-        </div>
-
-        {/* Left-aligned navigation hints, keeping center corridor open for lanyard */}
-        <nav
-          className="hidden lg:flex"
+    <div className="login-universe-bg">
+      {/* Random Floating Glowing Particles across Black Background */}
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="login-particle"
           style={{
-            alignItems: 'center',
-            gap: '1.5rem',
-            fontSize: '11px',
-            color: '#64748B',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            marginRight: 'auto',
-            marginLeft: '2.5rem',
+            left: p.left,
+            top: p.top,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+          }}
+        />
+      ))}
+
+      {/* Ambient Pulsing Glow Nebulae in Background */}
+      <div className="login-nebula-1" />
+      <div className="login-nebula-2" />
+      <div className="login-nebula-3" />
+
+      {/* Centered Minimalistic Login Card in the Classic Style */}
+      <div
+        className="card animate-page-enter"
+        style={{
+          width: '100%',
+          maxWidth: '430px',
+          margin: '0 auto',
+          position: 'relative',
+          zIndex: 10,
+          overflow: 'hidden',
+          borderRadius: '1rem',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+        }}
+      >
+        {/* Top Header Banner - Clean Minimalist Dark Navy */}
+        <div
+          style={{
+            backgroundColor: '#0D1B2A',
+            color: '#E0E1DD',
+            padding: '1.5rem',
+            textAlign: 'center',
+            position: 'relative',
           }}
         >
-          <span style={{ color: '#E2E8F0', cursor: 'default' }}>Portal Access</span>
-          <span style={{ cursor: 'default', opacity: 0.6 }}>Quotation Network</span>
-          <span style={{ cursor: 'default', opacity: 0.6 }}>Dispatch Manager</span>
-        </nav>
+          {company?.logo_base64 ? (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+              <img
+                src={company.logo_base64}
+                alt={company.company_name || 'Logo'}
+                style={{
+                  maxHeight: '58px',
+                  maxWidth: '220px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '0.75rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.25rem',
+                margin: '0 auto 0.75rem auto',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+              }}
+            >
+              {(company?.company_name || 'AMA').slice(0, 3).toUpperCase()}
+            </div>
+          )}
 
-        {/* Right server status pill & settings trigger */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
           <div
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.28rem 0.65rem',
+              gap: '0.375rem',
+              padding: '0.2rem 0.65rem',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              color: '#6EE7B7',
               borderRadius: '9999px',
-              backgroundColor: '#12151C',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              fontSize: '11px',
-              fontWeight: 600,
-              color: '#E2E8F0',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: '0.5rem',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
             }}
           >
+            <Sparkles size={11} style={{ color: '#34D399' }} />
+            <span>Central Quotation Network</span>
+          </div>
+
+          <h1
+            style={{
+              fontSize: '1.25rem',
+              fontWeight: 900,
+              letterSpacing: '-0.02em',
+              color: '#FFFFFF',
+              margin: '0 0 0.25rem 0',
+              lineHeight: 1.2,
+            }}
+          >
+            {company?.company_name || 'AMA CERAMICS PVT LTD'}
+          </h1>
+          <p
+            style={{
+              fontSize: '11px',
+              color: '#778DA9',
+              margin: 0,
+              fontWeight: 500,
+            }}
+          >
+            {company?.tagline || 'Commercial Quotation Management'}
+          </p>
+        </div>
+
+        {/* Minimalist Server Connection Bar */}
+        <div
+          style={{
+            padding: '0.5rem 1.25rem',
+            backgroundColor: '#F8FAFC',
+            borderBottom: '1px solid #E2E8F0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
             <span
               style={{
-                width: '6.5px',
-                height: '6.5px',
+                width: '8px',
+                height: '8px',
                 borderRadius: '50%',
                 backgroundColor: status === 'connected' ? '#10B981' : '#EF4444',
-                boxShadow: status === 'connected' ? '0 0 6px rgba(16, 185, 129, 0.6)' : '0 0 6px rgba(239, 68, 68, 0.6)',
+                boxShadow: status === 'connected' ? '0 0 6px #10B981' : 'none',
                 flexShrink: 0,
               }}
             />
-            <span className="hidden sm:inline">{status === 'connected' ? 'Server Connected' : 'Server Offline'}</span>
-            <span className="sm:hidden text-[10px]">{status === 'connected' ? 'Online' : 'Offline'}</span>
+            <span
+              style={{
+                color: '#475569',
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '220px',
+              }}
+              title={serverUrl}
+            >
+              {serverUrl}
+            </span>
           </div>
-
           <button
             type="button"
             onClick={onOpenServerSettings}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.28rem 0.65rem',
-              borderRadius: '8px',
-              backgroundColor: '#12151C',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              color: '#E2E8F0',
+              color: '#1D4ED8',
               fontSize: '11px',
               fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              backgroundColor: '#EFF6FF',
+              padding: '0.25rem 0.5rem',
+              borderRadius: '0.375rem',
+              border: '1px solid #BFDBFE',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#1C212D';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#12151C';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)';
             }}
           >
-            <Server size={12} className="text-gray-300" />
-            <span className="hidden sm:inline">Configure</span>
+            <Server size={11} />
+            <span>Configure Server</span>
           </button>
         </div>
-      </header>
 
-      {/* Main Centerpiece: Hanging Physical ID Access Pass */}
-      <main className="w-full flex-1 flex flex-col items-center justify-center px-3.5 pb-6 sm:px-4 sm:pb-8 relative z-20">
-        {/* Realistic Lanyard Ribbon & Chrome Clasp Assembly */}
-        <div className="idcard-lanyard-assembly">
-          {/* Woven Fabric Ribbon */}
-          <div className="idcard-ribbon" />
-
-          {/* Metal Crimp Band */}
-          <div className="idcard-metal-crimp" />
-
-          {/* Swivel Loop Ring */}
-          <div className="idcard-swivel-loop" />
-
-          {/* Alligator / Badge Clip Body overlapping the card */}
-          <div className="idcard-clip-body">
-            <div className="idcard-clip-screw" />
-            <div className="idcard-clip-jaw" />
-          </div>
-        </div>
-
-        {/* Realistic Matte Black PVC Card */}
-        <div className="idcard-badge-plate animate-page-enter">
-          {/* Specular Glare Reflection across card */}
-          <div className="idcard-sheen-glare" />
-
-          {/* Physical Punch Hole Cutout (clamped by clip above) */}
-          <div className="idcard-punch-hole" />
-
-          {/* Card Body */}
-          <div className="idcard-card-body">
-            {/* Top Micro-Security Header */}
+        {/* Form Body */}
+        <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#FFFFFF' }}>
+          {status !== 'connected' && (
             <div
               style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                borderRadius: '0.5rem',
+                fontSize: '11px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                paddingBottom: '0.4rem',
-                marginBottom: '1rem',
               }}
             >
-              <span
-                style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  letterSpacing: '0.15em',
-                  color: '#94A3B8',
-                  textTransform: 'uppercase',
-                  fontFamily: 'monospace',
-                }}
-              >
-                CORPORATE ACCESS PASS
-              </span>
-              <span
-                style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  letterSpacing: '0.12em',
-                  color: '#64748B',
-                  textTransform: 'uppercase',
-                  fontFamily: 'monospace',
-                }}
-              >
-                SEC-ID // LEVEL 4
-              </span>
-            </div>
-
-            {/* Smart Chip & Brand Header */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '1rem',
-              }}
-            >
-              {/* Smart Card IC Contact Pad */}
-              <div className="idcard-smart-chip" title="RFID & Smartcard Security Contact">
-                <Cpu size={14} style={{ color: '#374151', position: 'relative', zIndex: 2 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={15} style={{ color: '#D97706', flexShrink: 0 }} />
+                <span style={{ fontWeight: 600 }}>Server Disconnected</span>
               </div>
-
-              {/* Company Logo / Monogram */}
-              {company?.logo_base64 ? (
-                <img
-                  src={company.logo_base64}
-                  alt={company.company_name || 'Logo'}
-                  style={{
-                    maxHeight: '44px',
-                    maxWidth: '180px',
-                    width: 'auto',
-                    objectFit: 'contain',
-                    display: 'block',
-                    filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7))',
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: 900,
-                    letterSpacing: '0.06em',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  {(company?.company_name || 'AMA CERAMICS').toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            {/* Card Title & Welcome */}
-            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-              <h1 className="idcard-title" title={`Welcome to ${company?.company_name || 'AMA CERAMICS PVT LTD'}`}>
-                Welcome to {company?.company_name || 'AMA CERAMICS PVT LTD'}
-              </h1>
-              <p className="idcard-subtitle" style={{ margin: '0.35rem 0 0 0' }}>
-                Commercial Quotation & Dispatch Management
-              </p>
-            </div>
-
-            {/* Offline Alert */}
-            {status !== 'connected' && (
-              <div
-                style={{
-                  marginBottom: '1rem',
-                  padding: '0.6rem 0.85rem',
-                  backgroundColor: '#1E1416',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  color: '#FCA5A5',
-                  borderRadius: '10px',
-                  fontSize: '11px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.5rem',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 }}>
-                  <AlertCircle size={14} style={{ color: '#EF4444', flexShrink: 0 }} />
-                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Server Offline / Unreachable
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenServerSettings}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    color: '#0A0A0A',
-                    border: 'none',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '5px',
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                  }}
-                >
-                  Connect
-                </button>
-              </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div
-                style={{
-                  marginBottom: '1rem',
-                  padding: '0.65rem 0.85rem',
-                  backgroundColor: '#1E1416',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#FCA5A5',
-                  borderRadius: '10px',
-                  fontSize: '11px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.5rem',
-                }}
-              >
-                <AlertCircle size={14} style={{ color: '#EF4444', marginTop: '2px', flexShrink: 0 }} />
-                <span style={{ fontWeight: 500, whiteSpace: 'pre-wrap' }}>{error}</span>
-              </div>
-            )}
-
-            {/* Login Form (Black, Grey, White) */}
-            <form onSubmit={handleCredentialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Username Field */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#94A3B8',
-                    marginBottom: '0.4rem',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Email or Username
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: 0,
-                      paddingLeft: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      pointerEvents: 'none',
-                      color: '#94A3B8',
-                    }}
-                  >
-                    <UserIcon size={15} />
-                  </div>
-                  <input
-                    type="text"
-                    className="idcard-input-box font-medium"
-                    placeholder="Enter your username or email..."
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    disabled={loading}
-                    autoComplete="username"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              {/* Password Field */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#94A3B8',
-                    marginBottom: '0.4rem',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: 0,
-                      paddingLeft: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      pointerEvents: 'none',
-                      color: '#94A3B8',
-                    }}
-                  >
-                    <Lock size={15} />
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="idcard-input-box font-mono"
-                    style={{ paddingRight: '2.5rem' }}
-                    placeholder="Enter your password..."
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      right: 0,
-                      paddingRight: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: '#64748B',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'color 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = '#FFFFFF')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748B')}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* High Contrast Pure White Action Button with Black Text */}
               <button
-                type="submit"
-                disabled={loading}
-                className="idcard-btn-white"
-                style={{ marginTop: '0.35rem' }}
+                type="button"
+                onClick={onOpenServerSettings}
+                className="btn btn-primary btn-xs"
+                style={{ padding: '0.25rem 0.65rem', fontSize: '10px' }}
               >
-                {loading ? (
-                  <>
-                    <RefreshCw size={15} className="animate-spin text-black" />
-                    <span>Authenticating...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn size={15} className="text-black" />
-                    <span>Sign In</span>
-                  </>
-                )}
+                Connect
               </button>
+            </div>
+          )}
 
-              {/* Realistic Security Barcode & Serial Identification */}
-              <div className="idcard-barcode-strip">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: '20px' }}>
-                  {[2, 1, 3, 1, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 2, 4, 1, 3, 2, 1, 3, 2, 4, 1, 2, 1, 3, 1, 2, 3, 1].map((w, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        width: `${w}px`,
-                        height: idx % 6 === 0 ? '20px' : '15px',
-                        backgroundColor: idx % 2 === 0 ? '#E2E8F0' : '#475569',
-                        borderRadius: '0.5px',
-                      }}
-                    />
-                  ))}
-                </div>
+          {error && (
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#B91C1C',
+                borderRadius: '0.5rem',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.5rem',
+              }}
+            >
+              <AlertCircle size={15} style={{ marginTop: '1px', flexShrink: 0 }} />
+              <span style={{ fontWeight: 500, whiteSpace: 'pre-wrap' }}>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleCredentialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '0.375rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Username or Email
+              </label>
+              <div style={{ position: 'relative' }}>
                 <div
                   style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    paddingLeft: '0.75rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '9px',
-                    fontFamily: 'monospace',
-                    color: '#64748B',
-                    letterSpacing: '0.1em',
+                    pointerEvents: 'none',
+                    color: '#94A3B8',
                   }}
                 >
-                  <ShieldCheck size={11} style={{ color: '#94A3B8' }} />
-                  <span>AMA-AUTH-SECURE // 256-BIT ENCRYPTION</span>
+                  <UserIcon size={15} />
                 </div>
+                <input
+                  type="text"
+                  className="input text-xs w-full font-medium"
+                  style={{ paddingLeft: '2.25rem', height: '2.4rem' }}
+                  placeholder="Enter your username or email..."
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
+                  autoComplete="username"
+                  autoFocus
+                />
               </div>
-            </form>
-          </div>
-        </div>
-      </main>
+            </div>
 
-      {/* Minimal Monochrome Footer */}
-      <footer className="w-full px-6 py-4 sm:px-10 sm:py-5 flex flex-row items-center justify-between text-[10px] sm:text-[11px] text-[#475569] border-none relative z-40">
-        <span className="text-left">
-          &copy; {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
-        </span>
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '0.375rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Password
+              </label>
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    paddingLeft: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    color: '#94A3B8',
+                  }}
+                >
+                  <Lock size={15} />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input text-xs w-full font-mono"
+                  style={{ paddingLeft: '2.25rem', paddingRight: '2.25rem', height: '2.4rem' }}
+                  placeholder="Enter your password..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    paddingRight: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#94A3B8',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          <span style={{ fontFamily: 'monospace', color: '#64748B' }}>v2.4.30</span>
-          <span className="hidden sm:inline" style={{ color: '#334155' }}>•</span>
-          <span className="hidden sm:inline" style={{ color: '#64748B' }}>Role-Based Access Control</span>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary w-full"
+              style={{
+                marginTop: '0.5rem',
+                padding: '0.75rem 1rem',
+                fontSize: '13px',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                borderRadius: '0.5rem',
+                background: 'linear-gradient(135deg, #1B263B 0%, #0D1B2A 100%)',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow: '0 4px 14px rgba(13, 27, 42, 0.35)',
+                cursor: 'pointer',
+              }}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin text-white" />
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <LogIn size={15} className="text-white" />
+                  <span>Sign In</span>
+                </>
+              )}
+            </button>
+
+            <p style={{ fontSize: '10px', color: '#94A3B8', textAlign: 'center', margin: '0.25rem 0 0 0' }}>
+              Please log in with your assigned credentials. Session is securely authenticated.
+            </p>
+          </form>
         </div>
-      </footer>
+
+        {/* Minimal Footer */}
+        <div
+          style={{
+            padding: '0.625rem 1.25rem',
+            backgroundColor: '#F8FAFC',
+            borderTop: '1px solid #E2E8F0',
+            fontSize: '10px',
+            color: '#64748B',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <ShieldCheck size={12} style={{ color: '#059669' }} />
+            <span>Secure Enterprise Session</span>
+          </span>
+          <span>{company?.company_name ? `${company.company_name} • v2.4.30` : 'Quotation System v2.4.30'}</span>
+        </div>
+      </div>
     </div>
   );
 };
