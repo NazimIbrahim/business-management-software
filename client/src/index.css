@@ -713,7 +713,6 @@ table tbody tr:hover {
 
 .idcard-login-viewport {
   min-height: 100vh;
-  min-height: 100dvh;
   width: 100%;
   background-color: #050608;
   background-image: 
@@ -722,14 +721,10 @@ table tbody tr:hover {
   background-size: 100% 100%, 32px 32px;
   position: relative;
   overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   color: #FFFFFF;
-  padding-top: env(safe-area-inset-top, 0);
-  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* Lanyard Ribbon & Clasp Assembly */
@@ -1001,78 +996,6 @@ table tbody tr:hover {
   gap: 4px;
   opacity: 0.7;
   margin-top: 10px;
-}
-
-/* Responsive Card Body */
-.idcard-card-body {
-  padding: 0.5rem 1.75rem 1.5rem 1.75rem;
-  position: relative;
-  z-index: 5;
-}
-
-/* Mobile Responsive Optimization (Phones & iOS Safari) */
-@media (max-width: 640px) {
-  .idcard-badge-plate {
-    max-width: 355px;
-    margin-top: -16px;
-    border-radius: 18px;
-  }
-
-  .idcard-card-body {
-    padding: 0.5rem 1.15rem 1.15rem 1.15rem;
-  }
-
-  /* CRITICAL FOR IOS SAFARI: font-size 16px prevents mobile Safari from auto-zooming on focus */
-  .idcard-input-box {
-    font-size: 16px !important;
-    height: 42px;
-    padding-left: 2.35rem;
-    border-radius: 9px;
-    touch-action: manipulation;
-    -webkit-text-size-adjust: 100%;
-  }
-
-  .idcard-btn-white {
-    height: 42px;
-    font-size: 13px;
-    border-radius: 9px;
-  }
-
-  .idcard-ribbon {
-    width: 28px;
-  }
-
-  .idcard-metal-crimp {
-    width: 36px;
-    height: 11px;
-  }
-
-  .idcard-swivel-loop {
-    width: 14px;
-    height: 10px;
-  }
-
-  .idcard-clip-body {
-    width: 36px;
-    height: 30px;
-    padding: 3px 3px;
-  }
-
-  .idcard-clip-screw {
-    width: 8px;
-    height: 8px;
-  }
-
-  .idcard-clip-jaw {
-    width: 20px;
-    height: 7px;
-  }
-
-  .idcard-punch-hole {
-    width: 44px;
-    height: 9px;
-    margin: 10px auto 8px auto;
-  }
 }
 
 /* Animated Login Background & Random Floating Particles */
