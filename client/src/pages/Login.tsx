@@ -199,9 +199,8 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                paddingBottom: '0.6rem',
-                marginBottom: '1.25rem',
+                paddingBottom: '0.4rem',
+                marginBottom: '1rem',
               }}
             >
               <span
@@ -274,8 +273,8 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
             {/* Card Title & Welcome */}
             <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-              <h1 className="idcard-title">
-                Welcome to {company?.company_name || 'AMA Ceramics'}
+              <h1 className="idcard-title" title={`Welcome to ${company?.company_name || 'AMA CERAMICS PVT LTD'}`}>
+                Welcome to {company?.company_name || 'AMA CERAMICS PVT LTD'}
               </h1>
               <p className="idcard-subtitle" style={{ margin: '0.35rem 0 0 0' }}>
                 Commercial Quotation & Dispatch Management
@@ -513,9 +512,9 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
       </main>
 
       {/* Minimal Monochrome Footer */}
-      <footer className="w-full px-4 py-3 sm:px-8 sm:py-5 flex flex-col xs:flex-row items-center justify-between text-[10px] sm:text-[11px] text-[#475569] gap-1.5 sm:gap-0 border-t border-white/[0.05] relative z-40">
-        <span className="text-center xs:text-left">
-          © {new Date().getFullYear()} {company?.company_name || 'AMA Ceramics Pvt Ltd'}. All rights reserved.
+      <footer className="w-full px-6 py-4 sm:px-10 sm:py-5 flex flex-row items-center justify-between text-[10px] sm:text-[11px] text-[#475569] border-none relative z-40">
+        <span className="text-left">
+          &copy; {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
