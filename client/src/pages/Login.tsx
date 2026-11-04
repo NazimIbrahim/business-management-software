@@ -90,23 +90,24 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           </div>
         </div>
 
-        {/* Center navigation hints (desktop view) */}
+        {/* Left-aligned navigation hints, keeping center corridor open for lanyard */}
         <nav
-          className="hidden md:flex"
+          className="hidden lg:flex"
           style={{
             alignItems: 'center',
-            gap: '1.75rem',
+            gap: '1.5rem',
             fontSize: '11px',
             color: '#64748B',
             fontWeight: 600,
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
+            marginRight: 'auto',
+            marginLeft: '2.5rem',
           }}
         >
           <span style={{ color: '#E2E8F0', cursor: 'default' }}>Portal Access</span>
           <span style={{ cursor: 'default', opacity: 0.6 }}>Quotation Network</span>
           <span style={{ cursor: 'default', opacity: 0.6 }}>Dispatch Manager</span>
-          <span style={{ cursor: 'default', opacity: 0.6 }}>Security Clearance</span>
         </nav>
 
         {/* Right server status pill & settings trigger */}
