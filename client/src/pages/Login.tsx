@@ -51,7 +51,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
   return (
     <div className="stream-login-viewport">
-      {/* Top Header Navigation (No horizontal dividing lines) */}
+      {/* Top Header Navigation (Clean Light Theme) */}
       <header className="stream-header">
         <div className="stream-header-brand">
           <div className="stream-header-monogram">
@@ -94,19 +94,23 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
       {/* Center Stage: Physical Lanyard + Pass Badge Card */}
       <main className="stream-center-stage">
-        {/* Realistic Physical Lanyard Assembly (Connected from top) */}
+        {/* Realistic Physical Lanyard Assembly (Guaranteed from top: 0 with zero gap) */}
         <div className="stream-lanyard-hanger" aria-hidden="true">
           <div className="stream-strap-ribbon" />
           <div className="stream-metal-clamp">
-            <div className="stream-metal-ferrule" />
-            <div className="stream-metal-swivel" />
-            <div className="stream-clamp-jaw">
-              <div className="stream-clamp-rivet" />
+            <div className="stream-metal-ferrule">
+              <div className="stream-crimp-emblem">AMA</div>
+            </div>
+          </div>
+          <div className="stream-vinyl-loop-assembly">
+            <div className="stream-vinyl-stem" />
+            <div className="stream-vinyl-strap">
+              <div className="stream-snap-rivet" />
             </div>
           </div>
         </div>
 
-        {/* Physical ID Badge Card Plate */}
+        {/* Physical ID Badge Card Plate (Clean Porcelain Light Theme) */}
         <div className="stream-badge-card animate-page-enter">
           {/* Punched slot cutout at top */}
           <div className="stream-punch-slot" aria-hidden="true" />
@@ -129,7 +133,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
               )}
             </div>
 
-            {/* Single-line Guaranteed Title */}
+            {/* Single-line Title (No ellipsis cut-off) */}
             <h1
               className="stream-badge-title"
               title={`Welcome to ${company?.company_name || 'AMA CERAMICS PVT LTD'}`}
@@ -150,7 +154,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                   <button
                     type="button"
                     onClick={onOpenServerSettings}
-                    className="underline font-semibold ml-2 text-amber-300 hover:text-white"
+                    className="underline font-semibold ml-2 text-amber-700 hover:text-amber-900"
                   >
                     Configure
                   </button>
@@ -236,14 +240,14 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
             {/* Badge Bottom Security Line */}
             <div className="stream-badge-security">
-              <ShieldCheck size={13} className="text-emerald-400 flex-shrink-0" />
+              <ShieldCheck size={13} className="text-emerald-600 flex-shrink-0" />
               <span>Secure 256-Bit SSL Enterprise Session</span>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Clean Minimalist Footer (No separating line) */}
+      {/* Clean Minimalist Footer (Light Theme) */}
       <footer className="stream-footer">
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
