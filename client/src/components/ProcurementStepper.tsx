@@ -85,32 +85,67 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
     currentIdx >= 0 ? Math.min(100, (currentIdx / (VALID_PROCUREMENT_STATUSES.length - 1)) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3.5 sm:p-4 my-1 transition-all">
+    <div
+      className="stream-procure-card"
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '12px',
+        border: '1px solid #E2E8F0',
+        padding: '12px 16px',
+        margin: '6px 0',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+      }}
+    >
       {/* Top Header Row */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-        <div className="flex items-center space-x-2">
+      <div
+        className="stream-procure-header"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          paddingBottom: '10px',
+          borderBottom: '1px solid #F1F5F9',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span
-            className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider ${
-              isFactoryOrder
-                ? 'bg-indigo-50 text-indigo-900 border border-indigo-200'
-                : 'bg-amber-50 text-amber-900 border border-amber-200'
-            }`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '2px 10px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              backgroundColor: isFactoryOrder ? '#EEF2FF' : '#FEF3C7',
+              color: isFactoryOrder ? '#3730A3' : '#92400E',
+              border: `1px solid ${isFactoryOrder ? '#C7D2FE' : '#FDE68A'}`,
+            }}
           >
             {isFactoryOrder ? (
-              <Factory size={13} className="text-indigo-600 mr-0.5" />
+              <Factory size={13} color="#4F46E5" />
             ) : (
-              <Package size={13} className="text-amber-600 mr-0.5" />
+              <Package size={13} color="#D97706" />
             )}
             <span>{isFactoryOrder ? 'Factory Order' : 'Local Purchase'}</span>
           </span>
 
-          <span className="text-[11px] font-semibold text-slate-500">
+          <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B' }}>
             {currentIdx >= 0 ? (
-              <span className="text-slate-700 font-bold">
-                Stage {currentIdx + 1} of 5: <span className="text-indigo-700">{VALID_PROCUREMENT_STATUSES[currentIdx]}</span>
+              <span style={{ color: '#334155', fontWeight: 700 }}>
+                Stage {currentIdx + 1} of 5:{' '}
+                <span style={{ color: '#4F46E5', fontWeight: 800 }}>
+                  {VALID_PROCUREMENT_STATUSES[currentIdx]}
+                </span>
               </span>
             ) : (
-              <span className="text-slate-400 italic">Procurement stage not started</span>
+              <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>
+                Procurement stage not started
+              </span>
             )}
           </span>
         </div>
@@ -120,7 +155,21 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
           <button
             type="button"
             onClick={onMarkReadyStock}
-            className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-none shrink-0 shadow-xs cursor-pointer flex items-center space-x-1.5 px-3 py-1 rounded-md transition-transform active:scale-95"
+            style={{
+              backgroundColor: '#059669',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '11px',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '4px 12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 5px rgba(5, 150, 105, 0.3)',
+              transition: 'background-color 0.15s ease, transform 0.1s ease',
+            }}
             title="Item has arrived in godown! Set dispatch status to Ready Stock"
           >
             <CheckCircle2 size={13} />
@@ -130,23 +179,58 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
       </div>
 
       {/* Horizontal Minimalist Stepper Track */}
-      <div className="overflow-x-auto py-2">
-        <div className="min-w-[460px] relative px-6 pt-3 pb-1">
-          {/* Background Track Line */}
-          <div className="absolute left-9 right-9 top-[25px] h-1.5 bg-slate-200 rounded-full z-0" />
+      <div style={{ overflowX: 'auto', padding: '10px 0 6px 0' }}>
+        <div
+          style={{
+            position: 'relative',
+            minWidth: '500px',
+            padding: '12px 24px 6px 24px',
+          }}
+        >
+          {/* Background Inactive Track Line (Always Visible) */}
+          <div
+            className="stream-procure-bg-line"
+            style={{
+              position: 'absolute',
+              top: '26px', // 12px container top padding + 14px center of 28px buttons
+              left: '52px', // Centered through node 0
+              right: '52px', // Centered through node 4
+              height: '5px',
+              backgroundColor: '#E2E8F0',
+              borderRadius: '9999px',
+              zIndex: 1,
+            }}
+          />
 
-          {/* Active Progress Track Line */}
+          {/* Active Progress Track Line (Solid Vivid Indigo) */}
           {currentIdx >= 0 && (
             <div
-              className="absolute left-9 top-[25px] h-1.5 bg-indigo-600 rounded-full z-0 transition-all duration-300 ease-out"
+              className="stream-procure-fill-line"
               style={{
-                width: `calc((100% - 4.5rem) * ${progressPercent / 100})`,
+                position: 'absolute',
+                top: '26px',
+                left: '52px',
+                height: '5px',
+                width: `calc((100% - 104px) * ${progressPercent / 100})`,
+                backgroundColor: '#4F46E5',
+                borderRadius: '9999px',
+                zIndex: 2,
+                transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 1px 4px rgba(79, 70, 229, 0.35)',
               }}
             />
           )}
 
           {/* Milestone Step Nodes */}
-          <div className="relative flex items-start justify-between z-10">
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              zIndex: 3,
+            }}
+          >
             {PROCUREMENT_STEPS_CONFIG.map((step, sIdx) => {
               const isCompleted = currentIdx >= 0 && sIdx <= currentIdx;
               const isCurrent = currentIdx === sIdx;
@@ -154,8 +238,13 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
               return (
                 <div
                   key={step.key}
-                  className="flex flex-col items-center select-none"
-                  style={{ width: '80px' }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    width: '84px',
+                    userSelect: 'none',
+                  }}
                 >
                   {/* Circular Node Button */}
                   <button
@@ -171,20 +260,38 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
                         ? step.key
                         : `Click to set procurement milestone: ${step.key}`
                     }
-                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                      isViewOnly ? 'cursor-default' : 'cursor-pointer hover:scale-110 active:scale-95'
-                    } ${
-                      isCurrent
-                        ? 'bg-indigo-600 text-white shadow-md ring-4 ring-indigo-200'
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: isViewOnly ? 'default' : 'pointer',
+                      border: isCompleted ? 'none' : '2.5px solid #CBD5E1',
+                      backgroundColor: isCompleted ? '#4F46E5' : '#FFFFFF',
+                      color: isCompleted ? '#FFFFFF' : 'transparent',
+                      boxShadow: isCurrent
+                        ? '0 0 0 4px #C7D2FE, 0 3px 8px rgba(79, 70, 229, 0.45)'
                         : isCompleted
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-white border-2 border-slate-300 text-transparent hover:border-indigo-400'
-                    }`}
+                        ? '0 2px 6px rgba(79, 70, 229, 0.35)'
+                        : '0 1px 2px rgba(0, 0, 0, 0.04)',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxSizing: 'border-box',
+                    }}
                   >
                     {isCompleted ? (
-                      <Check size={14} strokeWidth={3} className="text-white" />
+                      <Check size={15} strokeWidth={3} color="#FFFFFF" />
                     ) : (
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                      <span
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: '#94A3B8',
+                          display: 'block',
+                        }}
+                      />
                     )}
                   </button>
 
@@ -197,36 +304,41 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
                         onChangeStatus(step.key);
                       }
                     }}
-                    className={`mt-2.5 flex items-center space-x-1.5 text-left transition-colors ${
-                      isViewOnly ? 'cursor-default' : 'cursor-pointer group'
-                    }`}
+                    style={{
+                      marginTop: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: isViewOnly ? 'default' : 'pointer',
+                      textAlign: 'left',
+                      padding: 0,
+                    }}
                   >
                     <step.Icon
-                      size={18}
-                      className={`shrink-0 transition-colors ${
-                        isCurrent
-                          ? 'text-indigo-600'
-                          : isCompleted
-                          ? 'text-indigo-600'
-                          : 'text-slate-400 group-hover:text-slate-600'
-                      }`}
+                      size={16}
+                      color={isCurrent || isCompleted ? '#4F46E5' : '#94A3B8'}
+                      style={{ flexShrink: 0, transition: 'color 0.2s ease' }}
                     />
-                    <div className="leading-tight">
+                    <div style={{ lineHeight: 1.2 }}>
                       <div
-                        className={`text-[11px] font-bold ${
-                          isCompleted
-                            ? 'text-slate-900'
-                            : 'text-slate-400 group-hover:text-slate-600'
-                        }`}
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: isCompleted ? '#0F172A' : '#64748B',
+                          transition: 'color 0.2s ease',
+                        }}
                       >
                         {step.line1}
                       </div>
                       <div
-                        className={`text-[11px] font-bold ${
-                          isCompleted
-                            ? 'text-slate-900'
-                            : 'text-slate-400 group-hover:text-slate-600'
-                        }`}
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: isCompleted ? '#0F172A' : '#64748B',
+                          transition: 'color 0.2s ease',
+                        }}
                       >
                         {step.line2}
                       </div>
@@ -240,13 +352,35 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
       </div>
 
       {/* Procurement Notes / LR & Supplier Reference */}
-      <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-        <div className="flex items-center space-x-1.5 text-[11px] text-slate-500 shrink-0">
-          <span className="font-bold text-slate-700">Procurement Notes / LR:</span>
+      <div
+        style={{
+          marginTop: '10px',
+          paddingTop: '8px',
+          borderTop: '1px solid #F1F5F9',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            color: '#64748B',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontWeight: 700, color: '#334155' }}>
+            Procurement Notes / LR:
+          </span>
         </div>
-        <div className="flex-1">
+        <div style={{ flex: 1, minWidth: '240px' }}>
           {isViewOnly ? (
-            <span className="text-[11px] text-slate-600 italic">
+            <span style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>
               {procurementNotes || 'No notes specified.'}
             </span>
           ) : (
@@ -255,7 +389,26 @@ export const ProcurementStepper: React.FC<ProcurementStepperProps> = ({
               placeholder="Supplier / LR tracking number / Payment details / Notes..."
               value={procurementNotes || ''}
               onChange={(e) => onChangeNotes && onChangeNotes(e.target.value)}
-              className="input input-xs text-[11px] w-full bg-slate-50/80 focus:bg-white border-slate-200 focus:border-indigo-400 rounded-md"
+              style={{
+                width: '100%',
+                fontSize: '11px',
+                padding: '5px 10px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                borderRadius: '6px',
+                color: '#0F172A',
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.2s ease, background-color 0.2s ease',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = '#4F46E5';
+                e.currentTarget.style.backgroundColor = '#FFFFFF';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '#CBD5E1';
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+              }}
             />
           )}
         </div>

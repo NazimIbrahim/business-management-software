@@ -147,7 +147,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             }`}
           >
             {/* FRONT FACE: Physical ID Badge Pass */}
-            <div className="stream-badge-card stream-badge-front animate-page-enter">
+            <div className="stream-badge-card stream-badge-front">
               {/* Punched slot cutout at top */}
               <div className="stream-punch-slot" aria-hidden="true" />
 
@@ -345,7 +345,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
-        <span className="stream-footer-version">v2.4.31</span>
+        <span className="stream-footer-version">v2.4.32</span>
       </footer>
     </div>
   );
