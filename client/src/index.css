@@ -1249,11 +1249,64 @@ table tbody tr:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.9);
 }
 
+/* 3D Card Flip Architecture & Perspective Container */
+.stream-badge-flipper-container {
+  position: relative;
+  width: 100%;
+  max-width: 450px;
+  perspective: 1400px;
+  z-index: 10;
+}
+
+.stream-badge-flipper {
+  width: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.85s cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+
+.stream-badge-flipper.flipped {
+  transform: rotateY(180deg);
+}
+
+@keyframes loginErrorShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.stream-badge-flipper.shake {
+  animation: loginErrorShake 0.45s ease-in-out;
+}
+
+.stream-badge-front,
+.stream-badge-back {
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.stream-badge-front {
+  transform: rotateY(0deg);
+}
+
+.stream-badge-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
 /* The Main Badge Card Pass (Frosted Acrylic Glassy UI) */
 .stream-badge-card {
   position: relative;
   width: 100%;
-  max-width: 450px;
   border-radius: 24px;
   /* Premium Glassmorphic Acrylic Finish */
   background: rgba(255, 255, 255, 0.72);
@@ -1269,6 +1322,205 @@ table tbody tr:hover {
   padding: 1.5rem 2rem 1.6rem 2rem;
   z-index: 10;
   box-sizing: border-box;
+}
+
+/* Access Granted Reverse Side Styling */
+.stream-badge-back .stream-card-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.stream-granted-biometric {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  margin: 0.75rem auto 1rem auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stream-granted-ring-1,
+.stream-granted-ring-2 {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  border: 2px solid rgba(16, 185, 129, 0.4);
+  pointer-events: none;
+  animation: pulseRing 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.stream-granted-ring-2 {
+  inset: -20px;
+  animation-delay: 0.5s;
+  border-color: rgba(5, 150, 105, 0.25);
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.stream-granted-icon-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  border: 2px solid #FFFFFF;
+  box-shadow: 
+    0 8px 24px -2px rgba(16, 185, 129, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  position: relative;
+  z-index: 2;
+  animation: scalePop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes scalePop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.stream-granted-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.stream-granted-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10B981;
+  box-shadow: 0 0 6px #10B981;
+}
+
+.stream-granted-title {
+  font-size: 1.55rem;
+  font-weight: 900;
+  color: #065F46;
+  letter-spacing: 0.05em;
+  line-height: 1.15;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
+}
+
+.stream-granted-user-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  margin: 0.75rem 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.stream-granted-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1B263B 0%, #0D1B2A 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(13, 27, 42, 0.2);
+}
+
+.stream-granted-user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stream-granted-username {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0F172A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-granted-role {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stream-granted-progress-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.stream-granted-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stream-granted-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10B981 0%, #3B82F6 100%);
+  border-radius: 9999px;
+  animation: progressFill 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes progressFill {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.stream-granted-redirect-text {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #059669;
+  letter-spacing: 0.02em;
 }
 
 /* Glassy Prism / Specular Gloss Reflection on Badge */

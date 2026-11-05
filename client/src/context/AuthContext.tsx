@@ -6,6 +6,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (username: string, password?: string) => Promise<void>;
+  authenticate: (username: string, password?: string) => Promise<{ token: string; user: User }>;
+  completeLogin: (data: { token: string; user: User }) => void;
   loginAsRole: (roleOrUsername: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
@@ -37,15 +39,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (username: string, password?: string) => {
+  const authenticate = async (username: string, password?: string): Promise<{ token: string; user: User }> => {
     const data = await fetchApi<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
+    return data;
+  };
 
+  const completeLogin = (data: { token: string; user: User }) => {
     localStorage.setItem('ama_token', data.token);
     setToken(data.token);
     setUser(data.user);
+  };
+
+  const login = async (username: string, password?: string) => {
+    const data = await authenticate(username, password);
+    completeLogin(data);
   };
 
   const loginAsRole = async (roleOrUsername: string) => {
@@ -71,6 +81,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         login,
+        authenticate,
+        completeLogin,
         loginAsRole,
         logout,
         isLoading,
