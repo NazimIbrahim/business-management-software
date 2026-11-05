@@ -814,6 +814,581 @@ table tbody tr:hover {
   }
 }
 
+/* ==========================================================================
+   Stream-Style Physical ID Badge Login Theme (App Navy & Sapphire Palette)
+   ========================================================================== */
+
+.stream-login-viewport {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  background-color: #070A12;
+  background-image:
+    radial-gradient(ellipse at 50% 32%, rgba(37, 99, 235, 0.16) 0%, rgba(27, 38, 59, 0.28) 35%, transparent 72%),
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 100% 100%, 28px 28px;
+  background-attachment: fixed;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Minimalist Top Header (No dividing horizontal line) */
+.stream-header {
+  width: 100%;
+  max-width: 1280px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.25rem;
+  z-index: 30;
+  position: relative;
+}
+
+.stream-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  text-decoration: none;
+}
+
+.stream-header-monogram {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1B263B 0%, #0D1B2A 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  color: #FFFFFF;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.stream-header-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #F8FAFC;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.stream-header-subtitle {
+  font-size: 10px;
+  font-weight: 500;
+  color: #778DA9;
+}
+
+.stream-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.stream-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(13, 27, 42, 0.75);
+  border: 1px solid rgba(119, 141, 169, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 600;
+  color: #E2E8F0;
+  transition: all 0.2s ease;
+}
+
+.stream-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stream-status-dot.connected {
+  background-color: #10B981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.85);
+}
+
+.stream-status-dot.disconnected {
+  background-color: #EF4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+}
+
+.stream-config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(27, 38, 59, 0.55);
+  border: 1px solid rgba(119, 141, 169, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  color: #CBD5E1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stream-config-btn:hover {
+  background: rgba(41, 58, 88, 0.75);
+  border-color: rgba(147, 197, 253, 0.45);
+  color: #FFFFFF;
+}
+
+/* Center Stage Area with Hanging Lanyard Assembly */
+.stream-center-stage {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin: 1.5rem auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+}
+
+/* Physical Lanyard Assembly (Reaches from top with zero gap) */
+.stream-lanyard-hanger {
+  position: absolute;
+  top: -65px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.stream-strap-ribbon {
+  width: 26px;
+  height: 70px;
+  background: repeating-linear-gradient(
+    45deg,
+    #172033,
+    #172033 3px,
+    #0F172A 3px,
+    #0F172A 6px
+  );
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    inset 0 0 5px rgba(0, 0, 0, 0.9),
+    0 4px 12px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.stream-strap-ribbon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(148, 163, 184, 0.45),
+    rgba(148, 163, 184, 0.45) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.stream-metal-clamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -1px;
+}
+
+.stream-metal-ferrule {
+  width: 32px;
+  height: 9px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #94A3B8 0%, #475569 50%, #1E293B 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.stream-metal-swivel {
+  width: 14px;
+  height: 9px;
+  border: 2px solid #64748B;
+  border-radius: 50%;
+  margin: -2px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.stream-clamp-jaw {
+  width: 20px;
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #64748B 0%, #334155 45%, #0F172A 100%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  position: relative;
+  z-index: 26;
+  margin-top: -2px;
+}
+
+.stream-clamp-rivet {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #CBD5E1;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.6);
+  margin: 4px auto 0 auto;
+}
+
+/* The Main Badge Card Pass */
+.stream-badge-card {
+  position: relative;
+  width: 100%;
+  border-radius: 22px;
+  background: linear-gradient(175deg, rgba(27, 38, 59, 0.75) 0%, rgba(13, 27, 42, 0.92) 58%, rgba(8, 14, 24, 0.97) 100%);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 30px 80px -15px rgba(0, 0, 0, 0.85),
+    0 0 50px -10px rgba(37, 99, 235, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+  padding: 1.4rem 2rem 1.6rem 2rem;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+/* Spectacular Luminous Specular Hologram Beam (Top-Right Angle) */
+.stream-badge-card::before {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle at 75% 25%, rgba(96, 165, 250, 0.42) 0%, rgba(59, 130, 246, 0.22) 34%, rgba(29, 78, 216, 0.05) 58%, transparent 75%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.stream-badge-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.11) 0%, rgba(147, 197, 253, 0.14) 16%, transparent 48%);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+}
+
+.stream-card-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Punched Slot Cutout */
+.stream-punch-slot {
+  width: 52px;
+  height: 9px;
+  border-radius: 9999px;
+  background: rgba(4, 7, 15, 0.95);
+  margin: 0 auto 1.15rem auto;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Badge Header & Monogram */
+.stream-badge-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.stream-badge-logo {
+  max-height: 48px;
+  max-width: 180px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.stream-badge-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.25) 0%, rgba(13, 27, 42, 0.8) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Badge Title (Single line guaranteed across all devices) */
+.stream-badge-title {
+  font-size: clamp(1.05rem, 3.4vw, 1.3rem);
+  font-weight: 800;
+  color: #FFFFFF;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 0.25rem 0;
+  padding: 0 0.25rem;
+}
+
+.stream-badge-subtitle {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #778DA9;
+  text-align: center;
+  margin: 0 0 1.35rem 0;
+  letter-spacing: 0.01em;
+}
+
+/* Alerts */
+.stream-alert-box {
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  font-size: 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.stream-alert-box.error {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #FCA5A5;
+}
+
+.stream-alert-box.warning {
+  background: rgba(217, 119, 6, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #FCD34D;
+}
+
+/* Form Styles */
+.stream-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.stream-field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+  margin-bottom: 0.35rem;
+  letter-spacing: 0.02em;
+}
+
+.stream-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.stream-input-icon {
+  position: absolute;
+  left: 0.85rem;
+  color: #778DA9;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.stream-input-field {
+  width: 100%;
+  height: 44px;
+  background: rgba(13, 27, 42, 0.65);
+  border: 1px solid rgba(119, 141, 169, 0.28);
+  border-radius: 10px;
+  padding: 0 2.5rem 0 2.5rem;
+  color: #FFFFFF;
+  font-size: 13.5px;
+  transition: all 0.2s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.stream-input-field:focus {
+  background: rgba(13, 27, 42, 0.9);
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.stream-input-field::placeholder {
+  color: rgba(148, 163, 184, 0.45);
+}
+
+.stream-password-toggle {
+  position: absolute;
+  right: 0.85rem;
+  color: #778DA9;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  transition: color 0.15s ease;
+}
+
+.stream-password-toggle:hover {
+  color: #E2E8F0;
+}
+
+/* Luminous Sapphire Action Button */
+.stream-btn-primary {
+  width: 100%;
+  height: 46px;
+  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 55%, #1D4ED8 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 13.5px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 22px -4px rgba(37, 99, 235, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 0.4rem;
+}
+
+.stream-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -2px rgba(37, 99, 235, 0.65);
+}
+
+.stream-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.stream-btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Badge Security Status */
+.stream-badge-security {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+  color: #778DA9;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* Minimalist Clean Footer (No dividing lines) */
+.stream-footer {
+  width: 100%;
+  max-width: 1280px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.25rem;
+  font-size: 11px;
+  color: #475569;
+  z-index: 10;
+  position: relative;
+}
+
+.stream-footer-copy {
+  color: #64748B;
+  font-weight: 500;
+}
+
+.stream-footer-version {
+  color: #475569;
+  font-family: monospace;
+  font-size: 10.5px;
+}
+
+/* Mobile & Safari Anti-Zoom Rules */
+@media (max-width: 640px) {
+  .stream-login-viewport {
+    padding: 1rem 0.75rem;
+  }
+  .stream-badge-card {
+    padding: 1.25rem 1.25rem 1.4rem 1.25rem;
+    border-radius: 18px;
+  }
+  .stream-input-field {
+    font-size: 16px !important; /* Critical: stops iOS Safari auto-zoom */
+    height: 44px;
+  }
+  .stream-badge-title {
+    font-size: 1.05rem;
+  }
+  .stream-header {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .stream-header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  .stream-center-stage {
+    margin-top: 2rem;
+  }
+  .stream-lanyard-hanger {
+    top: -55px;
+  }
+  .stream-strap-ribbon {
+    height: 60px;
+  }
+  .stream-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    text-align: center;
+  }
+}
+
 /* Dropdown Opening Animation */
 .animate-dropdown-open {
   animation: dropdownSlide 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;

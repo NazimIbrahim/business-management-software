@@ -36,11 +36,14 @@ const AppContent: React.FC = () => {
   const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
+  // Always redirect to dashboard upon login
   useEffect(() => {
-    if (user && (user.role === 'dispatch' || user.role === 'dispatch_team')) {
-      setActiveTab('dispatch');
+    if (user) {
+      setActiveTab('dashboard');
+      setSelectedQuotationId(null);
+      setIsEditingQuotation(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   if (isLoading) {
     return (
