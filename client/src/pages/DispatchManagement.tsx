@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import { Quotation, QuotationItem } from '../types';
+import { ProcurementStepper } from '../components/ProcurementStepper';
 import {
   Truck,
   Search,
@@ -26,6 +27,7 @@ import {
   Eye,
   Bell,
   ArrowRight,
+  Layers,
 } from 'lucide-react';
 
 export const DISPATCH_STATUS_OPTIONS = [
@@ -155,6 +157,70 @@ export const DispatchManagement: React.FC = () => {
 
   // Print Slip Modal State
   const [isPrintSlipOpen, setIsPrintSlipOpen] = useState<boolean>(false);
+
+  // Quotation line items view mode: Default sequence vs Grouped by Availability
+  const [itemsViewMode, setItemsViewMode] = useState<'default' | 'availability'>('default');
+
+  // Group line items by stock & procurement availability: Ready Stock first, Local Purchase next, Factory Order next
+  const availabilityGroups = useMemo(() => {
+    const readyStock: QuotationItem[] = [];
+    const localPurchase: QuotationItem[] = [];
+    const factoryOrder: QuotationItem[] = [];
+    const pending: QuotationItem[] = [];
+
+    activeItems.forEach((item, idx) => {
+      const itemId = item.id || idx;
+      const itemState = editedItems[itemId] || {
+        status: item.dispatch_status || 'Ready Stock',
+      };
+      const st = itemState.status || item.dispatch_status || 'Ready Stock';
+
+      if (st === 'Ready Stock' || st === 'Dispatched') {
+        readyStock.push(item);
+      } else if (st === 'Need to Arrange from Local') {
+        localPurchase.push(item);
+      } else if (st === 'Factory Order') {
+        factoryOrder.push(item);
+      } else {
+        pending.push(item);
+      }
+    });
+
+    return [
+      {
+        id: 'ready-stock',
+        label: '1. Ready Stock & Dispatched',
+        subtitle: 'Available immediately in godown / Dispatched',
+        color: 'emerald',
+        items: readyStock,
+      },
+      {
+        id: 'local-purchase',
+        label: '2. Local Purchase Items',
+        subtitle: 'Need to arrange from local distributors / market vendors',
+        color: 'amber',
+        items: localPurchase,
+      },
+      {
+        id: 'factory-order',
+        label: '3. Factory Order Items',
+        subtitle: 'Direct mill / factory production sourcing',
+        color: 'indigo',
+        items: factoryOrder,
+      },
+      ...(pending.length > 0
+        ? [
+            {
+              id: 'pending',
+              label: '4. Stock Status Pending',
+              subtitle: 'Awaiting dispatch categorization',
+              color: 'slate',
+              items: pending,
+            },
+          ]
+        : []),
+    ];
+  }, [activeItems, editedItems]);
 
   // Debounce search
   useEffect(() => {
@@ -1751,13 +1817,45 @@ export const DispatchManagement: React.FC = () => {
 
                                 {/* Items Breakdown Table */}
                                 <div className="card overflow-hidden bg-white border border-slate-200 shadow-xs">
-                                  <div className="px-3.5 py-2 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between">
-                                    <span className="text-xs font-bold text-slate-800">
-                                      Quotation Line Items ({activeItems.length})
-                                    </span>
-                                    <span className="text-[11px] text-slate-500">
-                                      Update stock status & expected dispatch date per item
-                                    </span>
+                                  <div className="px-3.5 py-2.5 bg-slate-100/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-xs font-bold text-slate-800">
+                                        Quotation Line Items ({activeItems.length})
+                                      </span>
+                                      <span className="text-[11px] text-slate-500 hidden sm:inline">
+                                        Update stock status & expected dispatch date per item
+                                      </span>
+                                    </div>
+
+                                    {/* View Mode Switcher: Default Quotation Order vs Group by Availability */}
+                                    <div className="inline-flex rounded-lg bg-white p-0.5 border border-slate-300 shadow-2xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setItemsViewMode('default')}
+                                        className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center space-x-1.5 cursor-pointer ${
+                                          itemsViewMode === 'default'
+                                            ? 'bg-slate-900 text-white shadow-xs'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                        title="View items in original quotation order"
+                                      >
+                                        <Layers size={12} />
+                                        <span>Default View</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setItemsViewMode('availability')}
+                                        className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center space-x-1.5 cursor-pointer ${
+                                          itemsViewMode === 'availability'
+                                            ? 'bg-indigo-600 text-white shadow-xs'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                        title="Group items: Ready Stock first, Local Purchase next, Factory Order next"
+                                      >
+                                        <CheckCircle2 size={12} />
+                                        <span>Group by Availability</span>
+                                      </button>
+                                    </div>
                                   </div>
 
                                   <div className="overflow-x-auto">
@@ -1775,39 +1873,44 @@ export const DispatchManagement: React.FC = () => {
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
-                                        {activeItems.map((item, idx) => {
-                                          const itemId = item.id || idx;
-                                          const totalItemQty =
-                                            item.quantity_boxes > 0
-                                              ? item.quantity_boxes
-                                              : item.quantity_sqft > 0
-                                              ? item.quantity_sqft
-                                              : 1;
-                                          const unitLabel =
-                                            item.quantity_boxes > 0 ? 'boxes' : item.quantity_sqft > 0 ? 'sqft' : 'nos';
+                                        {(() => {
+                                          const renderItemRow = (
+                                            item: QuotationItem,
+                                            itemOriginalIndex: number,
+                                            displayNum: number
+                                          ) => {
+                                            const itemId = item.id || itemOriginalIndex;
+                                            const totalItemQty =
+                                              item.quantity_boxes > 0
+                                                ? item.quantity_boxes
+                                                : item.quantity_sqft > 0
+                                                ? item.quantity_sqft
+                                                : 1;
+                                            const unitLabel =
+                                              item.quantity_boxes > 0 ? 'boxes' : item.quantity_sqft > 0 ? 'sqft' : 'nos';
 
-                                          const itemState = editedItems[itemId] || {
-                                            status: item.dispatch_status || 'Ready Stock',
-                                            date: item.expected_dispatch_date
-                                              ? String(item.expected_dispatch_date).split('T')[0]
-                                              : overallDate,
-                                            notes: item.dispatch_notes || '',
-                                            dispatched_quantity:
-                                              item.dispatched_quantity !== undefined && item.dispatched_quantity !== null
-                                                ? item.dispatched_quantity
-                                                : (item.dispatch_status === 'Dispatched' ? totalItemQty : 0),
-                                            procurement_status: item.procurement_status || '',
-                                            procurement_notes: item.procurement_notes || '',
-                                          };
+                                            const itemState = editedItems[itemId] || {
+                                              status: item.dispatch_status || 'Ready Stock',
+                                              date: item.expected_dispatch_date
+                                                ? String(item.expected_dispatch_date).split('T')[0]
+                                                : overallDate,
+                                              notes: item.dispatch_notes || '',
+                                              dispatched_quantity:
+                                                item.dispatched_quantity !== undefined && item.dispatched_quantity !== null
+                                                  ? item.dispatched_quantity
+                                                  : (item.dispatch_status === 'Dispatched' ? totalItemQty : 0),
+                                              procurement_status: item.procurement_status || '',
+                                              procurement_notes: item.procurement_notes || '',
+                                            };
 
-                                          const isItemMissingDate = !itemState.date && !overallDate;
+                                            const isItemMissingDate = !itemState.date && !overallDate;
 
-                                          return (
-                                            <React.Fragment key={itemId}>
-                                              <tr className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                                                  {idx + 1}
-                                                </td>
+                                            return (
+                                              <React.Fragment key={itemId}>
+                                                <tr className="hover:bg-slate-50/80 transition-colors">
+                                                  <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                                                    {displayNum}
+                                                  </td>
                                                 <td className="py-2.5 px-3">
                                                   <div className="flex items-start space-x-2.5">
                                                     {item.item_image ? (
@@ -1997,162 +2100,145 @@ export const DispatchManagement: React.FC = () => {
                                                 </td>
                                               </tr>
 
-                                              {/* Interactive Purchase / Sourcing Tracker for Local & Factory Orders */}
+                                              {/* Minimalist Horizontal Procurement Stepper for Local & Factory Orders */}
                                               {(itemState.status === 'Need to Arrange from Local' ||
                                                 itemState.status === 'Factory Order' ||
                                                 Boolean(itemState.procurement_status)) && (
-                                                <tr className="bg-gradient-to-r from-amber-50/70 via-indigo-50/50 to-slate-50 border-b border-slate-200">
-                                                  <td colSpan={8} className="px-4 py-2.5">
-                                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/95 p-3 rounded-lg border border-amber-200 shadow-2xs">
-                                                      <div className="flex items-center space-x-2 shrink-0">
-                                                        <span
-                                                          className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider ${
-                                                            itemState.status === 'Factory Order'
-                                                              ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                                                              : 'bg-amber-100 text-amber-900 border border-amber-200'
-                                                          }`}
-                                                        >
-                                                          {itemState.status === 'Factory Order' ? (
-                                                            <Factory size={12} className="mr-1" />
-                                                          ) : (
-                                                            <Package size={12} className="mr-1" />
-                                                          )}
-                                                          <span>
-                                                            {itemState.status === 'Factory Order'
-                                                              ? 'Factory Sourcing'
-                                                              : 'Local Purchase'}
-                                                          </span>
-                                                        </span>
-                                                        <span className="text-[11px] font-bold text-slate-700">
-                                                          Procurement Progress:
-                                                        </span>
-                                                      </div>
+                                                <tr className="bg-slate-50/70 border-b border-slate-200">
+                                                  <td colSpan={8} className="p-3">
+                                                    <ProcurementStepper
+                                                      status={itemState.status}
+                                                      procurementStatus={itemState.procurement_status}
+                                                      procurementNotes={itemState.procurement_notes}
+                                                      isViewOnly={isViewOnly}
+                                                      itemName={item.description}
+                                                      onChangeStatus={(newStage) => {
+                                                        if (isViewOnly) return;
+                                                        setEditedItems((prev) => ({
+                                                          ...prev,
+                                                          [itemId]: {
+                                                            ...itemState,
+                                                            procurement_status: newStage,
+                                                          },
+                                                        }));
+                                                      }}
+                                                      onChangeNotes={(notes) => {
+                                                        if (isViewOnly) return;
+                                                        setEditedItems((prev) => ({
+                                                          ...prev,
+                                                          [itemId]: {
+                                                            ...itemState,
+                                                            procurement_notes: notes,
+                                                          },
+                                                        }));
+                                                      }}
+                                                      onMarkReadyStock={() => {
+                                                        const nextEdited = {
+                                                          ...editedItems,
+                                                          [itemId]: {
+                                                            ...itemState,
+                                                            status: 'Ready Stock' as DispatchStatusType,
+                                                          },
+                                                        };
+                                                        setEditedItems(nextEdited);
 
-                                                      <div className="flex items-center flex-wrap gap-1.5 flex-1">
-                                                        {VALID_PROCUREMENT_STATUSES.map((procStage, sIdx) => {
-                                                          const isCurrent = itemState.procurement_status === procStage;
-                                                          const currentIdx = VALID_PROCUREMENT_STATUSES.indexOf(
-                                                            itemState.procurement_status as any
+                                                        // Recalculate and update overall dispatch status immediately
+                                                        const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
+                                                        setOverallStatus(newOverall);
+                                                        if (selectedQuotationId) {
+                                                          setQuotations((prev) =>
+                                                            prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
                                                           );
-                                                          const isCompleted = currentIdx >= 0 && sIdx <= currentIdx;
-
-                                                          return (
-                                                            <button
-                                                              key={procStage}
-                                                              type="button"
-                                                              disabled={isViewOnly}
-                                                              onClick={() => {
-                                                                if (isViewOnly) return;
-                                                                setEditedItems((prev) => ({
-                                                                  ...prev,
-                                                                  [itemId]: {
-                                                                    ...itemState,
-                                                                    procurement_status: procStage,
-                                                                  },
-                                                                }));
-                                                              }}
-                                                              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
-                                                                isViewOnly
-                                                                  ? 'cursor-default'
-                                                                  : 'cursor-pointer hover:shadow-xs'
-                                                              } ${
-                                                                isCurrent
-                                                                  ? 'bg-slate-900 text-white shadow-xs scale-102 ring-2 ring-slate-800'
-                                                                  : isCompleted
-                                                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                                                  : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                                                              }`}
-                                                              title={`Click to set stage: ${procStage}`}
-                                                            >
-                                                              <span
-                                                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${
-                                                                  isCurrent
-                                                                    ? 'bg-amber-400 text-slate-950'
-                                                                    : isCompleted
-                                                                    ? 'bg-emerald-600 text-white'
-                                                                    : 'bg-slate-300 text-slate-700'
-                                                                }`}
-                                                              >
-                                                                {isCompleted && !isCurrent ? (
-                                                                  <Check size={9} strokeWidth={3} />
-                                                                ) : (
-                                                                  sIdx + 1
-                                                                )}
-                                                              </span>
-                                                              <span>{procStage}</span>
-                                                            </button>
-                                                          );
-                                                        })}
-                                                      </div>
-
-                                                      {itemState.procurement_status === 'Reached to Godown' &&
-                                                        itemState.status !== 'Ready Stock' &&
-                                                        !isViewOnly && (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                              const nextEdited = {
-                                                                ...editedItems,
-                                                                [itemId]: {
-                                                                  ...itemState,
-                                                                  status: 'Ready Stock' as DispatchStatusType,
-                                                                },
-                                                              };
-                                                              setEditedItems(nextEdited);
-
-                                                              // Recalculate and update overall dispatch status immediately
-                                                              const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
-                                                              setOverallStatus(newOverall);
-                                                              if (selectedQuotationId) {
-                                                                setQuotations((prev) =>
-                                                                  prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
-                                                                );
-                                                              }
-                                                            }}
-                                                            className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-none shrink-0 shadow-xs cursor-pointer flex items-center space-x-1"
-                                                            title="Item arrived in godown! Set dispatch status to Ready Stock"
-                                                          >
-                                                            <CheckCircle2 size={12} />
-                                                            <span>Mark Ready Stock</span>
-                                                          </button>
-                                                        )}
-
-                                                      <div className="w-full lg:w-64 shrink-0">
-                                                        <input
-                                                          type="text"
-                                                          placeholder={
-                                                            isViewOnly
-                                                              ? 'No procurement notes'
-                                                              : 'Supplier / LR # / Payment details...'
-                                                          }
-                                                          value={itemState.procurement_notes || ''}
-                                                          disabled={isViewOnly}
-                                                          readOnly={isViewOnly}
-                                                          onChange={(e) => {
-                                                            if (isViewOnly) return;
-                                                            const val = e.target.value;
-                                                            setEditedItems((prev) => ({
-                                                              ...prev,
-                                                              [itemId]: {
-                                                                ...itemState,
-                                                                procurement_notes: val,
-                                                              },
-                                                            }));
-                                                          }}
-                                                          className={`input input-xs text-[11px] w-full ${
-                                                            isViewOnly
-                                                              ? 'bg-slate-100 text-slate-600 cursor-not-allowed'
-                                                              : 'bg-white border-slate-300'
-                                                          }`}
-                                                        />
-                                                      </div>
-                                                    </div>
+                                                        }
+                                                      }}
+                                                    />
                                                   </td>
                                                 </tr>
                                               )}
                                             </React.Fragment>
                                           );
-                                        })}
+                                        };
+
+                                        if (itemsViewMode === 'default') {
+                                          return activeItems.map((item, idx) =>
+                                            renderItemRow(item, idx, idx + 1)
+                                          );
+                                        }
+
+                                        return availabilityGroups.map((group) => {
+                                          if (group.items.length === 0) return null;
+                                          return (
+                                            <React.Fragment key={group.id}>
+                                              <tr
+                                                className={`border-y ${
+                                                  group.color === 'emerald'
+                                                    ? 'bg-emerald-50/90 border-emerald-200'
+                                                    : group.color === 'amber'
+                                                    ? 'bg-amber-50/90 border-amber-200'
+                                                    : group.color === 'indigo'
+                                                    ? 'bg-indigo-50/90 border-indigo-200'
+                                                    : 'bg-slate-100 border-slate-200'
+                                                }`}
+                                              >
+                                                <td colSpan={8} className="px-3.5 py-2">
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="flex items-center space-x-2">
+                                                      <span
+                                                        className={`w-2.5 h-2.5 rounded-full ${
+                                                          group.color === 'emerald'
+                                                            ? 'bg-emerald-600'
+                                                            : group.color === 'amber'
+                                                            ? 'bg-amber-500'
+                                                            : group.color === 'indigo'
+                                                            ? 'bg-indigo-600'
+                                                            : 'bg-slate-400'
+                                                        }`}
+                                                      />
+                                                      <span
+                                                        className={`text-xs font-black uppercase tracking-wider ${
+                                                          group.color === 'emerald'
+                                                            ? 'text-emerald-950'
+                                                            : group.color === 'amber'
+                                                            ? 'text-amber-950'
+                                                            : group.color === 'indigo'
+                                                            ? 'text-indigo-950'
+                                                            : 'text-slate-800'
+                                                        }`}
+                                                      >
+                                                        {group.label}
+                                                      </span>
+                                                      <span className="text-[11px] text-slate-500 hidden md:inline">
+                                                        — {group.subtitle}
+                                                      </span>
+                                                    </div>
+                                                    <span
+                                                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                                        group.color === 'emerald'
+                                                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                                          : group.color === 'amber'
+                                                          ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                                          : group.color === 'indigo'
+                                                          ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                                          : 'bg-slate-200 text-slate-700'
+                                                      }`}
+                                                    >
+                                                      {group.items.length}{' '}
+                                                      {group.items.length === 1 ? 'item' : 'items'}
+                                                    </span>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                              {group.items.map((item, gIdx) =>
+                                                renderItemRow(
+                                                  item,
+                                                  activeItems.indexOf(item),
+                                                  gIdx + 1
+                                                )
+                                              )}
+                                            </React.Fragment>
+                                          );
+                                        });
+                                      })()}
                                       </tbody>
                                     </table>
                                   </div>

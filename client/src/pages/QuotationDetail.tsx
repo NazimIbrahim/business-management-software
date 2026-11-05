@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useServer } from '../context/ServerContext';
 import { useAuth } from '../context/AuthContext';
-import { Quotation, QuotationArea, Payment } from '../types';
+import { Quotation, QuotationArea, Payment, QuotationItem } from '../types';
+import { ProcurementStepper } from '../components/ProcurementStepper';
 import {
   ArrowLeft,
   Printer,
@@ -17,10 +18,15 @@ import {
   X,
   Lock,
   CheckCircle,
+  CheckCircle2,
   AlertTriangle,
   History,
   Eye,
   Truck,
+  PackageCheck,
+  Package,
+  Factory,
+  Layers,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
@@ -65,6 +71,9 @@ export const QuotationDetail: React.FC<Props> = ({
   } | null>(null);
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
+  // Line items view mode: Default sequence vs Grouped by Availability
+  const [itemViewMode, setItemViewMode] = useState<'default' | 'availability'>('default');
+
   const loadDetail = async () => {
     try {
       setLoading(true);
@@ -92,8 +101,74 @@ export const QuotationDetail: React.FC<Props> = ({
   }, [quotationId]);
 
   const allQuotationItems = useMemo(() => {
-    return (data?.areas || []).flatMap((a) => a.items || []);
+    return (data?.areas || []).flatMap((a) =>
+      (a.items || []).map((it) => ({
+        ...it,
+        area_name: it.area_name || a.area_name,
+      }))
+    );
   }, [data]);
+
+  const hasAnyDispatchUpdates = useMemo(() => {
+    return allQuotationItems.some(
+      (it) => it.dispatch_status && it.dispatch_status !== 'Yet to Update'
+    );
+  }, [allQuotationItems]);
+
+  const availabilityGroups = useMemo(() => {
+    const readyStock: QuotationItem[] = [];
+    const localPurchase: QuotationItem[] = [];
+    const factoryOrder: QuotationItem[] = [];
+    const pending: QuotationItem[] = [];
+
+    allQuotationItems.forEach((item) => {
+      const st = item.dispatch_status || 'Yet to Update';
+      if (st === 'Ready Stock' || st === 'Dispatched') {
+        readyStock.push(item);
+      } else if (st === 'Need to Arrange from Local') {
+        localPurchase.push(item);
+      } else if (st === 'Factory Order') {
+        factoryOrder.push(item);
+      } else {
+        pending.push(item);
+      }
+    });
+
+    return [
+      {
+        id: 'ready-stock',
+        label: '1. Ready Stock & Dispatched',
+        subtitle: 'Available immediately in godown / Dispatched',
+        color: 'emerald',
+        items: readyStock,
+      },
+      {
+        id: 'local-purchase',
+        label: '2. Local Purchase Items',
+        subtitle: 'Need to arrange from local distributors / market vendors',
+        color: 'amber',
+        items: localPurchase,
+      },
+      {
+        id: 'factory-order',
+        label: '3. Factory Order Items',
+        subtitle: 'Direct mill / factory production sourcing',
+        color: 'indigo',
+        items: factoryOrder,
+      },
+      ...(pending.length > 0
+        ? [
+            {
+              id: 'pending',
+              label: '4. Stock Status Pending',
+              subtitle: 'Awaiting dispatch categorization',
+              color: 'slate',
+              items: pending,
+            },
+          ]
+        : []),
+    ];
+  }, [allQuotationItems]);
 
   const encryptedProductMap = useMemo(() => {
     if (!data?.quotation) return new Map<string, string>();
@@ -606,227 +681,446 @@ export const QuotationDetail: React.FC<Props> = ({
       )}
       </div>
 
-      {/* Items Section (Sanitary vs Tiles) */}
-      {quotation.quotation_type === 'sanitary' ? (
-        <div className="card overflow-hidden">
-          <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 font-bold text-xs text-slate-900 uppercase tracking-wide flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <span>Sanitary Ware Line Items</span>
-            </div>
-            <span className="text-[11px] font-normal text-slate-500">
-              Total: {allQuotationItems.length} items ({allQuotationItems.reduce((acc, it) => acc + (it.quantity_boxes || 1), 0)} Nos)
+      {/* Items Display Switcher (Default View vs Group by Availability) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center space-x-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+            Items Display Mode:
+          </span>
+          {hasAnyDispatchUpdates ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              Dispatch Updated
             </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-600 bg-slate-50/50 text-[11px]">
-                  <th className="py-2.5 px-3 text-center w-10">Sl</th>
-                  <th className="py-2.5 px-3 w-16 text-center">Image</th>
-                  <th className="py-2.5 px-3 w-32">Item Code</th>
-                  <th className="py-2.5 px-3 min-w-[200px]">Item Description</th>
-                  <th className="py-2.5 px-3 text-right w-24">Qty (Nos)</th>
-                  <th className="py-2.5 px-3 text-right w-28">MRP (₹)</th>
-                  <th className="py-2.5 px-3 text-right w-24">Discount %</th>
-                  <th className="py-2.5 px-3 text-right w-28">Discounted Price</th>
-                  <th className="py-2.5 px-3 text-right w-32 font-bold">Total (₹)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {allQuotationItems.length > 0 ? (
-                  allQuotationItems.map((item, idx) => (
-                    <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
-                        {item.sl_no || idx + 1}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {item.item_image ? (
-                          <img
-                            src={item.item_image}
-                            alt={item.item_code}
-                            onClick={() => setEnlargedImage(item.item_image || null)}
-                            className="w-10 h-10 object-cover rounded-lg border border-slate-200 shadow-2xs mx-auto cursor-pointer hover:opacity-90"
-                            title="Click to view full image"
-                          />
-                        ) : (
-                          <span className="text-slate-400 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                        {item.item_code || item.size || '-'}
-                      </td>
-                      <td className="py-2.5 px-3 font-medium text-slate-800">
-                        {item.description}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                        {item.quantity_boxes || 1} Nos
-                      </td>
-                      <td className="py-2.5 px-3 text-right text-slate-600 font-mono tabular-nums">
-                        ₹ {formatCurrency(item.mrp_price || item.base_rate_per_box || item.rate_per_box || 0)}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-amber-800 font-semibold tabular-nums">
-                        {Number(item.discount_percent || 0) > 0 ? `${item.discount_percent}%` : '-'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 tabular-nums">
-                        ₹ {formatCurrency(item.rate_per_box)}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-950 tabular-nums">
-                        ₹ {formatCurrency(item.total_amount)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={9} className="py-6 text-center text-slate-400">
-                      No sanitary items recorded in this quotation.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+              Standard View
+            </span>
+          )}
         </div>
-      ) : (
-        /* Room-wise Items */
-        <div className="space-y-3">
-          <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Itemized Areas & Tile Specifications
-          </h2>
 
-          {areas.map((area) => (
-            <div key={area.id} className="card overflow-hidden">
-              <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 font-bold text-xs text-slate-900 uppercase tracking-wide">
-                AREA: {area.area_name}
-              </div>
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setItemViewMode('default')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center space-x-1.5 cursor-pointer ${
+              itemViewMode === 'default'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers size={13} />
+            <span>Default View ({quotation.quotation_type === 'sanitary' ? 'Sanitary List' : 'By Area'})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setItemViewMode('availability')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center space-x-1.5 cursor-pointer ${
+              itemViewMode === 'availability'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <PackageCheck size={13} />
+            <span>Group by Availability (Ready Stock → Local → Factory)</span>
+          </button>
+        </div>
+      </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-600 bg-slate-50/50 text-[11px]">
-                      <th className="py-2 px-3 text-center w-8">Sl</th>
-                      <th className="py-2 px-3">Description</th>
-                      <th className="py-2 px-3">Brand</th>
-                      <th className="py-2 px-3">Size</th>
-                      <th className="py-2 px-2.5">Type</th>
-                      <th className="py-2 px-3 text-right">Cov/Box</th>
-                      <th className="py-2 px-3 text-right">Sqft</th>
-                      <th className="py-2 px-3 text-right">Rate/Sqft</th>
-                      <th className="py-2 px-3 text-right">Boxes/Qty</th>
-                      <th className="py-2 px-3 text-right">Rate/Unit</th>
-                      <th className="py-2 px-3 text-right">Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {area.items && area.items.length > 0 ? (
-                      area.items.map((item) => {
-                        const pType = (item.product_type || 'box').toLowerCase();
-                        const badgeStyles: Record<string, { label: string; cls: string }> = {
-                          box: { label: 'Box', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-                          pieces: { label: 'Pcs', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
-                          sqft: { label: 'Sq.Ft', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                          bags: { label: 'Bags', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-                          nos: { label: 'Nos', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
-                        };
-                        const badge = badgeStyles[pType] || badgeStyles['box'];
+      {itemViewMode === 'availability' ? (
+        <div className="space-y-4">
+          {availabilityGroups.map((group) => {
+            if (group.items.length === 0) return null;
+            return (
+              <div key={group.id} className="card overflow-hidden shadow-2xs">
+                {/* Group Header */}
+                <div
+                  className={`px-4 py-2.5 border-b font-bold text-xs flex flex-wrap items-center justify-between gap-2 ${
+                    group.color === 'emerald'
+                      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                      : group.color === 'amber'
+                      ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+                      : group.color === 'indigo'
+                      ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+                      : 'bg-slate-100 border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        group.color === 'emerald'
+                          ? 'bg-emerald-600'
+                          : group.color === 'amber'
+                          ? 'bg-amber-500'
+                          : group.color === 'indigo'
+                          ? 'bg-indigo-600'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span className="uppercase tracking-wider">{group.label}</span>
+                    <span className="text-[11px] font-normal opacity-75 hidden sm:inline">
+                      ({group.subtitle})
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      group.color === 'emerald'
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                        : group.color === 'amber'
+                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                        : group.color === 'indigo'
+                        ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                        : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-600 bg-slate-50/60 text-[11px]">
+                        <th className="py-2.5 px-3 text-center w-10">#</th>
+                        <th className="py-2.5 px-3 w-16 text-center">Image</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">Item Description</th>
+                        <th className="py-2.5 px-3 w-32">Area / Section</th>
+                        <th className="py-2.5 px-3 text-right w-24">Qty</th>
+                        <th className="py-2.5 px-3 text-right w-28">Rate (₹)</th>
+                        <th className="py-2.5 px-3 text-right w-32 font-bold">Total (₹)</th>
+                        <th className="py-2.5 px-3 w-36">Stock Status</th>
+                        <th className="py-2.5 px-3 w-32">Expected Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {group.items.map((item, gIdx) => {
+                        const totalQty =
+                          item.quantity_boxes > 0
+                            ? `${item.quantity_boxes} ${item.product_type || (quotation.quotation_type === 'sanitary' ? 'Nos' : 'boxes')}`
+                            : item.quantity_sqft > 0
+                            ? `${item.quantity_sqft} sqft`
+                            : '1 nos';
 
                         return (
-                          <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-2 px-3 text-center text-slate-400 font-mono">
-                              {item.sl_no}
-                            </td>
-                            <td className="py-2 px-3 text-slate-900">
-                              <div className="font-semibold">{item.description}</div>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center space-x-1">
-                                <span>Ref:</span>
-                                <span className="bg-amber-50 text-amber-800 font-semibold px-1 rounded border border-amber-200/60" title="Masked product code on Encrypted Export">
-                                  {item.encrypted_code || encryptedProductMap.get((item.description || '').trim()) || derive3LetterCode(item.description)}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-3 text-slate-600">{item.brand}</td>
-                            <td className="py-2 px-3 text-slate-600 font-mono">{item.size}</td>
-                            <td className="py-2 px-2.5">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.cls}`}>
-                                {badge.label}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-right text-slate-600 tabular-nums">
-                              {pType === 'box' ? Number(item.coverage_area).toFixed(1) : '-'}
-                            </td>
-                            <td className="py-2 px-3 text-right font-medium tabular-nums">
-                              {pType === 'box' || pType === 'sqft' ? item.quantity_sqft : '-'}
-                            </td>
-                            <td className="py-2 px-3 text-right tabular-nums">
-                              {pType === 'box' || pType === 'sqft' ? (
-                                <div>
-                                  <div>₹ {formatCurrency(item.rate_per_sqft)}</div>
-                                  {Number(item.discount_percent || 0) > 0 ? (
-                                    <div className="text-[10px] text-emerald-700 font-medium">
-                                      (-{item.discount_percent}%) <span className="line-through text-slate-400">₹{formatCurrency(item.base_rate_per_sqft || item.rate_per_sqft)}</span>
-                                    </div>
-                                  ) : isCeraBrand(item.brand) && Number(quotation.discount_amount || 0) > 0 ? (
-                                    <div className="text-[10px] text-amber-700 font-medium">CERA (0%)</div>
-                                  ) : null}
+                          <React.Fragment key={item.id || gIdx}>
+                            <tr className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
+                                {gIdx + 1}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                {item.item_image ? (
+                                  <img
+                                    src={item.item_image}
+                                    alt={item.description}
+                                    onClick={() => setEnlargedImage(item.item_image || null)}
+                                    className="w-10 h-10 object-cover rounded-lg border border-slate-200 shadow-2xs mx-auto cursor-pointer hover:opacity-90"
+                                    title="Click to view full image"
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 text-xs">-</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <div className="font-semibold text-slate-900">
+                                  {item.description}
                                 </div>
-                              ) : (
-                                '-'
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right text-slate-700 font-semibold tabular-nums">
-                              {pType === 'sqft'
-                                ? '-'
-                                : `${item.quantity_boxes} ${
-                                    pType === 'bags'
-                                      ? 'Bags'
-                                      : pType === 'pieces'
-                                      ? 'Pcs'
-                                      : pType === 'nos'
-                                      ? 'Nos'
-                                      : 'Boxes'
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex flex-wrap items-center gap-x-2">
+                                  {item.item_code && (
+                                    <span className="bg-slate-100 px-1 rounded font-semibold text-slate-700">
+                                      {item.item_code}
+                                    </span>
+                                  )}
+                                  {item.brand && <span>Brand: {item.brand}</span>}
+                                  {item.size && <span>Size: {item.size}</span>}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 font-medium text-xs">
+                                {item.area_name || 'General Area'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                {totalQty}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-700 tabular-nums">
+                                ₹ {formatCurrency(item.rate_per_box || item.rate_per_sqft || 0)}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-950 tabular-nums">
+                                ₹ {formatCurrency(item.total_amount)}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    item.dispatch_status === 'Ready Stock'
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                      : item.dispatch_status === 'Dispatched'
+                                      ? 'bg-teal-100 text-teal-900 border border-teal-300'
+                                      : item.dispatch_status === 'Need to Arrange from Local'
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : item.dispatch_status === 'Factory Order'
+                                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                                   }`}
-                            </td>
-                            <td className="py-2 px-3 text-right text-slate-600 tabular-nums">
-                              {pType === 'sqft' ? (
-                                '-'
-                              ) : (
-                                <div>
-                                  <div>₹ {formatCurrency(item.rate_per_box)}</div>
-                                  {Number(item.discount_percent || 0) > 0 ? (
-                                    <div className="text-[10px] text-emerald-700 font-medium">
-                                      (-{item.discount_percent}%) <span className="line-through text-slate-400">₹{formatCurrency(item.base_rate_per_box || item.rate_per_box)}</span>
-                                    </div>
-                                  ) : isCeraBrand(item.brand) && Number(quotation.discount_amount || 0) > 0 ? (
-                                    <div className="text-[10px] text-amber-700 font-medium">CERA (0%)</div>
-                                  ) : null}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right font-bold text-slate-900 tabular-nums">
-                              <div>₹ {formatCurrency(item.total_amount)}</div>
-                              {Number(item.discount_percent || 0) > 0 && Number(item.discount_amount || 0) > 0 && (
-                                <div className="text-[10px] text-slate-400 line-through font-normal">
-                                  ₹ {formatCurrency(Number(item.total_amount) + Number(item.discount_amount))}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
+                                >
+                                  {item.dispatch_status || 'Yet to Update'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 font-mono text-xs">
+                                {item.expected_dispatch_date
+                                  ? new Date(item.expected_dispatch_date).toLocaleDateString('en-GB')
+                                  : quotation.expected_dispatch_date
+                                  ? new Date(quotation.expected_dispatch_date).toLocaleDateString('en-GB')
+                                  : '-'}
+                              </td>
+                            </tr>
+
+                            {/* Minimalist Horizontal Procurement Stepper for Local Purchase and Factory Orders */}
+                            {(item.dispatch_status === 'Need to Arrange from Local' ||
+                              item.dispatch_status === 'Factory Order' ||
+                              Boolean(item.procurement_status)) && (
+                              <tr className="bg-slate-50/50 border-b border-slate-200">
+                                <td colSpan={9} className="p-3">
+                                  <ProcurementStepper
+                                    status={item.dispatch_status || 'Need to Arrange from Local'}
+                                    procurementStatus={item.procurement_status}
+                                    procurementNotes={item.procurement_notes}
+                                    isViewOnly={true}
+                                    itemName={item.description}
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={11} className="py-4 text-center text-slate-400">
-                          No line items recorded in this area.
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Default View: Sanitary vs Tiles */
+        quotation.quotation_type === 'sanitary' ? (
+          <div className="card overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 font-bold text-xs text-slate-900 uppercase tracking-wide flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                <span>Sanitary Ware Line Items</span>
+              </div>
+              <span className="text-[11px] font-normal text-slate-500">
+                Total: {allQuotationItems.length} items ({allQuotationItems.reduce((acc, it) => acc + (it.quantity_boxes || 1), 0)} Nos)
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-600 bg-slate-50/50 text-[11px]">
+                    <th className="py-2.5 px-3 text-center w-10">Sl</th>
+                    <th className="py-2.5 px-3 w-16 text-center">Image</th>
+                    <th className="py-2.5 px-3 w-32">Item Code</th>
+                    <th className="py-2.5 px-3 min-w-[200px]">Item Description</th>
+                    <th className="py-2.5 px-3 text-right w-24">Qty (Nos)</th>
+                    <th className="py-2.5 px-3 text-right w-28">MRP (₹)</th>
+                    <th className="py-2.5 px-3 text-right w-24">Discount %</th>
+                    <th className="py-2.5 px-3 text-right w-28">Discounted Price</th>
+                    <th className="py-2.5 px-3 text-right w-32 font-bold">Total (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allQuotationItems.length > 0 ? (
+                    allQuotationItems.map((item, idx) => (
+                      <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
+                          {item.sl_no || idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.item_image ? (
+                            <img
+                              src={item.item_image}
+                              alt={item.item_code}
+                              onClick={() => setEnlargedImage(item.item_image || null)}
+                              className="w-10 h-10 object-cover rounded-lg border border-slate-200 shadow-2xs mx-auto cursor-pointer hover:opacity-90"
+                              title="Click to view full image"
+                            />
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                          {item.item_code || item.size || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-slate-800">
+                          {item.description}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                          {item.quantity_boxes || 1} Nos
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-600 font-mono tabular-nums">
+                          ₹ {formatCurrency(item.mrp_price || item.base_rate_per_box || item.rate_per_box || 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-amber-800 font-semibold tabular-nums">
+                          {Number(item.discount_percent || 0) > 0 ? `${item.discount_percent}%` : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 tabular-nums">
+                          ₹ {formatCurrency(item.rate_per_box)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-950 tabular-nums">
+                          ₹ {formatCurrency(item.total_amount)}
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={9} className="py-6 text-center text-slate-400">
+                        No sanitary items recorded in this quotation.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          /* Room-wise Items */
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Itemized Areas & Tile Specifications
+            </h2>
+
+            {areas.map((area) => (
+              <div key={area.id} className="card overflow-hidden">
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 font-bold text-xs text-slate-900 uppercase tracking-wide">
+                  AREA: {area.area_name}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-600 bg-slate-50/50 text-[11px]">
+                        <th className="py-2 px-3 text-center w-8">Sl</th>
+                        <th className="py-2 px-3">Description</th>
+                        <th className="py-2 px-3">Brand</th>
+                        <th className="py-2 px-3">Size</th>
+                        <th className="py-2 px-2.5">Type</th>
+                        <th className="py-2 px-3 text-right">Cov/Box</th>
+                        <th className="py-2 px-3 text-right">Sqft</th>
+                        <th className="py-2 px-3 text-right">Rate/Sqft</th>
+                        <th className="py-2 px-3 text-right">Boxes/Qty</th>
+                        <th className="py-2 px-3 text-right">Rate/Unit</th>
+                        <th className="py-2 px-3 text-right">Total (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {area.items && area.items.length > 0 ? (
+                        area.items.map((item) => {
+                          const pType = (item.product_type || 'box').toLowerCase();
+                          const badgeStyles: Record<string, { label: string; cls: string }> = {
+                            box: { label: 'Box', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+                            pieces: { label: 'Pcs', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+                            sqft: { label: 'Sq.Ft', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                            bags: { label: 'Bags', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                            nos: { label: 'Nos', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
+                          };
+                          const badge = badgeStyles[pType] || badgeStyles['box'];
+
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-2 px-3 text-center text-slate-400 font-mono">
+                                {item.sl_no}
+                              </td>
+                              <td className="py-2 px-3 text-slate-900">
+                                <div className="font-semibold">{item.description}</div>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center space-x-1">
+                                  <span>Ref:</span>
+                                  <span className="bg-amber-50 text-amber-800 font-semibold px-1 rounded border border-amber-200/60" title="Masked product code on Encrypted Export">
+                                    {item.encrypted_code || encryptedProductMap.get((item.description || '').trim()) || derive3LetterCode(item.description)}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-slate-600">{item.brand}</td>
+                              <td className="py-2 px-3 text-slate-600 font-mono">{item.size}</td>
+                              <td className="py-2 px-2.5">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.cls}`}>
+                                  {badge.label}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-right text-slate-600 tabular-nums">
+                                {pType === 'box' ? Number(item.coverage_area).toFixed(1) : '-'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-medium tabular-nums">
+                                {pType === 'box' || pType === 'sqft' ? item.quantity_sqft : '-'}
+                              </td>
+                              <td className="py-2 px-3 text-right tabular-nums">
+                                {pType === 'box' || pType === 'sqft' ? (
+                                  <div>
+                                    <div>₹ {formatCurrency(item.rate_per_sqft)}</div>
+                                    {Number(item.discount_percent || 0) > 0 ? (
+                                      <div className="text-[10px] text-emerald-700 font-medium">
+                                        (-{item.discount_percent}%) <span className="line-through text-slate-400">₹{formatCurrency(item.base_rate_per_sqft || item.rate_per_sqft)}</span>
+                                      </div>
+                                    ) : isCeraBrand(item.brand) && Number(quotation.discount_amount || 0) > 0 ? (
+                                      <div className="text-[10px] text-amber-700 font-medium">CERA (0%)</div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  '-'
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right text-slate-700 font-semibold tabular-nums">
+                                {pType === 'sqft'
+                                  ? '-'
+                                  : `${item.quantity_boxes} ${
+                                      pType === 'bags'
+                                        ? 'Bags'
+                                        : pType === 'pieces'
+                                        ? 'Pcs'
+                                        : pType === 'nos'
+                                        ? 'Nos'
+                                        : 'Boxes'
+                                    }`}
+                              </td>
+                              <td className="py-2 px-3 text-right text-slate-600 tabular-nums">
+                                {pType === 'sqft' ? (
+                                  '-'
+                                ) : (
+                                  <div>
+                                    <div>₹ {formatCurrency(item.rate_per_box)}</div>
+                                    {Number(item.discount_percent || 0) > 0 ? (
+                                      <div className="text-[10px] text-emerald-700 font-medium">
+                                        (-{item.discount_percent}%) <span className="line-through text-slate-400">₹{formatCurrency(item.base_rate_per_box || item.rate_per_box)}</span>
+                                      </div>
+                                    ) : isCeraBrand(item.brand) && Number(quotation.discount_amount || 0) > 0 ? (
+                                      <div className="text-[10px] text-amber-700 font-medium">CERA (0%)</div>
+                                    ) : null}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right font-bold text-slate-900 tabular-nums">
+                                <div>₹ {formatCurrency(item.total_amount)}</div>
+                                {Number(item.discount_percent || 0) > 0 && Number(item.discount_amount || 0) > 0 && (
+                                  <div className="text-[10px] text-slate-400 line-through font-normal">
+                                    ₹ {formatCurrency(Number(item.total_amount) + Number(item.discount_amount))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={11} className="py-4 text-center text-slate-400">
+                            No line items recorded in this area.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* Payment History */}
