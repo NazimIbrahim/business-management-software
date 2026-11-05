@@ -147,7 +147,19 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             }`}
           >
             {/* FRONT FACE: Physical ID Badge Pass */}
-            <div className="stream-badge-card stream-badge-front">
+            <div
+              className="stream-badge-card stream-badge-front"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100%',
+                height: '100%',
+                margin: 0,
+              }}
+            >
               {/* Punched slot cutout at top */}
               <div className="stream-punch-slot" aria-hidden="true" />
 
@@ -283,7 +295,19 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
             </div>
 
             {/* BACK FACE: ACCESS GRANTED Clearance Hologram */}
-            <div className="stream-badge-card stream-badge-back">
+            <div
+              className="stream-badge-card stream-badge-back"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100%',
+                height: '100%',
+                margin: 0,
+              }}
+            >
               {/* Punched slot cutout at top */}
               <div className="stream-punch-slot" aria-hidden="true" />
 
@@ -345,7 +369,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
-        <span className="stream-footer-version">v2.4.32</span>
+        <span className="stream-footer-version">v2.4.33</span>
       </footer>
     </div>
   );
