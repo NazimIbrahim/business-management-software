@@ -51,6 +51,14 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
   return (
     <div className="stream-login-viewport">
+      {/* Ambient Animated Floating Smokey Fog Clouds */}
+      <div className="stream-smoke-container" aria-hidden="true">
+        <div className="stream-smoke-orb stream-smoke-1" />
+        <div className="stream-smoke-orb stream-smoke-2" />
+        <div className="stream-smoke-orb stream-smoke-3" />
+        <div className="stream-smoke-orb stream-smoke-4" />
+      </div>
+
       {/* Top Header Navigation (Clean Light Theme) */}
       <header className="stream-header">
         <div className="stream-header-brand">
@@ -67,27 +75,28 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
           </div>
         </div>
 
+        {/* Minimized Minimalist Actions */}
         <div className="stream-header-actions">
           <div
-            className="stream-status-pill"
+            className="stream-status-pill-mini"
             title={`Connected to ${serverUrl}`}
           >
             <span
-              className={`stream-status-dot ${
+              className={`stream-status-dot-mini ${
                 isConnected ? 'connected' : 'disconnected'
               }`}
             />
-            <span>{isConnected ? 'Server Connected' : 'Disconnected'}</span>
+            <span>{isConnected ? 'Connected' : 'Offline'}</span>
           </div>
 
           <button
             type="button"
             onClick={onOpenServerSettings}
-            className="stream-config-btn"
+            className="stream-config-btn-mini"
             title="Configure Server Settings"
           >
-            <Server size={12} />
-            <span>Configure</span>
+            <Server size={11} />
+            <span>Config</span>
           </button>
         </div>
       </header>
