@@ -444,20 +444,41 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
   };
 
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      {
-        sl_no: prev.length + 1,
-        item_code: '',
-        item_description: '',
-        item_image: '',
-        quantity: 1,
-        mrp_price: 0,
-        discount_percent: 0,
-        discounted_price: 0,
-        total_price: 0,
-      },
-    ]);
+    setItems((prev) => {
+      const nextIndex = prev.length;
+      setTimeout(() => {
+        const mobileInput = document.querySelector<HTMLElement>(
+          `[data-mobile-sanitary-suggest="${nextIndex}"]`
+        );
+        if (mobileInput) {
+          mobileInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          mobileInput.focus();
+        } else {
+          const deskInput = document.querySelector<HTMLElement>(
+            `[data-sanitary-cell="${nextIndex}-0"]`
+          );
+          if (deskInput) {
+            deskInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            deskInput.focus();
+          }
+        }
+      }, 120);
+
+      return [
+        ...prev,
+        {
+          sl_no: prev.length + 1,
+          item_code: '',
+          item_description: '',
+          item_image: '',
+          quantity: 1,
+          mrp_price: 0,
+          discount_percent: 0,
+          discounted_price: 0,
+          total_price: 0,
+        },
+      ];
+    });
   };
 
   const duplicateItem = (index: number) => {
@@ -1569,6 +1590,16 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
               </div>
             </div>
           ))}
+
+          {/* Quick Add Next Item Button directly after the mobile item cards */}
+          <button
+            type="button"
+            onClick={addItem}
+            className="w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-[#415A77]/40 hover:border-[#415A77] bg-white hover:bg-slate-50 text-[#1B263B] font-bold text-xs flex items-center justify-center space-x-1.5 shadow-2xs transition-all active:scale-[0.99]"
+          >
+            <Plus size={15} className="text-[#415A77]" />
+            <span>+ Add Next Item</span>
+          </button>
         </div>
 
         {/* Desktop View: Full Spreadsheet Table */}

@@ -561,6 +561,25 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
       total_amount: initialTotal,
     });
     setAreas(newAreas);
+
+    setTimeout(() => {
+      const addedIdx = newAreas[areaIdx].items.length - 1;
+      const mobileInput = document.querySelector<HTMLElement>(
+        `[data-mobile-suggest="${areaIdx}-${addedIdx}"]`
+      );
+      if (mobileInput) {
+        mobileInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        mobileInput.focus();
+      } else {
+        const desktopInput = document.querySelector<HTMLElement>(
+          `[data-cell="${areaIdx}-${addedIdx}-0"]`
+        );
+        if (desktopInput) {
+          desktopInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          desktopInput.focus();
+        }
+      }
+    }, 120);
   };
 
   const handleRemoveItem = (areaIdx: number, itemIdx: number) => {
@@ -2416,6 +2435,16 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                   </div>
                 );
               })}
+
+              {/* Quick Add Line Item Button directly after the last item */}
+              <button
+                type="button"
+                onClick={() => handleAddItem(areaIdx)}
+                className="w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-[#415A77]/40 hover:border-[#415A77] bg-white hover:bg-slate-50 text-[#1B263B] font-bold text-xs flex items-center justify-center space-x-1.5 shadow-2xs transition-all active:scale-[0.99]"
+              >
+                <Plus size={15} className="text-[#415A77]" />
+                <span>+ Add Line Item in {area.name || `Area #${areaIdx + 1}`}</span>
+              </button>
             </div>
 
             {/* Desktop View: Full Spreadsheet Table */}
@@ -2754,6 +2783,21 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Area Card Footer: Add Line Item Button at the bottom of the room */}
+            <div className="p-2.5 sm:p-3 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleAddItem(areaIdx)}
+                className="btn btn-secondary text-xs px-3 py-1.5 font-bold inline-flex items-center space-x-1.5 hover:bg-slate-200/70"
+              >
+                <Plus size={13} className="text-[#415A77]" />
+                <span>+ Add Line Item</span>
+              </button>
+              <span className="text-xs text-slate-500 font-medium">
+                {area.items.length} {area.items.length === 1 ? 'item' : 'items'} in {area.name || `Area #${areaIdx + 1}`}
+              </span>
             </div>
           </div>
         ))}
