@@ -119,12 +119,13 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
     const rect = el.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const showAbove = spaceBelow < 280 && rect.top > 280;
-    const width = Math.max(rect.width, 420);
+    const maxAvailableWidth = Math.max(280, window.innerWidth - 24);
+    const width = Math.min(maxAvailableWidth, Math.max(rect.width, Math.min(420, maxAvailableWidth)));
 
     setSuggestPosition({
       top: showAbove ? undefined : rect.bottom + 4,
       bottom: showAbove ? window.innerHeight - rect.top + 4 : undefined,
-      left: Math.max(10, Math.min(rect.left, window.innerWidth - width - 10)),
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
       width,
     });
   };
@@ -148,7 +149,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
     const handleScrollOrResize = () => {
       if (activeTileSuggestRow) {
         const el = document.querySelector<HTMLElement>(
-          `[data-cell="${activeTileSuggestRow.areaIdx}-${activeTileSuggestRow.itemIdx}-0"]`
+          `[data-cell="${activeTileSuggestRow.areaIdx}-${activeTileSuggestRow.itemIdx}-0"], [data-mobile-suggest="${activeTileSuggestRow.areaIdx}-${activeTileSuggestRow.itemIdx}"]`
         );
         if (el) {
           updateSuggestPosition(el);
@@ -787,7 +788,11 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
       setActiveTileSuggestRow({ areaIdx, itemIdx });
       setTileHighlightIndex(0);
 
-      const el = targetEl || document.querySelector<HTMLElement>(`[data-cell="${areaIdx}-${itemIdx}-0"]`);
+      const el =
+        targetEl ||
+        document.querySelector<HTMLElement>(
+          `[data-cell="${areaIdx}-${itemIdx}-0"], [data-mobile-suggest="${areaIdx}-${itemIdx}"]`
+        );
       if (el) {
         updateSuggestPosition(el);
       }
@@ -1997,7 +2002,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
 
       {/* Section 2: Room / Areas & Tile Line Items */}
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
           <div>
             <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
               Room-Wise Tile Specifications
@@ -2006,12 +2011,12 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
               Calculate quantities across square feet and full packaging boxes
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {canClearAll && (
               <button
                 type="button"
                 onClick={handleRemoveAllItems}
-                className="btn btn-secondary btn-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                className="btn btn-secondary btn-xs sm:btn-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
                 title="Remove all items and areas (Admin & Accounts only)"
               >
                 <Trash2 size={13} className="text-rose-600" />
@@ -2021,7 +2026,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
             <button
               type="button"
               onClick={handleAddArea}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-xs sm:btn-sm"
             >
               <Plus size={13} />
               <span>Add Area / Room</span>
@@ -2032,8 +2037,8 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
         {areas.map((area, areaIdx) => (
           <div key={areaIdx} className="card overflow-hidden">
             {/* Area Header Bar */}
-            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex justify-between items-center">
-              <div className="flex items-center space-x-2 flex-1 max-w-xl">
+            <div className="bg-slate-50 px-3 sm:px-4 py-2 sm:py-2.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+              <div className="flex items-center space-x-2 flex-1 min-w-[200px] max-w-xl">
                 <span className="text-xs font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap">
                   AREA #{areaIdx + 1}:
                 </span>
@@ -2050,7 +2055,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                 />
               </div>
 
-              <div className="flex items-center space-x-2 ml-4">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
                 <button
                   type="button"
                   onClick={() => handleAddItem(areaIdx)}
@@ -2070,8 +2075,351 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
               </div>
             </div>
 
-            {/* Area Table */}
-            <div className="overflow-x-auto w-full">
+            {/* Mobile View: Fixed Zero-Horizontal-Scroll Cards */}
+            <div className="quotation-mobile-cards p-3 space-y-3">
+              {area.items.map((item, itemIdx) => {
+                const pType = (item.product_type || 'box').toLowerCase();
+                const selectedBrandObj = brands.find(
+                  (b) => b.name.toLowerCase() === (item.brand || '').toLowerCase()
+                );
+                const rowBrandSizes = coverages.filter(
+                  (c) =>
+                    (selectedBrandObj && c.brand_id === selectedBrandObj.id) ||
+                    (c.brand_name && c.brand_name.toLowerCase() === (item.brand || '').toLowerCase())
+                );
+                const hasCurrentSize = rowBrandSizes.some(
+                  (c) => c.size.toLowerCase() === (item.size || '').toLowerCase()
+                );
+
+                return (
+                  <div
+                    key={itemIdx}
+                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5 transition-all"
+                  >
+                    {/* Card Header: Item # and Delete */}
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-6 h-6 rounded-md bg-[#1B263B] text-white font-mono font-bold text-xs flex items-center justify-center shadow-2xs">
+                          {item.sl_no}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800">
+                          Line Item #{item.sl_no}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(areaIdx, itemIdx)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                        title="Delete this line item"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+
+                    {/* Description Field */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Tile / Surface Description
+                      </label>
+                      <input
+                        type="text"
+                        data-mobile-suggest={`${areaIdx}-${itemIdx}`}
+                        className="input input-sm py-1.5 font-medium text-slate-900 w-full tile-suggest-input"
+                        value={item.description}
+                        onChange={(e) =>
+                          handleDescriptionChange(areaIdx, itemIdx, e.target.value, e.currentTarget)
+                        }
+                        onFocus={(e) => {
+                          if (item.description) {
+                            handleDescriptionChange(areaIdx, itemIdx, item.description, e.currentTarget);
+                          }
+                        }}
+                        onBlur={() => handleDescriptionBlur(areaIdx, itemIdx)}
+                        placeholder="e.g. OMBRA EMERALD ULTRA - S"
+                      />
+                      <div className="flex items-center space-x-1.5 mt-1 text-[10px]">
+                        <span className="text-slate-400 font-medium">Encrypted Code:</span>
+                        <span
+                          className="bg-slate-900 text-amber-300 font-mono font-bold px-1.5 py-0.5 rounded border border-slate-700 shadow-2xs"
+                        >
+                          {encryptedProductMap.get((item.description || '').trim()) || derive3LetterCode(item.description)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Brand & Size (2 Columns) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Brand
+                        </label>
+                        <select
+                          className="select select-sm py-1 w-full text-xs"
+                          value={item.brand}
+                          onChange={(e) => handleItemChange(areaIdx, itemIdx, 'brand', e.target.value)}
+                        >
+                          {brands.length > 0 ? (
+                            brands.map((b) => (
+                              <option key={b.id} value={b.name}>
+                                {b.name}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="Simpolo Ceramics">Simpolo Ceramics</option>
+                          )}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Size
+                        </label>
+                        <select
+                          className="select select-sm py-1 font-mono text-xs w-full"
+                          value={item.size}
+                          onChange={(e) => handleItemChange(areaIdx, itemIdx, 'size', e.target.value)}
+                        >
+                          {rowBrandSizes.length > 0 ? (
+                            <>
+                              {item.size && !hasCurrentSize && (
+                                <option value={item.size}>
+                                  {item.size} ({item.product_type || 'box'})
+                                </option>
+                              )}
+                              {rowBrandSizes.map((c) => (
+                                <option key={c.id} value={c.size}>
+                                  {c.size} ({c.product_type || 'box'})
+                                </option>
+                              ))}
+                            </>
+                          ) : (
+                            <option value={item.size || ''}>
+                              {item.size
+                                ? `${item.size} (${item.product_type || 'box'})`
+                                : 'No sizes'}
+                            </option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Product Type & Coverage / Box (2 Columns) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Product Type
+                        </label>
+                        <select
+                          className={`select select-sm py-1 font-semibold text-xs w-full ${
+                            pType === 'box'
+                              ? 'text-blue-700 bg-blue-50/50'
+                              : pType === 'sqft'
+                              ? 'text-emerald-700 bg-emerald-50/50'
+                              : pType === 'bags'
+                              ? 'text-amber-800 bg-amber-50/50'
+                              : pType === 'pieces'
+                              ? 'text-purple-800 bg-purple-50/50'
+                              : 'text-slate-800 bg-slate-100'
+                          }`}
+                          value={item.product_type || 'box'}
+                          onChange={(e) =>
+                            handleItemChange(areaIdx, itemIdx, 'product_type', e.target.value)
+                          }
+                        >
+                          <option value="box">Box</option>
+                          <option value="pieces">Pieces</option>
+                          <option value="sqft">Sq.Ft</option>
+                          <option value="bags">Bags</option>
+                          <option value="nos">Nos</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Cov / Box (Sqft)
+                        </label>
+                        {pType === 'box' ? (
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="input input-sm py-1 text-right text-slate-600 font-mono w-full text-xs"
+                            value={item.coverage_area}
+                            onChange={(e) =>
+                              handleItemChange(areaIdx, itemIdx, 'coverage_area', e.target.value)
+                            }
+                            placeholder="Sqft/Box"
+                          />
+                        ) : (
+                          <div className="text-slate-400 font-mono text-xs py-1.5 px-2 bg-slate-50 rounded border border-slate-200 text-center">
+                            N/A
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sqft & Rate / Sqft (2 Columns) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Total Area (Sqft)
+                        </label>
+                        {pType === 'box' || pType === 'sqft' ? (
+                          <input
+                            type="number"
+                            step="1"
+                            className="input input-sm py-1 text-right font-semibold text-slate-900 tabular-nums w-full text-xs"
+                            placeholder="Sqft"
+                            value={item.quantity_sqft}
+                            onChange={(e) =>
+                              handleItemChange(areaIdx, itemIdx, 'quantity_sqft', e.target.value)
+                            }
+                          />
+                        ) : (
+                          <div className="text-slate-400 font-mono text-xs py-1.5 px-2 bg-slate-50 rounded border border-slate-200 text-center">
+                            N/A
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Rate / Sqft (₹)
+                        </label>
+                        {pType === 'box' || pType === 'sqft' ? (
+                          <div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="input input-sm py-1 text-right text-slate-700 tabular-nums w-full text-xs"
+                              placeholder="₹/Sqft"
+                              value={
+                                item.base_rate_per_sqft !== undefined && item.base_rate_per_sqft !== null
+                                  ? item.base_rate_per_sqft
+                                  : item.rate_per_sqft
+                              }
+                              onChange={(e) =>
+                                handleItemChange(areaIdx, itemIdx, 'rate_per_sqft', e.target.value)
+                              }
+                            />
+                            {isCeraBrand(item.brand) ? (
+                              <div className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
+                                CERA (0% Disc)
+                              </div>
+                            ) : computedDiscountPercent > 0 && item.discount_percent ? (
+                              <div className="text-[10px] text-emerald-700 font-mono font-semibold text-right mt-0.5">
+                                ₹{formatCurrency(item.rate_per_sqft)} (-{item.discount_percent}%)
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="text-slate-400 font-mono text-xs py-1.5 px-2 bg-slate-50 rounded border border-slate-200 text-center">
+                            N/A
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Boxes/Qty & Rate/Unit (2 Columns) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          {pType === 'box'
+                            ? 'Quantity (Boxes)'
+                            : pType === 'bags'
+                            ? 'Quantity (Bags)'
+                            : pType === 'pieces'
+                            ? 'Quantity (Pieces)'
+                            : pType === 'sqft'
+                            ? 'Boxes (N/A)'
+                            : 'Quantity (Nos)'}
+                        </label>
+                        {pType === 'sqft' ? (
+                          <div className="text-slate-400 font-mono text-xs py-1.5 px-2 bg-slate-50 rounded border border-slate-200 text-center">
+                            N/A
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            step={pType === 'box' ? '0.01' : '1'}
+                            className="input input-sm py-1 text-right tabular-nums w-full text-xs font-semibold text-slate-900"
+                            placeholder={
+                              pType === 'box'
+                                ? 'Boxes'
+                                : pType === 'bags'
+                                ? 'Bags'
+                                : pType === 'pieces'
+                                ? 'Pcs'
+                                : 'Nos'
+                            }
+                            value={item.quantity_boxes}
+                            onChange={(e) =>
+                              handleItemChange(areaIdx, itemIdx, 'quantity_boxes', e.target.value)
+                            }
+                          />
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                          Rate / {pType === 'box' ? 'Box' : pType === 'bags' ? 'Bag' : pType === 'pieces' ? 'Piece' : pType === 'sqft' ? 'Unit' : 'No'} (₹)
+                        </label>
+                        {pType === 'sqft' ? (
+                          <div className="text-slate-400 font-mono text-xs py-1.5 px-2 bg-slate-50 rounded border border-slate-200 text-center">
+                            N/A
+                          </div>
+                        ) : (
+                          <div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="input input-sm py-1 text-right tabular-nums w-full text-xs"
+                              placeholder="₹/Unit"
+                              value={
+                                item.base_rate_per_box !== undefined && item.base_rate_per_box !== null
+                                  ? item.base_rate_per_box
+                                  : item.rate_per_box
+                              }
+                              onChange={(e) =>
+                                handleItemChange(areaIdx, itemIdx, 'rate_per_box', e.target.value)
+                              }
+                            />
+                            {isCeraBrand(item.brand) ? (
+                              <div className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
+                                CERA (0% Disc)
+                              </div>
+                            ) : computedDiscountPercent > 0 && item.discount_percent ? (
+                              <div className="text-[10px] text-emerald-700 font-mono font-semibold text-right mt-0.5">
+                                ₹{formatCurrency(item.rate_per_box)} (-{item.discount_percent}%)
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Item Total (Highlighted Bar) */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 bg-slate-50/70 -mx-3 -mb-3 px-3 py-2 rounded-b-xl">
+                      <span className="text-xs font-semibold text-slate-600">Item Total:</span>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-slate-900 tabular-nums">
+                          ₹ {formatCurrency(item.total_amount)}
+                        </span>
+                        {computedDiscountPercent > 0 &&
+                          !isCeraBrand(item.brand) &&
+                          (item._itemBaseTotal || 0) > item.total_amount && (
+                            <span className="text-[10px] text-slate-400 line-through font-normal block">
+                              ₹ {formatCurrency(item._itemBaseTotal || 0)}
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Full Spreadsheet Table */}
+            <div className="quotation-desktop-table overflow-x-auto w-full">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-700 font-semibold text-[11px] uppercase tracking-wider">

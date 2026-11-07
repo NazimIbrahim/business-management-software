@@ -161,12 +161,13 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
     const rect = el.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const showAbove = spaceBelow < 280 && rect.top > 280;
-    const width = Math.max(rect.width, 360);
+    const maxAvailableWidth = Math.max(280, window.innerWidth - 24);
+    const width = Math.min(maxAvailableWidth, Math.max(rect.width, Math.min(360, maxAvailableWidth)));
 
     setSuggestPosition({
       top: showAbove ? undefined : rect.bottom + 4,
       bottom: showAbove ? window.innerHeight - rect.top + 4 : undefined,
-      left: Math.max(10, Math.min(rect.left, window.innerWidth - width - 10)),
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
       width,
     });
   };
@@ -296,7 +297,7 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
     const handleScrollOrResize = () => {
       if (activeSuggestRow !== null) {
         const el = document.querySelector<HTMLElement>(
-          `[data-sanitary-cell="${activeSuggestRow}-0"]`
+          `[data-sanitary-cell="${activeSuggestRow}-0"], [data-mobile-sanitary-suggest="${activeSuggestRow}"]`
         );
         if (el) {
           updateSuggestPosition(el);
@@ -680,7 +681,11 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
     setActiveSuggestRow(index);
     setCatalogHighlightIndex(0);
 
-    const el = targetEl || document.querySelector<HTMLElement>(`[data-sanitary-cell="${index}-0"]`);
+    const el =
+      targetEl ||
+      document.querySelector<HTMLElement>(
+        `[data-sanitary-cell="${index}-0"], [data-mobile-sanitary-suggest="${index}"]`
+      );
     if (el) {
       updateSuggestPosition(el);
     }
@@ -709,7 +714,9 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
         if (res.item && res.item.item_code.trim().toLowerCase() === trimmed.toLowerCase()) {
           applyCatalogItem(index, res.item);
         } else if (found.length > 0) {
-          const currentInput = document.querySelector<HTMLElement>(`[data-sanitary-cell="${index}-0"]`);
+          const currentInput = document.querySelector<HTMLElement>(
+            `[data-sanitary-cell="${index}-0"], [data-mobile-sanitary-suggest="${index}"]`
+          );
           if (currentInput) {
             updateSuggestPosition(currentInput);
           }
@@ -1335,48 +1342,237 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={handleToolbarPaste}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-2xs"
               title="Paste image from clipboard into active/unfilled item"
             >
-              <ClipboardPaste size={14} className="text-indigo-600" />
+              <ClipboardPaste size={13} className="text-indigo-600" />
               <span>Paste Image</span>
             </button>
             <button
               type="button"
               onClick={() => setCatalogPickerOpen(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-teal-50 border border-teal-300 text-teal-900 hover:bg-teal-100 transition-colors shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-teal-50 border border-teal-300 text-teal-900 hover:bg-teal-100 transition-colors shadow-2xs"
               title="Browse catalog and insert items directly"
             >
-              <Bath size={14} className="text-teal-700" />
+              <Bath size={13} className="text-teal-700" />
               <span>Browse Catalog</span>
             </button>
             {canClearAll && (
               <button
                 type="button"
                 onClick={handleRemoveAllItems}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs"
                 title="Remove all items (Admin & Accounts only)"
               >
-                <Trash2 size={14} className="text-rose-600" />
+                <Trash2 size={13} className="text-rose-600" />
                 <span>Remove All</span>
               </button>
             )}
             <button
               type="button"
               onClick={addItem}
-              className="btn btn-primary text-xs px-3 py-1.5 font-bold inline-flex items-center space-x-1.5 shadow-xs"
+              className="btn btn-primary text-xs px-2.5 sm:px-3 py-1.5 font-bold inline-flex items-center space-x-1.5 shadow-xs"
             >
-              <Plus size={14} />
+              <Plus size={13} />
               <span>Add Item</span>
             </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile View: Fixed Zero-Horizontal-Scroll Cards */}
+        <div className="quotation-mobile-cards p-3 space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={index}
+              className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2.5 transition-all"
+            >
+              {/* Header: Sl #, Image Thumbnail / Upload, and Delete */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2.5">
+                  <span className="w-6 h-6 rounded-md bg-[#1B263B] text-white font-mono font-bold text-xs flex items-center justify-center shadow-2xs">
+                    {item.sl_no}
+                  </span>
+                  <span className="text-xs font-bold text-slate-800">
+                    Sanitary Item #{item.sl_no}
+                  </span>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {/* Image Thumbnail / Picker */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={(el) => (fileInputRefs.current[index] = el)}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        processImageUpload(e.target.files[0], index);
+                      }
+                    }}
+                    className="hidden"
+                  />
+
+                  {item.item_image ? (
+                    <div className="relative inline-block">
+                      <img
+                        src={item.item_image}
+                        alt={item.item_code}
+                        onClick={() => setEnlargedImage(item.item_image)}
+                        className="w-8 h-8 object-cover rounded-md border border-slate-200 cursor-pointer"
+                        title="Click to view full image"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateItem(index, 'item_image', '')}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 hover:bg-rose-600"
+                        title="Remove Image"
+                      >
+                        <X size={8} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRefs.current[index]?.click()}
+                      className="px-2 py-0.5 rounded border border-dashed border-slate-300 text-slate-600 bg-slate-50 text-[10px] font-semibold"
+                    >
+                      + Image
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => removeItem(index)}
+                    className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                    title="Delete Item"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Item Code (with Catalog Autocomplete) */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                  Item Code (Auto-fetches details)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    data-mobile-sanitary-suggest={index}
+                    placeholder="e.g. KB1011011"
+                    value={item.item_code}
+                    onChange={(e) => handleItemCodeChange(index, e.target.value, e.currentTarget)}
+                    onFocus={(e) => {
+                      if (item.item_code) handleItemCodeChange(index, item.item_code, e.currentTarget);
+                    }}
+                    onBlur={() => handleItemCodeBlur(index)}
+                    className="sanitary-suggest-input w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-[#415A77] bg-white"
+                  />
+                  {isSearchingCatalog && activeSuggestRow === index && (
+                    <div className="absolute right-2.5 top-2">
+                      <Loader2 size={12} className="animate-spin text-teal-600" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Item Description */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                  Item Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Wall Hung Rimless WC with Soft Close Seat Cover"
+                  value={item.item_description}
+                  onChange={(e) => updateItem(index, 'item_description', e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:border-[#415A77] bg-white font-medium"
+                />
+              </div>
+
+              {/* Qty & MRP Price (2 Columns) */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                    Qty (Nos)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-[#415A77] bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                    MRP Price (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={item.mrp_price || ''}
+                    onChange={(e) => updateItem(index, 'mrp_price', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-[#415A77] bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Discount % & Discounted Price (2 Columns) */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                    Discount %
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="0"
+                    value={item.discount_percent || ''}
+                    onChange={(e) => updateItem(index, 'discount_percent', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-medium text-xs text-emerald-700 focus:outline-none focus:border-[#415A77] bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                    Discounted Price (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={item.discounted_price || ''}
+                    onChange={(e) => updateItem(index, 'discounted_price', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-right font-mono font-bold text-xs text-emerald-800 focus:outline-none focus:border-[#415A77] bg-emerald-50/40"
+                  />
+                </div>
+              </div>
+
+              {/* Total Price (Highlighted Bar) */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 bg-slate-50/70 -mx-3 -mb-3 px-3 py-2 rounded-b-xl">
+                <span className="text-xs font-semibold text-slate-600">Total Price:</span>
+                <span className="text-sm font-bold text-slate-900 font-mono tabular-nums">
+                  ₹ {formatCurrency(item.total_price)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View: Full Spreadsheet Table */}
+        <div className="quotation-desktop-table overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/90 text-[11px] font-bold text-[#1B263B] uppercase tracking-wider border-b border-slate-200">

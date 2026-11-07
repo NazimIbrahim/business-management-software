@@ -257,7 +257,7 @@ const AppContent: React.FC = () => {
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-transparent">
           <div
             key={activeTab + (selectedQuotationId ? `-${selectedQuotationId}` : '') + (isEditingQuotation ? '-edit' : '')}
-            className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-transparent animate-page-enter"
+            className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden bg-transparent animate-page-enter"
           >
             {renderMainContent()}
           </div>

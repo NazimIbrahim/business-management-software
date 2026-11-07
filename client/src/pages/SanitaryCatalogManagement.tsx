@@ -254,7 +254,7 @@ export const SanitaryCatalogManagement: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 p-4 sm:p-5 lg:p-6 space-y-4 overflow-y-auto w-full min-w-0">
+    <div className="flex-1 p-3 sm:p-5 lg:p-6 space-y-4 overflow-y-auto w-full min-w-0 max-w-full">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -273,37 +273,37 @@ export const SanitaryCatalogManagement: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {isAdminOrManager && (
             <>
               <button
                 type="button"
                 onClick={() => setUploaderOpen(true)}
-                className="btn btn-secondary btn-sm flex items-center space-x-1.5 border border-teal-500/30 text-teal-950 bg-teal-50 hover:bg-teal-100"
+                className="btn btn-secondary btn-xs sm:btn-sm flex items-center space-x-1 border border-teal-500/30 text-teal-950 bg-teal-50 hover:bg-teal-100"
                 title="Upload PDF Manufacturer Catalogue to extract items"
               >
-                <FileText size={14} className="text-teal-700" />
-                <span>Upload PDF Catalogue</span>
+                <FileText size={13} className="text-teal-700" />
+                <span className="text-xs">Upload PDF Catalogue</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="btn btn-primary btn-sm flex items-center space-x-1.5 shadow-sm"
+                className="btn btn-primary btn-xs sm:btn-sm flex items-center space-x-1 shadow-sm"
               >
-                <Plus size={14} />
-                <span>Add Item</span>
+                <Plus size={13} />
+                <span className="text-xs">Add Item</span>
               </button>
 
               {isAdminOrAccountant && (
                 <button
                   type="button"
                   onClick={handleClearAllCatalog}
-                  className="btn btn-secondary btn-sm flex items-center space-x-1.5 border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100"
+                  className="btn btn-secondary btn-xs sm:btn-sm flex items-center space-x-1 border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100"
                   title="Remove all data from sanitary catalog (Admin & Accounts only)"
                 >
-                  <Trash2 size={14} className="text-rose-600" />
-                  <span>Remove All Data</span>
+                  <Trash2 size={13} className="text-rose-600" />
+                  <span className="text-xs">Remove All Data</span>
                 </button>
               )}
             </>
@@ -312,7 +312,7 @@ export const SanitaryCatalogManagement: React.FC = () => {
           <button
             type="button"
             onClick={loadCatalog}
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-xs sm:btn-sm"
             title="Refresh list"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
@@ -322,13 +322,13 @@ export const SanitaryCatalogManagement: React.FC = () => {
 
       {/* Filter and Search Bar */}
       <div className="card p-3 space-y-2.5">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {/* Search Box */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              className="input input-sm pl-8 pr-8 w-full"
+              className="input input-sm pl-8 pr-8 w-full text-xs"
               placeholder="Search by Item Code, Description, Brand (e.g. Cera, Jaquar, Kohler)..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -343,45 +343,133 @@ export const SanitaryCatalogManagement: React.FC = () => {
             )}
           </div>
 
-          {/* Brand Filter */}
-          <div className="relative min-w-[160px]">
-            <select
-              className="select select-sm w-full text-xs font-medium"
-              value={selectedBrand}
-              onChange={(e) => {
-                setSelectedBrand(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="all">All Brands ({brands.length})</option>
-              {brands.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
+          {/* Brand & Category Filters */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+            <div className="relative min-w-0 sm:min-w-[150px]">
+              <select
+                className="select select-sm w-full text-xs font-medium"
+                value={selectedBrand}
+                onChange={(e) => {
+                  setSelectedBrand(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">All Brands ({brands.length})</option>
+                {brands.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
 
-          {/* Category Filter */}
-          <div className="relative min-w-[160px]">
-            <select
-              className="select select-sm w-full text-xs font-medium"
-              value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="all">All Categories ({categories.length})</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <div className="relative min-w-0 sm:min-w-[150px]">
+              <select
+                className="select select-sm w-full text-xs font-medium"
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">All Categories ({categories.length})</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Catalog Table */}
+      {/* Catalog Items */}
       <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Fixed Zero-Horizontal-Scroll Cards */}
+        <div className="quotation-mobile-cards p-3 space-y-2.5">
+          {loading && items.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs">
+              <RefreshCw className="animate-spin inline mr-2 text-slate-600" size={15} />
+              Loading Sanitary Catalog...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs">
+              <Bath size={24} className="mx-auto mb-2 opacity-30 text-teal-600" />
+              No sanitary items match your filters. Click <strong>"Upload PDF Catalogue"</strong> to import items.
+            </div>
+          ) : (
+            items.map((it) => (
+              <div
+                key={it.id}
+                className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <div
+                      onClick={() => it.item_image && setEnlargedImage(it.item_image)}
+                      className={`w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 shrink-0 overflow-hidden flex items-center justify-center ${
+                        it.item_image ? 'cursor-pointer hover:ring-2 hover:ring-teal-400' : ''
+                      }`}
+                    >
+                      {it.item_image ? (
+                        <img src={it.item_image} alt={it.item_code} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon size={16} className="text-slate-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-mono font-bold text-xs text-[#0D1B2A] truncate">
+                        {it.item_code}
+                      </div>
+                      <div className="flex items-center space-x-1.5 mt-0.5">
+                        <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          {it.brand || 'Sanitary'}
+                        </span>
+                        <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                          {it.category || 'General'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isAdminOrManager && (
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(it)}
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                        title="Edit Item"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => it.id && handleDeleteItem(it.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Delete Item"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-xs text-slate-700 leading-snug font-medium pt-1">
+                  {it.item_description}
+                </div>
+
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs">
+                  <span className="text-slate-400 text-[10px] font-mono">
+                    {it.catalog_name ? `${it.catalog_name}${it.page_number ? ` (p.${it.page_number})` : ''}` : 'Manual Entry'}
+                  </span>
+                  <div className="font-mono font-bold text-emerald-700 text-sm">
+                    ₹ {formatCurrency(it.mrp_price)}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop View: Full Spreadsheet Table */}
+        <div className="quotation-desktop-table overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-[#E0E1DD] bg-[#F8F9FA]/80 text-[#415A77] font-semibold text-[11px] uppercase tracking-wider">

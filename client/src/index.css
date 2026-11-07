@@ -391,6 +391,8 @@ th, td {
 .overflow-hidden { overflow: hidden; }
 .overflow-y-auto { overflow-y: auto; }
 .overflow-x-auto { overflow-x: auto; }
+.overflow-x-hidden { overflow-x: hidden !important; }
+.overflow-y-hidden { overflow-y: hidden !important; }
 
 /* Hover states */
 .hover\:bg-slate-50:hover { background-color: #F8F9FA; }
@@ -2004,10 +2006,10 @@ table tbody tr:hover {
   .sm\:p-4 { padding: 1rem; }
   .sm\:p-5 { padding: 1.25rem; }
   .sm\:p-6 { padding: 1.5rem; }
-  .sm\:block { display: block; }
-  .sm\:inline { display: inline; }
-  .sm\:inline-flex { display: inline-flex; }
-  .sm\:hidden { display: none; }
+  .sm\:block { display: block !important; }
+  .sm\:inline { display: inline !important; }
+  .sm\:inline-flex { display: inline-flex !important; }
+  .sm\:hidden { display: none !important; }
 }
 
 @media (min-width: 768px) {
@@ -2022,10 +2024,10 @@ table tbody tr:hover {
   .md\:col-span-3 { grid-column: span 3 / span 3; }
   .md\:col-span-4 { grid-column: span 4 / span 4; }
   .md\:col-span-5 { grid-column: span 5 / span 5; }
-  .md\:block { display: block; }
-  .md\:inline { display: inline; }
-  .md\:inline-flex { display: inline-flex; }
-  .md\:hidden { display: none; }
+  .md\:block { display: block !important; }
+  .md\:inline { display: inline !important; }
+  .md\:inline-flex { display: inline-flex !important; }
+  .md\:hidden { display: none !important; }
 }
 
 @media (min-width: 1024px) {
@@ -2044,10 +2046,29 @@ table tbody tr:hover {
   .lg\:col-span-6 { grid-column: span 6 / span 6; }
   .lg\:p-6 { padding: 1.5rem; }
   .lg\:space-y-5 > * + * { margin-top: 1.25rem; }
-  .lg\:block { display: block; }
-  .lg\:inline { display: inline; }
-  .lg\:inline-flex { display: inline-flex; }
-  .lg\:hidden { display: none; }
+  .lg\:block { display: block !important; }
+  .lg\:inline { display: inline !important; }
+  .lg\:inline-flex { display: inline-flex !important; }
+  .lg\:hidden { display: none !important; }
+}
+
+/* Responsive Quotation & Catalog UI System: Mobile Zero-Scroll Cards & Desktop Spreadsheet Table */
+@media (max-width: 767px) {
+  .quotation-desktop-table {
+    display: none !important;
+  }
+  .quotation-mobile-cards {
+    display: block !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .quotation-desktop-table {
+    display: block !important;
+  }
+  .quotation-mobile-cards {
+    display: none !important;
+  }
 }
 
 @media (min-width: 1280px) {

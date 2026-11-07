@@ -215,7 +215,7 @@ export const ProductManagement: React.FC = () => {
   const currentBrand = brands.find((b) => b.id === selectedBrandId);
 
   return (
-    <div className="flex-1 p-4 sm:p-5 lg:p-6 space-y-4 overflow-y-auto w-full min-w-0">
+    <div className="flex-1 p-3 sm:p-5 lg:p-6 space-y-4 overflow-y-auto w-full min-w-0 max-w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -224,11 +224,11 @@ export const ProductManagement: React.FC = () => {
             Configure box coverage formulas, pieces per carton, and standard rates
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button
             onClick={loadData}
             title="Refresh brands and formulas"
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-xs sm:btn-sm flex items-center space-x-1"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>
@@ -237,14 +237,14 @@ export const ProductManagement: React.FC = () => {
             <>
               <button
                 onClick={handleOpenCreateBrand}
-                className="btn btn-secondary btn-sm flex items-center space-x-1"
+                className="btn btn-secondary btn-xs sm:btn-sm flex items-center space-x-1"
               >
                 <Tag size={12} />
                 <span>+ Add Brand</span>
               </button>
               <button
                 onClick={handleOpenCreateCoverage}
-                className="btn btn-primary btn-sm flex items-center space-x-1"
+                className="btn btn-primary btn-xs sm:btn-sm flex items-center space-x-1"
               >
                 <Plus size={12} />
                 <span>+ Add Size Formula</span>
@@ -252,7 +252,7 @@ export const ProductManagement: React.FC = () => {
               {isAdminOrAccountant && (
                 <button
                   onClick={handleClearAllTileCatalog}
-                  className="btn btn-secondary btn-sm flex items-center space-x-1 border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100"
+                  className="btn btn-secondary btn-xs sm:btn-sm flex items-center space-x-1 border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100"
                   title="Remove all tile catalogue data (Admin & Accounts only)"
                 >
                   <Trash2 size={12} className="text-rose-600" />
@@ -352,7 +352,100 @@ export const ProductManagement: React.FC = () => {
             <span className="text-[10px] text-[#415A77]">Auto-populates quotation line items</span>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile View: Fixed Zero-Horizontal-Scroll Cards */}
+          <div className="quotation-mobile-cards p-3 space-y-2.5">
+            {filteredCoverages.length === 0 ? (
+              <div className="py-8 text-center text-xs text-[#778DA9]">
+                No size formulas recorded for this brand. Click "+ Add Size Formula" above.
+              </div>
+            ) : (
+              filteredCoverages.map((c) => {
+                const pType = c.product_type || 'box';
+                const badgeStyles: Record<string, { label: string; cls: string }> = {
+                  box: { label: 'Boxes (Box)', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+                  pieces: { label: 'Pieces (Pcs)', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+                  sqft: { label: 'Square Feet (Sq.Ft)', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                  bags: { label: 'Bags (Bag)', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                  nos: { label: 'Numbers (Nos)', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
+                };
+                const badge = badgeStyles[pType] || badgeStyles['box'];
+
+                return (
+                  <div
+                    key={c.id}
+                    className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono font-bold text-xs text-[#0D1B2A]">{c.size}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      {isAdminOrManager && (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenEditCoverage(c, e)}
+                            title="Edit size specification"
+                            className="p-1.5 rounded-lg text-[#415A77] hover:text-[#0D1B2A] hover:bg-[#E0E1DD] transition-colors"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteCoverage(c, e)}
+                            title="Delete size specification"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-slate-600 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400 font-medium">Packaging:</span>
+                      <span className="font-medium text-slate-700">
+                        {pType === 'box'
+                          ? `${Number(c.coverage_sqft).toFixed(2)} sqft/box (${c.pieces_per_box} pcs)`
+                          : pType === 'sqft'
+                          ? '1.00 Sq.Ft Unit'
+                          : pType === 'bags'
+                          ? '1 Bag Packaging'
+                          : pType === 'pieces'
+                          ? '1 Piece Unit'
+                          : '1 Unit (Nos)'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs">
+                      <span className="text-[11px] text-slate-400 font-medium">Default Rate:</span>
+                      <span className="font-bold text-[#0D1B2A]">
+                        {pType === 'box' ? (
+                          <span>
+                            ₹ {Number(c.default_rate_sqft).toFixed(2)}/sqft{' '}
+                            <span className="text-[11px] font-semibold text-[#415A77]">
+                              (₹ {Number(c.default_rate_box).toFixed(2)}/box)
+                            </span>
+                          </span>
+                        ) : pType === 'sqft' ? (
+                          <span>₹ {Number(c.default_rate_sqft).toFixed(2)}/sqft</span>
+                        ) : (
+                          <span>
+                            ₹ {Number(c.default_rate_box || c.default_rate_sqft).toFixed(2)}/{pType === 'bags' ? 'bag' : pType === 'pieces' ? 'pc' : 'no'}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop View: Full Spreadsheet Table */}
+          <div className="quotation-desktop-table overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[#E0E1DD] text-[#415A77] bg-[#F8F9FA]/60 font-semibold text-[11px]">
