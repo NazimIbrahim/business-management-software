@@ -223,7 +223,10 @@ export interface Payment {
   payment_number: string;
   quotation_id: number;
   quotation_number?: string;
+  customer_id?: number;
   customer_name?: string;
+  customer_phone?: string;
+  customer_gstin?: string;
   quotation_net_total?: number;
   amount: number;
   payment_mode: 'Cash' | 'Cheque' | 'Bank Transfer (NEFT/RTGS/IMPS)' | 'UPI (GPay/PhonePe/Paytm)' | 'Card';
@@ -231,6 +234,9 @@ export interface Payment {
   status: 'Recorded' | 'Cleared' | 'Bounced' | 'Refunded' | 'Verified';
   reference_number?: string;
   notes?: string;
+  proof_file_url?: string;
+  proof_file_name?: string;
+  proof_mime_type?: string;
   recorded_by_id?: number;
   recorded_by_name?: string;
   recorded_by_role?: string;

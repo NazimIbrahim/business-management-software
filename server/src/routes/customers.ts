@@ -85,6 +85,111 @@ customersRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// Fast customer search with active quotations & outstanding balance for Payment Entry Autocomplete
+customersRouter.get('/search', async (req: Request, res: Response) => {
+  try {
+    const q = ((req.query.q as string) || '').trim();
+    if (!q) {
+      res.json({ customers: [] });
+      return;
+    }
+    const cleanDigits = q.replace(/\D/g, '');
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
+    let sql = `
+      SELECT c.id, c.name, c.mobile_number, c.email, c.delivery_address, c.site_location, c.gstin,
+             COALESCE(q_agg.active_quotations_count, 0) as active_quotations_count,
+             COALESCE(q_agg.total_quoted, 0) as total_quoted,
+             COALESCE(q_agg.total_paid, 0) as total_paid,
+             GREATEST(0, COALESCE(q_agg.total_quoted, 0) - COALESCE(q_agg.total_paid, 0)) as outstanding_balance
+      FROM customers c
+      LEFT JOIN (
+        SELECT q.customer_id,
+               COUNT(q.id) as active_quotations_count,
+               SUM(q.net_total) as total_quoted,
+               SUM(COALESCE(p_agg.paid_amount, 0)) as total_paid
+        FROM quotations q
+        LEFT JOIN (
+          SELECT quotation_id, SUM(amount) as paid_amount
+          FROM payments
+          WHERE status IN ('Cleared', 'Verified')
+          GROUP BY quotation_id
+        ) p_agg ON p_agg.quotation_id = q.id
+        WHERE q.status NOT IN ('cancelled', 'rejected', 'archived')
+        ${isSalesperson ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})` : ''}
+        GROUP BY q.customer_id
+      ) q_agg ON q_agg.customer_id = c.id
+      WHERE c.is_active = true
+    `;
+    const params: any[] = [];
+    let idx = 1;
+
+    if (isSalesperson) {
+      sql += ` AND (c.created_by_id = $${idx} OR c.id IN (
+        SELECT DISTINCT customer_id FROM quotations
+        WHERE customer_id IS NOT NULL AND (sales_person_id = $${idx} OR assisted_sales_person_id = $${idx})
+      ))`;
+      params.push(req.user!.id);
+      idx++;
+    }
+
+    sql += ` AND (
+      c.name ILIKE $${idx}
+      OR c.mobile_number ILIKE $${idx}
+      OR c.site_location ILIKE $${idx}
+      OR c.gstin ILIKE $${idx}
+      OR c.id IN (
+        SELECT customer_id FROM quotations
+        WHERE quotation_number ILIKE $${idx}
+      )
+    `;
+    params.push(`%${q}%`);
+    idx++;
+
+    if (cleanDigits.length >= 3) {
+      sql += ` OR REPLACE(c.mobile_number, ' ', '') ILIKE $${idx}`;
+      params.push(`%${cleanDigits}%`);
+      idx++;
+    }
+    sql += `) ORDER BY outstanding_balance DESC, c.name ASC LIMIT 15`;
+
+    const customers = await query(sql, params);
+    res.json({ customers });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Active & unpaid quotations for payment entry selector
+customersRouter.get('/:id/active-quotations', async (req: Request, res: Response) => {
+  try {
+    const customerId = parseInt(req.params.id as string, 10);
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+
+    const quotes = await query(
+      `SELECT q.id, q.quotation_number, q.quotation_date, q.status, q.net_total,
+              COALESCE(paid.total_paid, 0) as total_paid,
+              GREATEST(0, q.net_total - COALESCE(paid.total_paid, 0)) as balance_due
+       FROM quotations q
+       LEFT JOIN (
+         SELECT quotation_id, SUM(amount) as total_paid
+         FROM payments
+         WHERE status IN ('Cleared', 'Verified')
+         GROUP BY quotation_id
+       ) paid ON paid.quotation_id = q.id
+       WHERE q.customer_id = $1
+         AND q.status NOT IN ('cancelled', 'rejected', 'archived')
+         ${isSalesperson ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})` : ''}
+       ORDER BY balance_due DESC, q.quotation_date DESC, q.id DESC`,
+      [customerId]
+    );
+
+    res.json({ quotations: quotes });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Fast customer lookup by phone, name, email, or address for autocomplete popup (scoped for salespersons)
 customersRouter.get('/lookup', async (req: Request, res: Response) => {
   try {

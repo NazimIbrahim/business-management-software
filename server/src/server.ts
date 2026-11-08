@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.53',
+    version: '2.4.54',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -82,12 +82,18 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/dispatch', dispatchRouter);
 
-// Static serving for uploaded tax invoices & receipts
+// Static serving for uploaded tax invoices & payment proofs
 const invoicesDir = path.resolve(process.cwd(), 'uploads/invoices');
 if (!fs.existsSync(invoicesDir)) {
   fs.mkdirSync(invoicesDir, { recursive: true });
 }
 app.use('/uploads/invoices', express.static(invoicesDir));
+
+const paymentProofsDir = path.resolve(process.cwd(), 'uploads/payment-proofs');
+if (!fs.existsSync(paymentProofsDir)) {
+  fs.mkdirSync(paymentProofsDir, { recursive: true });
+}
+app.use('/uploads/payment-proofs', express.static(paymentProofsDir));
 
 // Static frontend serving (turns central server into an instant web portal for any browser on LAN/web)
 const clientDistCandidates = [
@@ -683,7 +689,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.53' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.54' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

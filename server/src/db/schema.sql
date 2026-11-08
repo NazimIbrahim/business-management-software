@@ -243,6 +243,10 @@ CREATE TABLE IF NOT EXISTS payments (
     status VARCHAR(30) NOT NULL DEFAULT 'Recorded' CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified')),
     reference_number VARCHAR(100),
     notes TEXT,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+    proof_file_url TEXT,
+    proof_file_name VARCHAR(255),
+    proof_mime_type VARCHAR(100),
     recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     verified_by_name VARCHAR(120),
@@ -253,6 +257,17 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE INDEX IF NOT EXISTS idx_payments_quotation ON payments (quotation_id);
 CREATE INDEX IF NOT EXISTS idx_payments_date ON payments (payment_date);
+CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments (customer_id);
+
+CREATE OR REPLACE VIEW payment_transactions AS
+SELECT p.*,
+       q.quotation_number,
+       q.customer_name as quotation_customer_name,
+       COALESCE(c.name, q.customer_name) as customer_name,
+       COALESCE(c.mobile_number, q.customer_phone) as customer_phone
+FROM payments p
+JOIN quotations q ON q.id = p.quotation_id
+LEFT JOIN customers c ON c.id = p.customer_id;
 
 CREATE TABLE IF NOT EXISTS sales_targets (
     id SERIAL PRIMARY KEY,

@@ -6,14 +6,52 @@ import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 import PDFDocument from 'pdfkit';
 import { numberToWordsIndian } from '../utils/numberToWords';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 
 export const paymentsRouter = Router();
+
+// Setup multer storage for mandatory payment proofs
+const paymentProofsDir = path.resolve(process.cwd(), 'uploads/payment-proofs');
+if (!fs.existsSync(paymentProofsDir)) {
+  fs.mkdirSync(paymentProofsDir, { recursive: true });
+}
+
+const proofStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, paymentProofsDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    const randomId = crypto.randomBytes(6).toString('hex');
+    cb(null, `proof-${Date.now()}-${randomId}${ext}`);
+  },
+});
+
+const proofUpload = multer({
+  storage: proofStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPG, PNG, WEBP, and PDF files up to 5MB are accepted.'));
+    }
+  },
+});
 
 let paymentsSchemaEnsured = false;
 export async function ensurePaymentsSchema() {
   if (paymentsSchemaEnsured) return;
   try {
     await query(`
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_file_url TEXT;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_file_name VARCHAR(255);
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_mime_type VARCHAR(100);
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
@@ -22,6 +60,22 @@ export async function ensurePaymentsSchema() {
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
       ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
+      CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
+
+      UPDATE payments p
+      SET customer_id = q.customer_id
+      FROM quotations q
+      WHERE p.quotation_id = q.id AND p.customer_id IS NULL AND q.customer_id IS NOT NULL;
+
+      CREATE OR REPLACE VIEW payment_transactions AS
+      SELECT p.*,
+             q.quotation_number,
+             q.customer_name as quotation_customer_name,
+             COALESCE(c.name, q.customer_name) as customer_name,
+             COALESCE(c.mobile_number, q.customer_phone) as customer_phone
+      FROM payments p
+      JOIN quotations q ON q.id = p.quotation_id
+      LEFT JOIN customers c ON c.id = p.customer_id;
     `);
     paymentsSchemaEnsured = true;
   } catch (err: any) {
@@ -335,6 +389,44 @@ const streamReceiptPdf = async (req: Request, res: Response) => {
 paymentsRouter.get('/:id/receipt', optionalAuthenticateToken, streamReceiptPdf);
 paymentsRouter.get('/:id/pdf', optionalAuthenticateToken, streamReceiptPdf);
 
+// Stream Payment Proof (Screenshots, UPI receipts, bank slips, cheques)
+paymentsRouter.get('/:id/proof', optionalAuthenticateToken, async (req: Request, res: Response) => {
+  try {
+    await ensurePaymentsSchema();
+    const id = parseInt(req.params.id as string, 10);
+    const pRows = await query('SELECT * FROM payments WHERE id = $1', [id]);
+    if (pRows.length === 0 || !pRows[0].proof_file_url) {
+      res.status(404).json({ error: 'Payment proof file not found' });
+      return;
+    }
+
+    const payment = pRows[0];
+    const cleanUrl = payment.proof_file_url.replace(/^\//, '');
+    const filePath = path.resolve(process.cwd(), cleanUrl);
+
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ error: 'Payment proof file does not exist on disk' });
+      return;
+    }
+
+    const mimeType =
+      payment.proof_mime_type ||
+      (filePath.toLowerCase().endsWith('.pdf')
+        ? 'application/pdf'
+        : filePath.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : filePath.toLowerCase().endsWith('.webp')
+        ? 'image/webp'
+        : 'image/jpeg');
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${payment.proof_file_name || path.basename(filePath)}"`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 paymentsRouter.use(authenticateToken);
 
 // 1. List Payments (Paginated with filters: status, payment_mode, quotation_id, date range)
@@ -397,6 +489,7 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
               COALESCE(sum(CASE WHEN p.status = 'Recorded' THEN 1 ELSE 0 END), 0) as pending_count
        FROM payments p
        JOIN quotations q ON q.id = p.quotation_id
+       LEFT JOIN customers c ON c.id = p.customer_id
        WHERE ${whereSql}`,
       params
     );
@@ -410,7 +503,9 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
     const dataSql = `
       SELECT p.*,
              q.quotation_number,
-             q.customer_name,
+             COALESCE(c.name, q.customer_name) as customer_name,
+             COALESCE(c.mobile_number, q.customer_phone) as customer_phone,
+             c.gstin as customer_gstin,
              q.net_total as quotation_net_total,
              u.full_name as recorded_by_name,
              u.role as recorded_by_role,
@@ -418,6 +513,7 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
              uv.role as verified_by_role
       FROM payments p
       JOIN quotations q ON q.id = p.quotation_id
+      LEFT JOIN customers c ON c.id = p.customer_id
       LEFT JOIN users u ON u.id = p.recorded_by_id
       LEFT JOIN users uv ON uv.id = p.verified_by_id
       WHERE ${whereSql}
@@ -450,141 +546,250 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Record Payment (Advance / Milestone Payment)
+// 2. Record Payment (Advance / Milestone Payment) with Mandatory Payment Proof File Gate
 // Salespeople entries default to status 'Recorded' (Not Verified)
 // Accounts/Admins can record directly as 'Cleared' (Verified) or 'Recorded'
-paymentsRouter.post('/', async (req: Request, res: Response) => {
-  try {
-    await ensurePaymentsSchema();
-    const { quotation_id, amount, payment_mode, payment_date, reference_number, notes, is_verified } = req.body;
-
-    const parsedAmount = parseFloat(amount);
-    if (!quotation_id || isNaN(parsedAmount) || parsedAmount <= 0 || !payment_mode) {
-      res.status(400).json({ error: 'Valid quotation, positive amount, and payment mode are required' });
-      return;
-    }
-
-    const userRole = (req.user?.role || '').toLowerCase();
-    const isAccountsOrAdmin = userRole === 'accounts' || userRole === 'admin';
-    // Salespeople and Store Managers can enter payment receipts, but they are ALWAYS recorded as 'Recorded' (unverified)
-    // ONLY Accounts team (or Administrator) can record a payment as 'Cleared' / verified directly
-    const initialStatus = isAccountsOrAdmin ? (is_verified === false ? 'Recorded' : 'Cleared') : 'Recorded';
-
-    const result = await withTransaction(async (client) => {
-      // Validate quotation and check outstanding balance
-      const qRes = await client.query(
-        `SELECT q.id, q.quotation_number, q.customer_name, q.net_total,
-                COALESCE(p.total_paid, 0) as total_paid
-         FROM quotations q
-         LEFT JOIN (
-           SELECT quotation_id, SUM(amount) as total_paid
-           FROM payments WHERE status IN ('Cleared', 'Verified') GROUP BY quotation_id
-         ) p ON p.quotation_id = q.id
-         WHERE q.id = $1 FOR UPDATE OF q`,
-        [quotation_id]
-      );
-
-      if (qRes.rows.length === 0) {
-        throw new Error('Quotation not found');
-      }
-
-      const q = qRes.rows[0];
-      const outstanding = parseFloat(q.net_total) - parseFloat(q.total_paid);
-
-      // Warning if payment exceeds outstanding balance by more than rounding
-      if (parsedAmount > outstanding + 1.0) {
-        throw new Error(
-          `Payment amount (INR ${parsedAmount.toFixed(2)}) exceeds outstanding balance (INR ${outstanding.toFixed(2)})`
-        );
-      }
-
-      // Check duplicate payment submission within last 60 seconds with same amount and ref
-      if (reference_number) {
-        const dupCheck = await client.query(
-          `SELECT id FROM payments
-           WHERE quotation_id = $1 AND amount = $2 AND reference_number = $3
-             AND created_at > NOW() - INTERVAL '60 seconds'`,
-          [quotation_id, parsedAmount, reference_number.trim()]
-        );
-        if (dupCheck.rows.length > 0) {
-          throw new Error('Duplicate payment submission detected. Please wait.');
+paymentsRouter.post(
+  '/',
+  (req: Request, res: Response, next) => {
+    proofUpload.single('proof')(req, res, (err: any) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({
+            error: 'File too large. Maximum file size for payment proof is 5 MB.',
+            code: 'FILE_TOO_LARGE',
+          });
         }
+        return res.status(400).json({ error: `Upload error: ${err.message}`, code: 'UPLOAD_ERROR' });
+      } else if (err) {
+        return res.status(400).json({ error: err.message, code: 'INVALID_FILE' });
+      }
+      next();
+    });
+  },
+  async (req: Request, res: Response) => {
+    try {
+      await ensurePaymentsSchema();
+
+      // 1. Mandatory Payment Proof Upload Hard Gate
+      if (!req.file) {
+        res.status(400).json({
+          error:
+            '🚫 Payment Proof Required: You must attach a valid payment screenshot, receipt, or bank slip before recording this transaction.',
+          code: 'PAYMENT_PROOF_REQUIRED',
+        });
+        return;
       }
 
-      const paymentNumber = await generateNextPaymentNumber(client);
+      const {
+        quotation_id,
+        customer_id,
+        amount,
+        payment_mode,
+        payment_date,
+        reference_number,
+        notes,
+        is_verified,
+        allow_overpayment,
+      } = req.body;
 
-      const verifiedById = initialStatus === 'Cleared' ? req.user!.id : null;
-      const verifiedByName = initialStatus === 'Cleared' ? req.user!.full_name : null;
-      const verifiedAt = initialStatus === 'Cleared' ? new Date() : null;
+      const parsedQuotationId = parseInt(quotation_id, 10);
+      const parsedAmount = parseFloat(amount);
 
-      const pRes = await client.query(
-        `INSERT INTO payments (
-          payment_number, quotation_id, amount, payment_mode, payment_date,
-          status, reference_number, notes, recorded_by_id,
-          verified_by_id, verified_by_name, verified_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING *`,
-        [
-          paymentNumber,
-          quotation_id,
-          parsedAmount,
-          payment_mode,
-          payment_date || new Date().toISOString().split('T')[0],
-          initialStatus,
-          reference_number?.trim() || null,
-          notes || '',
-          req.user!.id,
-          verifiedById,
-          verifiedByName,
-          verifiedAt,
-        ]
-      );
+      if (isNaN(parsedQuotationId) || isNaN(parsedAmount) || parsedAmount <= 0 || !payment_mode) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {}
+        res.status(400).json({
+          error: 'Valid quotation, positive payment amount, and payment mode are required.',
+          code: 'INVALID_INPUT',
+        });
+        return;
+      }
 
-      const payment = pRes.rows[0];
+      // 2. Enforce Reference / UTR Number for non-cash transactions
+      const modeUpper = payment_mode.toUpperCase();
+      const isCash = modeUpper === 'CASH';
+      if (!isCash && (!reference_number || !reference_number.trim())) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {}
+        res.status(400).json({
+          error: `Transaction Reference / Cheque / UTR number is required for ${payment_mode}.`,
+          code: 'REFERENCE_NUMBER_REQUIRED',
+        });
+        return;
+      }
 
-      // If verified and fully paid, optionally update quotation status to 'closed'
-      if (initialStatus === 'Cleared' && parsedAmount >= outstanding - 0.5) {
-        await client.query(
-          `UPDATE quotations SET status = 'closed', updated_at = NOW() WHERE id = $1`,
-          [quotation_id]
+      const userRole = (req.user?.role || '').toLowerCase();
+      const isAccountsOrAdmin = userRole === 'accounts' || userRole === 'admin' || userRole === 'accountant';
+      const initialStatus = isAccountsOrAdmin
+        ? is_verified === 'false' || is_verified === false
+          ? 'Recorded'
+          : 'Cleared'
+        : 'Recorded';
+
+      const result = await withTransaction(async (client) => {
+        // Validate quotation and check outstanding balance
+        const qRes = await client.query(
+          `SELECT q.id, q.quotation_number, q.customer_id, q.customer_name, q.customer_phone, q.net_total,
+                  COALESCE(p.total_paid, 0) as total_paid
+           FROM quotations q
+           LEFT JOIN (
+             SELECT quotation_id, SUM(amount) as total_paid
+             FROM payments WHERE status IN ('Cleared', 'Verified') GROUP BY quotation_id
+           ) p ON p.quotation_id = q.id
+           WHERE q.id = $1 FOR UPDATE OF q`,
+          [parsedQuotationId]
         );
-      }
 
-      await recordAuditLog({
-        userId: req.user!.id,
-        username: req.user!.username,
-        action: initialStatus === 'Cleared' ? 'PAYMENT_RECORDED_AND_VERIFIED' : 'PAYMENT_RECORDED_PENDING_VERIFICATION',
-        entityType: 'payment',
-        entityId: payment.id,
-        details: {
-          payment_number: payment.payment_number,
-          amount: parsedAmount,
-          status: initialStatus,
-          quotation_id,
-          quotation_number: q.quotation_number,
-          recorded_by_name: req.user!.full_name,
-        },
-        ipAddress: req.ip,
+        if (qRes.rows.length === 0) {
+          throw new Error('Quotation not found');
+        }
+
+        const q = qRes.rows[0];
+        const outstanding = parseFloat(q.net_total) - parseFloat(q.total_paid);
+
+        // Warning / Confirmation check if payment exceeds outstanding balance
+        const isOverpayment = parsedAmount > outstanding + 1.0;
+        const isConfirmed = allow_overpayment === 'true' || allow_overpayment === true;
+        if (isOverpayment && !isConfirmed) {
+          const err: any = new Error(
+            `Payment amount (INR ${parsedAmount.toFixed(2)}) exceeds outstanding balance (INR ${outstanding.toFixed(
+              2
+            )}). Please confirm advance payment to proceed.`
+          );
+          err.code = 'EXCEEDS_BALANCE';
+          err.outstanding = outstanding;
+          throw err;
+        }
+
+        // Check duplicate payment submission within last 60 seconds with same amount and ref
+        if (reference_number && reference_number.trim()) {
+          const dupCheck = await client.query(
+            `SELECT id FROM payments
+             WHERE quotation_id = $1 AND amount = $2 AND reference_number = $3
+               AND created_at > NOW() - INTERVAL '60 seconds'`,
+            [parsedQuotationId, parsedAmount, reference_number.trim()]
+          );
+          if (dupCheck.rows.length > 0) {
+            throw new Error('Duplicate payment submission detected. Please wait.');
+          }
+        }
+
+        const paymentNumber = await generateNextPaymentNumber(client);
+
+        const verifiedById = initialStatus === 'Cleared' ? req.user!.id : null;
+        const verifiedByName = initialStatus === 'Cleared' ? req.user!.full_name : null;
+        const verifiedAt = initialStatus === 'Cleared' ? new Date() : null;
+
+        const relativeFileUrl = `/uploads/payment-proofs/${req.file!.filename}`;
+        const originalFileName = req.file!.originalname;
+        const mimeType = req.file!.mimetype;
+        const resolvedCustomerId = customer_id ? parseInt(customer_id, 10) : q.customer_id || null;
+
+        const pRes = await client.query(
+          `INSERT INTO payments (
+            payment_number, quotation_id, customer_id, amount, payment_mode, payment_date,
+            status, reference_number, notes, proof_file_url, proof_file_name, proof_mime_type,
+            recorded_by_id, verified_by_id, verified_by_name, verified_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          RETURNING *`,
+          [
+            paymentNumber,
+            parsedQuotationId,
+            resolvedCustomerId,
+            parsedAmount,
+            payment_mode,
+            payment_date || new Date().toISOString().split('T')[0],
+            initialStatus,
+            reference_number?.trim() || null,
+            notes || '',
+            relativeFileUrl,
+            originalFileName,
+            mimeType,
+            req.user!.id,
+            verifiedById,
+            verifiedByName,
+            verifiedAt,
+          ]
+        );
+
+        const payment = pRes.rows[0];
+
+        // If verified and fully paid, update quotation status to 'closed'
+        if (initialStatus === 'Cleared' && parsedAmount >= outstanding - 0.5) {
+          await client.query(
+            `UPDATE quotations SET status = 'closed', updated_at = NOW() WHERE id = $1`,
+            [parsedQuotationId]
+          );
+        }
+
+        await recordAuditLog({
+          userId: req.user!.id,
+          username: req.user!.username,
+          action:
+            initialStatus === 'Cleared'
+              ? 'PAYMENT_RECORDED_AND_VERIFIED'
+              : 'PAYMENT_RECORDED_PENDING_VERIFICATION',
+          entityType: 'payment',
+          entityId: payment.id,
+          details: {
+            payment_number: payment.payment_number,
+            amount: parsedAmount,
+            status: initialStatus,
+            quotation_id: parsedQuotationId,
+            quotation_number: q.quotation_number,
+            customer_id: resolvedCustomerId,
+            proof_file_name: originalFileName,
+            recorded_by_name: req.user!.full_name,
+          },
+          ipAddress: req.ip,
+        });
+
+        return { payment, quotation: q };
       });
 
-      return { payment, quotation: q };
-    });
+      // WebSocket broadcast to update billing, warehouse, accounting terminals
+      broadcast({
+        type: 'PAYMENT_RECORDED',
+        payload: {
+          id: result.payment.id,
+          payment_number: result.payment.payment_number,
+          quotation_id: result.payment.quotation_id,
+          customer_id: result.payment.customer_id,
+          amount: result.payment.amount,
+          status: result.payment.status,
+          proof_file_url: result.payment.proof_file_url,
+        },
+      });
 
-    broadcast({
-      type: 'PAYMENT_RECORDED',
-      payload: {
-        id: result.payment.id,
-        quotation_id: result.payment.quotation_id,
-        amount: result.payment.amount,
-        status: result.payment.status,
-      },
-    });
+      broadcast({
+        type: 'payment:recorded',
+        payload: {
+          id: result.payment.id,
+          payment_number: result.payment.payment_number,
+          quotation_id: result.payment.quotation_id,
+          amount: result.payment.amount,
+          status: result.payment.status,
+        },
+      });
 
-    res.status(201).json(result);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
+      res.status(201).json(result);
+    } catch (error: any) {
+      if (req.file) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {}
+      }
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+        outstanding: error.outstanding,
+      });
+    }
   }
-});
+);
 
 // 3. Accounts Verification Endpoint (Verify / Unverify payment receipt)
 // Only Managers / Admins / Accounts team members can perform this action
