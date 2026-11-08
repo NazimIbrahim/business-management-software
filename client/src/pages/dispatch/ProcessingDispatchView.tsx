@@ -174,6 +174,112 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   } | null>(null);
   const [supervisorOverageReason, setSupervisorOverageReason] = useState('');
 
+  // Reactive Quantity Editor for Tax Invoice Reconciliation
+  const handleInvoiceQtyChange = (quotationItemId: number, rawQty: number) => {
+    if (!reconcileDrawer) return;
+    const qty = isNaN(rawQty) || rawQty < 0 ? 0 : rawQty;
+
+    const updatedMatched = (reconcileDrawer.reconciliation.matched_items || []).map((it: any) => {
+      if (it.quotation_item_id === quotationItemId) {
+        const quoted = parseFloat(it.quoted_qty || 0);
+        const already = parseFloat(it.already_dispatched_qty || 0);
+        const newDispatched = Math.round((already + qty) * 100) / 100;
+        const pending = Math.max(0, Math.round((quoted - newDispatched) * 100) / 100);
+        const isOverage = newDispatched > quoted;
+        const excess = isOverage ? Math.round((newDispatched - quoted) * 100) / 100 : 0;
+        const fulfillmentStatus =
+          newDispatched >= quoted
+            ? 'DISPATCHED'
+            : newDispatched > 0
+            ? 'PARTIALLY_DISPATCHED'
+            : 'PENDING';
+
+        return {
+          ...it,
+          invoice_qty: qty,
+          new_dispatched_qty: newDispatched,
+          pending_qty: pending,
+          is_overage: isOverage,
+          excess_qty: excess,
+          fulfillment_status: fulfillmentStatus,
+        };
+      }
+      return it;
+    });
+
+    const hasOverages = updatedMatched.some((it: any) => it.is_overage);
+
+    setReconcileDrawer({
+      ...reconcileDrawer,
+      reconciliation: {
+        ...reconcileDrawer.reconciliation,
+        matched_items: updatedMatched,
+        has_overages: hasOverages,
+      },
+    });
+  };
+
+  // Manual Item Mapper: Bind an unmapped invoice line to a quotation item
+  const handleMapUnmappedLine = (unmappedIdx: number, targetQuoteItemId: number) => {
+    if (!reconcileDrawer) return;
+    const unmappedLine = reconcileDrawer.reconciliation.unmapped_invoice_lines?.[unmappedIdx];
+    const targetQuoteItem = reconcileDrawer.quote.items.find((i) => i.id === targetQuoteItemId);
+    if (!unmappedLine || !targetQuoteItem) return;
+
+    const quoted = parseFloat(String(targetQuoteItem.ordered_quantity || 0));
+    const already = parseFloat(String(targetQuoteItem.quantity_dispatched || 0));
+    const qty = parseFloat(String(unmappedLine.quantity || 0));
+    const newDispatched = Math.round((already + qty) * 100) / 100;
+    const pending = Math.max(0, Math.round((quoted - newDispatched) * 100) / 100);
+    const isOverage = newDispatched > quoted;
+    const excess = isOverage ? Math.round((newDispatched - quoted) * 100) / 100 : 0;
+    const fulfillmentStatus =
+      newDispatched >= quoted
+        ? 'DISPATCHED'
+        : newDispatched > 0
+        ? 'PARTIALLY_DISPATCHED'
+        : 'PENDING';
+
+    const newMatchedItem = {
+      quotation_item_id: targetQuoteItem.id,
+      description: targetQuoteItem.description,
+      brand: targetQuoteItem.brand,
+      size: targetQuoteItem.size,
+      invoice_description: unmappedLine.raw_description,
+      quoted_qty: quoted,
+      already_dispatched_qty: already,
+      invoice_qty: qty,
+      unit: unmappedLine.unit || 'BOX',
+      new_dispatched_qty: newDispatched,
+      pending_qty: pending,
+      fulfillment_status: fulfillmentStatus,
+      is_overage: isOverage,
+      excess_qty: excess,
+      match_score: 1.0,
+      confidence: 'MANUAL',
+    };
+
+    const nextMatched = [...(reconcileDrawer.reconciliation.matched_items || []), newMatchedItem];
+    const nextUnmapped = (reconcileDrawer.reconciliation.unmapped_invoice_lines || []).filter(
+      (_: any, idx: number) => idx !== unmappedIdx
+    );
+    const nextUnmatched = (reconcileDrawer.reconciliation.unmatched_items || []).filter(
+      (u: any) => u.quotation_item_id !== targetQuoteItemId
+    );
+
+    setReconcileDrawer({
+      ...reconcileDrawer,
+      reconciliation: {
+        ...reconcileDrawer.reconciliation,
+        matched_items: nextMatched,
+        unmapped_invoice_lines: nextUnmapped,
+        unmatched_items: nextUnmatched,
+        has_overages: nextMatched.some((m: any) => m.is_overage),
+        total_matched_count: nextMatched.length,
+      },
+    });
+  };
+
   const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
 
   const toggleExpand = (id: number) => {
@@ -941,16 +1047,21 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
               {/* Matched Line Items Table */}
               <div>
-                <h4 className="font-bold text-slate-800 mb-2 uppercase text-[11px] tracking-wider">
-                  Reconciled Line Items ({reconcileDrawer.reconciliation.matched_items?.length || 0} items)
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-slate-800 uppercase text-[11px] tracking-wider">
+                    Reconciled Line Items ({reconcileDrawer.reconciliation.matched_items?.length || 0} items)
+                  </h4>
+                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    💡 Invoice Qty is editable (recalculates live)
+                  </span>
+                </div>
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
                       <tr>
                         <th className="py-2 px-3">Description</th>
                         <th className="py-2 px-2 text-right">Quoted</th>
-                        <th className="py-2 px-2 text-right">Invoice Qty</th>
+                        <th className="py-2 px-2 text-right">Invoice Qty (Edit)</th>
                         <th className="py-2 px-2 text-right">New Dispatched</th>
                         <th className="py-2 px-2 text-right">Pending</th>
                         <th className="py-2 px-3 text-center">Status</th>
@@ -959,11 +1070,36 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                     <tbody className="divide-y divide-slate-100">
                       {(reconcileDrawer.reconciliation.matched_items || []).map((it: any) => (
                         <tr key={it.quotation_item_id} className={it.is_overage ? 'bg-rose-50/50' : ''}>
-                          <td className="py-2 px-3 font-semibold text-slate-800">{it.description}</td>
-                          <td className="py-2 px-2 text-right font-mono">{it.quoted_qty}</td>
-                          <td className="py-2 px-2 text-right font-mono font-bold text-indigo-700">{it.invoice_qty}</td>
-                          <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">{it.new_dispatched_qty}</td>
-                          <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">{it.pending_qty}</td>
+                          <td className="py-2 px-3 font-semibold text-slate-800">
+                            <div>{it.description}</div>
+                            {it.invoice_description && it.invoice_description !== it.description && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 font-normal">
+                                Invoice: {it.invoice_description}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-slate-600">{it.quoted_qty}</td>
+                          <td className="py-2 px-2 text-right">
+                            <div className="flex items-center justify-end space-x-1">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                className="w-20 px-2 py-1 text-right font-mono font-bold text-indigo-700 border border-indigo-300 rounded-lg focus:ring-1 focus:ring-indigo-500 bg-white shadow-2xs"
+                                value={it.invoice_qty}
+                                onChange={(e) =>
+                                  handleInvoiceQtyChange(it.quotation_item_id, parseFloat(e.target.value) || 0)
+                                }
+                              />
+                              <span className="text-[10px] text-slate-400 font-mono">{it.unit || 'BOX'}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">
+                            {it.new_dispatched_qty}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">
+                            {it.pending_qty}
+                          </td>
                           <td className="py-2 px-3 text-center">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -981,6 +1117,63 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   </table>
                 </div>
               </div>
+
+              {/* Unmapped Invoice Lines Mapping Control */}
+              {reconcileDrawer.reconciliation.unmapped_invoice_lines?.length > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs space-y-2">
+                  <div className="font-bold text-indigo-950 flex items-center justify-between">
+                    <span className="flex items-center space-x-1.5">
+                      <AlertTriangle size={13} className="text-indigo-600" />
+                      <span>
+                        Unmapped Invoice Lines Detected ({reconcileDrawer.reconciliation.unmapped_invoice_lines.length}):
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-indigo-700 font-normal">
+                      Bind invoice lines to quotation items manually
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {reconcileDrawer.reconciliation.unmapped_invoice_lines.map((unmapped: any, uIdx: number) => (
+                      <div
+                        key={uIdx}
+                        className="p-2 bg-white rounded-lg border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800 truncate">{unmapped.raw_description}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Detected Qty: {unmapped.quantity} {unmapped.unit}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <select
+                            className="text-xs px-2.5 py-1 border border-slate-300 rounded-lg bg-slate-50 font-medium"
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleMapUnmappedLine(uIdx, parseInt(e.target.value, 10));
+                              }
+                            }}
+                            defaultValue=""
+                          >
+                            <option value="">-- Map to Quotation Item --</option>
+                            {reconcileDrawer.quote.items
+                              .filter(
+                                (qIt) =>
+                                  !(reconcileDrawer.reconciliation.matched_items || []).some(
+                                    (m: any) => m.quotation_item_id === qIt.id
+                                  )
+                              )
+                              .map((qIt) => (
+                                <option key={qIt.id} value={qIt.id}>
+                                  {qIt.description} ({qIt.ordered_quantity} boxes)
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Unmatched Items Alert */}
               {reconcileDrawer.reconciliation.unmatched_items?.length > 0 && (

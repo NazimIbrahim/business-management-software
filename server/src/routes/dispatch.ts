@@ -8,6 +8,8 @@ import { query, withTransaction } from '../db/connection';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
+import { parseTaxInvoiceWithCoordinates } from '../utils/pdfTableParser';
+import { matchInvoiceItemToQuotationItems, normalizeCeramicName } from '../utils/fuzzyItemMatcher';
 
 export const dispatchRouter = Router();
 
@@ -1878,18 +1880,18 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
     }
     const quotation = quoteRows[0];
 
-    // Extract raw text from PDF
+    // Extract and parse Tax Invoice using Coordinate & Column-Bounded Parser
     const pdfBuffer = fs.readFileSync(req.file.path);
-    let fullText = '';
+    let parsedInvoice: any;
     try {
-      fullText = await extractTextFromPdf(pdfBuffer);
+      parsedInvoice = await parseTaxInvoiceWithCoordinates(pdfBuffer);
     } catch (parseErr: any) {
       if (req.file) fs.unlinkSync(req.file.path);
       res.status(400).json({ error: 'Failed to extract text from PDF: ' + parseErr.message });
       return;
     }
 
-    if (!fullText || fullText.trim().length === 0) {
+    if (!parsedInvoice.raw_text || parsedInvoice.raw_text.trim().length === 0) {
       if (req.file) fs.unlinkSync(req.file.path);
       res.status(400).json({
         error: 'PDF contains no readable text or is a scanned image without OCR text. Please upload a digital Tax Invoice PDF.',
@@ -1897,27 +1899,10 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       return;
     }
 
-    // Phone Numbers
-    const phoneMatches = Array.from(fullText.matchAll(/(?:\+91[\-\s]?)?([6-9]\d{9})\b/g)).map((m) => m[1]);
-    const detectedPhones = Array.from(new Set(phoneMatches));
-
-    // GSTIN (15 characters)
-    const gstinMatches = fullText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/gi) || [];
-    const detectedGstins = Array.from(new Set(gstinMatches.map((g) => g.toUpperCase())));
-
-    // Invoice Number
-    const invMatch =
-      fullText.match(/(?:Invoice\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
-      fullText.match(/(?:Bill\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
-      fullText.match(/(?:Tax\s*Invoice[\s\S]*?(?:No|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i);
-    const invoiceNumber = invMatch && invMatch[1] ? invMatch[1].trim() : `INV-${Date.now().toString().slice(-6)}`;
-
-    // Invoice Date
-    const dateMatch = fullText.match(/(?:Invoice\s*Date|Dated|Date)[\s.:#]*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4})/i);
-    let invoiceDate: string | null = null;
-    if (dateMatch && dateMatch[1]) {
-      invoiceDate = dateMatch[1];
-    }
+    const detectedPhones = parsedInvoice.customer_phones;
+    const detectedGstins = parsedInvoice.customer_gstins;
+    const invoiceNumber = parsedInvoice.invoice_number;
+    const invoiceDate = parsedInvoice.invoice_date;
 
     // Validate Customer Identity Match
     const targetPhoneCandidates = [quotation.customer_phone, quotation.cust_mobile]
@@ -1947,81 +1932,93 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       return;
     }
 
-    // Line Items Reconciliation Analysis
+    // Line Items Reconciliation Analysis with Robust Ceramic Fuzzy Normalization
     const itemRows = await query(
       `SELECT * FROM quotation_items WHERE quotation_id = $1 ORDER BY id ASC`,
       [quotationId]
     );
 
-    const fullTextLower = fullText.toLowerCase();
     const matchedItems: any[] = [];
     const unmatchedItems: any[] = [];
+    const matchedQuoteItemIds = new Set<number>();
+    const usedInvoiceIndices = new Set<number>();
 
-    for (const it of itemRows) {
-      const quotedQty = parseFloat(it.quantity_boxes || it.quantity_sqft || 0);
-      const alreadyDispatched = parseFloat(it.dispatched_quantity || 0);
-      const remainingQty = Math.max(0, quotedQty - alreadyDispatched);
+    // 1. Match extracted invoice items to quotation lines using Token-Set Sorensen-Dice Matcher
+    if (parsedInvoice.items && parsedInvoice.items.length > 0) {
+      for (let invIdx = 0; invIdx < parsedInvoice.items.length; invIdx++) {
+        const invItem = parsedInvoice.items[invIdx];
+        const matchResult = matchInvoiceItemToQuotationItems(invItem.raw_description, itemRows);
 
-      const descWords = (it.description || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter((w: string) => w.length > 2 && !['box', 'boxes', 'sqft', 'tile', 'tiles', 'sanitary', 'glazed', 'vitrified', 'series'].includes(w));
+        if (matchResult.bestMatch && !matchedQuoteItemIds.has(matchResult.bestMatch.id)) {
+          const qItem = matchResult.bestMatch;
+          matchedQuoteItemIds.add(qItem.id);
+          usedInvoiceIndices.add(invIdx);
 
-      const sizeStr = (it.size || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const brandStr = (it.brand || '').toLowerCase().trim();
+          const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 0);
+          const alreadyDispatched = parseFloat(qItem.dispatched_quantity || 0);
+          const invQty = parseFloat(invItem.quantity) || 0;
+          const newDispatched = alreadyDispatched + invQty;
+          const pending = Math.max(0, quotedQty - newDispatched);
+          const isOverage = newDispatched > quotedQty;
+          const excess = isOverage ? Math.round((newDispatched - quotedQty) * 100) / 100 : 0;
+          const status =
+            newDispatched >= quotedQty
+              ? 'DISPATCHED'
+              : newDispatched > 0
+              ? 'PARTIALLY_DISPATCHED'
+              : 'PENDING';
 
-      const wordMatches = descWords.filter((w: string) => fullTextLower.includes(w));
-      const hasWordMatch = descWords.length > 0 && (wordMatches.length >= Math.ceil(descWords.length * 0.4) || wordMatches.length >= 2);
-      const hasSizeMatch = sizeStr.length > 3 && fullTextLower.replace(/[^a-z0-9]/g, '').includes(sizeStr);
-      const isDetected = hasWordMatch || (hasSizeMatch && fullTextLower.includes(brandStr));
-
-      if (isDetected) {
-        let detectedInvoiceQty = remainingQty;
-
-        // Search near description in raw text for numbers followed by unit
-        const keywordPattern = descWords.slice(0, 2).join('|');
-        if (keywordPattern) {
-          const qtyRegex = new RegExp(`(?:${keywordPattern})[\\s\\S]{0,90}?(?:(\\d+(?:\\.\\d+)?)\\s*(?:box|boxes|sqft|pcs|nos|mtr)?|qty[\\s.:]*(\\d+(?:\\.\\d+)?))`, 'i');
-          const m = fullText.match(qtyRegex);
-          if (m) {
-            const val = parseFloat(m[1] || m[2]);
-            if (!isNaN(val) && val > 0) {
-              detectedInvoiceQty = val;
-            }
-          }
+          matchedItems.push({
+            quotation_item_id: qItem.id,
+            description: qItem.description,
+            brand: qItem.brand,
+            size: qItem.size,
+            invoice_description: invItem.raw_description,
+            quoted_qty: quotedQty,
+            already_dispatched_qty: alreadyDispatched,
+            invoice_qty: invQty,
+            unit: invItem.unit || 'BOX',
+            new_dispatched_qty: newDispatched,
+            pending_qty: pending,
+            fulfillment_status: status,
+            is_overage: isOverage,
+            excess_qty: excess,
+            match_score: matchResult.score,
+            confidence: matchResult.confidence,
+          });
         }
+      }
+    }
 
-        const newDispatched = alreadyDispatched + detectedInvoiceQty;
-        const pending = Math.max(0, quotedQty - newDispatched);
-        const isOverage = newDispatched > quotedQty;
-        const excess = isOverage ? Math.round((newDispatched - quotedQty) * 100) / 100 : 0;
-        const status = newDispatched >= quotedQty ? 'DISPATCHED' : (newDispatched > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING');
+    // 2. Fallback check for any quotation item not matched above
+    for (const qItem of itemRows) {
+      if (!matchedQuoteItemIds.has(qItem.id)) {
+        const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 0);
+        const alreadyDispatched = parseFloat(qItem.dispatched_quantity || 0);
+        const remainingQty = Math.max(0, quotedQty - alreadyDispatched);
 
-        matchedItems.push({
-          quotation_item_id: it.id,
-          description: it.description,
-          brand: it.brand,
-          size: it.size,
-          quoted_qty: quotedQty,
-          already_dispatched_qty: alreadyDispatched,
-          invoice_qty: detectedInvoiceQty,
-          new_dispatched_qty: newDispatched,
-          pending_qty: pending,
-          fulfillment_status: status,
-          is_overage: isOverage,
-          excess_qty: excess,
-        });
-      } else {
         unmatchedItems.push({
-          quotation_item_id: it.id,
-          description: it.description,
+          quotation_item_id: qItem.id,
+          description: qItem.description,
+          brand: qItem.brand,
+          size: qItem.size,
           quoted_qty: quotedQty,
           already_dispatched_qty: alreadyDispatched,
           remaining_qty: remainingQty,
         });
       }
     }
+
+    // 3. Unmapped invoice lines (lines in the invoice that weren't automatically bound to a quote item)
+    const unmappedInvoiceLines = (parsedInvoice.items || [])
+      .filter((_: any, idx: number) => !usedInvoiceIndices.has(idx))
+      .map((inv: any) => ({
+        raw_description: inv.raw_description,
+        clean_description: inv.clean_description,
+        quantity: inv.quantity,
+        unit: inv.unit,
+        raw_line: inv.raw_line,
+      }));
 
     // Save Invoice Record
     const relativeFileUrl = `/uploads/invoices/${path.basename(req.file.path)}`;
@@ -2033,9 +2030,12 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       matched_gstins: detectedGstins,
       matched_items: matchedItems,
       unmatched_items: unmatchedItems,
+      unmapped_invoice_lines: unmappedInvoiceLines,
       has_overages: matchedItems.some((i) => i.is_overage),
       total_matched_count: matchedItems.length,
       total_items_count: itemRows.length,
+      parser_type: parsedInvoice.parser_type,
+      extraction_confidence: parsedInvoice.confidence,
     };
 
     const insertRes = await query(
@@ -2064,7 +2064,7 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
         req.file.size,
         detectedPhones.join(', ') || null,
         detectedGstins.join(', ') || null,
-        JSON.stringify({ text_sample: fullText.slice(0, 1500) }),
+        JSON.stringify({ text_sample: parsedInvoice.raw_text.slice(0, 1500) }),
         JSON.stringify(reconciliationSummary),
         req.user?.id || null,
         req.user?.full_name || 'Staff',
@@ -2172,7 +2172,7 @@ dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res
       if (dbItem) {
         const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 0);
         const already = parseFloat(dbItem.dispatched_quantity || 0);
-        const willDispatch = parseFloat(reqItem.dispatch_qty || 0);
+        const willDispatch = parseFloat(reqItem.dispatch_qty ?? reqItem.invoice_qty ?? 0);
         if (already + willDispatch > quoted) {
           hasOverage = true;
           break;
@@ -2198,7 +2198,7 @@ dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res
 
         const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 0);
         const already = parseFloat(dbItem.dispatched_quantity || 0);
-        const addQty = parseFloat(reqItem.dispatch_qty || 0);
+        const addQty = parseFloat(reqItem.dispatch_qty ?? reqItem.invoice_qty ?? 0);
         const newDispatched = already + addQty;
         const pending = Math.max(0, quoted - newDispatched);
         const status = newDispatched >= quoted ? 'DISPATCHED' : (newDispatched > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING');
