@@ -15,6 +15,11 @@ import {
   Printer,
   ChevronDown,
   ChevronUp,
+  CreditCard,
+  ShieldCheck,
+  ShieldAlert,
+  ArrowRight,
+  X,
 } from 'lucide-react';
 import { formatCurrency } from '../DispatchManagement';
 
@@ -33,6 +38,7 @@ interface ProcessingItem {
   procurement_status?: string;
   expected_dispatch_date?: string;
   item_image?: string;
+  total_amount?: number;
 }
 
 interface ProcessingQuotation {
@@ -59,6 +65,13 @@ interface ProcessingQuotation {
   total_dispatched_qty: number;
   progress_percent: number;
   all_items_dispatched: boolean;
+  total_received_amount?: number;
+  ready_stock_total_value?: number;
+  local_purchase_total_value?: number;
+  committed_immediate_value?: number;
+  is_payment_sufficient?: boolean;
+  deficit_amount?: number;
+  payment_coverage_status?: 'COVERED' | 'INSUFFICIENT';
 }
 
 interface Props {
@@ -68,6 +81,8 @@ interface Props {
   onRecordPartial: (quote: ProcessingQuotation, item: ProcessingItem) => void;
   onPrintChallan: (quoteId: number) => void;
   canEdit: boolean;
+  onNavigateToPayments?: (quotationNumber?: string) => void;
+  userRole?: string;
 }
 
 export const ProcessingDispatchView: React.FC<Props> = ({
@@ -77,12 +92,36 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   onRecordPartial,
   onPrintChallan,
   canEdit,
+  onNavigateToPayments,
+  userRole = '',
 }) => {
   const [search, setSearch] = useState('');
   const [expandedQuotes, setExpandedQuotes] = useState<{ [key: number]: boolean }>({});
+  const [safetyModalItem, setSafetyModalItem] = useState<{
+    quote: ProcessingQuotation;
+    item: ProcessingItem;
+  } | null>(null);
+  const [adminOverrideReason, setAdminOverrideReason] = useState('');
+
+  const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
 
   const toggleExpand = (id: number) => {
     setExpandedQuotes((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleInitiatePartial = (quote: ProcessingQuotation, item: ProcessingItem) => {
+    if (quote.is_payment_sufficient === false && (quote.deficit_amount || 0) > 0) {
+      setSafetyModalItem({ quote, item });
+      setAdminOverrideReason('');
+      return;
+    }
+    onRecordPartial(quote, item);
+  };
+
+  const handleConfirmAdminOverride = () => {
+    if (!safetyModalItem) return;
+    onRecordPartial(safetyModalItem.quote, safetyModalItem.item);
+    setSafetyModalItem(null);
   };
 
   const filtered = dispatches.filter((d) => {
@@ -218,6 +257,67 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   </div>
                 </div>
 
+                {/* Financial Safety Summary Banner */}
+                <div
+                  className={`px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs border-b ${
+                    d.is_payment_sufficient !== false
+                      ? 'bg-emerald-50/70 border-emerald-100 text-emerald-950'
+                      : 'bg-rose-50/90 border-rose-200 text-rose-950'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                    <div className="flex items-center space-x-1.5 font-medium">
+                      <CreditCard
+                        size={13}
+                        className={d.is_payment_sufficient !== false ? 'text-emerald-600' : 'text-rose-600'}
+                      />
+                      <span className="text-slate-600">Total Received:</span>
+                      <span className="font-bold font-mono text-emerald-800">
+                        {formatCurrency(d.total_received_amount || 0)}
+                      </span>
+                    </div>
+
+                    <span className="text-slate-300">|</span>
+
+                    <div className="flex items-center space-x-1.5">
+                      <Package size={13} className="text-slate-500" />
+                      <span className="text-slate-600">Committed Immediate Value:</span>
+                      <span className="font-bold font-mono text-slate-900">
+                        {formatCurrency(d.committed_immediate_value || 0)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        (Ready: {formatCurrency(d.ready_stock_total_value || 0)} + Local:{' '}
+                        {formatCurrency(d.local_purchase_total_value || 0)})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {d.is_payment_sufficient !== false ? (
+                      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <ShieldCheck size={12} />
+                        <span>Payment Covered</span>
+                      </span>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                          <ShieldAlert size={12} />
+                          <span>Insufficient Payment — Deficit: {formatCurrency(d.deficit_amount || 0)}</span>
+                        </span>
+                        {onNavigateToPayments && (
+                          <button
+                            onClick={() => onNavigateToPayments(d.quotation_number)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] cursor-pointer shadow-2xs transition-colors"
+                          >
+                            <span>Record Payment</span>
+                            <ArrowRight size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Expanded Line Items Table */}
                 {isExpanded && (
                   <div className="p-3 overflow-x-auto">
@@ -286,7 +386,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                   </span>
                                 ) : canEdit ? (
                                   <button
-                                    onClick={() => onRecordPartial(d, it)}
+                                    onClick={() => handleInitiatePartial(d, it)}
                                     className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-2xs cursor-pointer transition-colors"
                                   >
                                     <Truck size={12} />
@@ -306,6 +406,136 @@ export const ProcessingDispatchView: React.FC<Props> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Financial Safeguard Warning Modal */}
+      {safetyModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-rose-200 shadow-2xl flex flex-col space-y-4 animate-fadeIn">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-2xl bg-rose-100 text-rose-600 shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  ⚠️ Insufficient Customer Payment for Dispatch / Procurement
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  The verified client payments received are less than the combined immediate value of Ready Stock and Local Purchase goods for this quotation.
+                </p>
+              </div>
+              <button
+                onClick={() => setSafetyModalItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Financial Breakdown Table */}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-2">
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Quotation Reference:</span>
+                <span className="font-mono font-bold text-slate-800">{safetyModalItem.quote.quotation_number}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Customer:</span>
+                <span className="font-semibold text-slate-800">{safetyModalItem.quote.customer_name}</span>
+              </div>
+              <div className="h-px bg-slate-200 my-1" />
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Total Verified Payments Received:</span>
+                <span className="font-mono font-bold text-emerald-700">
+                  {formatCurrency(safetyModalItem.quote.total_received_amount || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Ready Stock Items Value:</span>
+                <span className="font-mono font-semibold text-slate-800">
+                  {formatCurrency(safetyModalItem.quote.ready_stock_total_value || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Local Purchase Items Value:</span>
+                <span className="font-mono font-semibold text-slate-800">
+                  {formatCurrency(safetyModalItem.quote.local_purchase_total_value || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-bold text-slate-900 pt-1 border-t border-slate-200">
+                <span>Committed Immediate Value:</span>
+                <span className="font-mono">
+                  {formatCurrency(safetyModalItem.quote.committed_immediate_value || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-bold text-rose-700 pt-1 border-t border-rose-200 bg-rose-50/80 p-2 rounded-lg">
+                <span>Outstanding Payment Deficit:</span>
+                <span className="font-mono text-sm font-extrabold">
+                  {formatCurrency(safetyModalItem.quote.deficit_amount || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* Target Item Being Dispatched */}
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+              <span className="font-bold text-amber-900">Attempted Action:</span>{' '}
+              <span className="text-amber-800">Dispatching "{safetyModalItem.item.description}"</span>
+            </div>
+
+            {/* Admin Override Section */}
+            {isAdminOrManager ? (
+              <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                  Supervisor Override (Admin / Manager Role Verified)
+                </label>
+                <input
+                  type="text"
+                  value={adminOverrideReason}
+                  onChange={(e) => setAdminOverrideReason(e.target.value)}
+                  placeholder="Optional reason for override (e.g. Approved by management, credit client)..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-rose-500/30 text-slate-900"
+                />
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs">
+                🔒 Dispatch requires supervisor authorization. Please contact an Administrator or Manager to approve dispatching this order.
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setSafetyModalItem(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold text-xs text-slate-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              {onNavigateToPayments && (
+                <button
+                  onClick={() => {
+                    const quoteNum = safetyModalItem.quote.quotation_number;
+                    setSafetyModalItem(null);
+                    onNavigateToPayments(quoteNum);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer flex items-center space-x-1.5"
+                >
+                  <CreditCard size={13} />
+                  <span>Record Customer Payment</span>
+                </button>
+              )}
+
+              {isAdminOrManager && (
+                <button
+                  onClick={handleConfirmAdminOverride}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm cursor-pointer flex items-center space-x-1.5"
+                >
+                  <ShieldCheck size={13} />
+                  <span>Override with Admin Approval</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

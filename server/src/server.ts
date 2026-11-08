@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.51',
+    version: '2.4.52',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -263,6 +263,28 @@ async function runAutoMigrations() {
       ALTER TABLE sales_targets ADD CONSTRAINT check_sales_targets_period_type CHECK (period_type IN ('MONTHLY', 'QUARTERLY', 'YEARLY'));
       CREATE INDEX IF NOT EXISTS idx_sales_targets_cat_period ON sales_targets (category, start_date, end_date);
       CREATE INDEX IF NOT EXISTS idx_sales_targets_user_period ON sales_targets (sales_person_id, start_date, end_date);
+
+      -- Financial Safety-Gate & Stepped Verification on local_purchases
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_by_name VARCHAR(120);
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_at TIMESTAMPTZ;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS availability_checked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS availability_checked_at TIMESTAMPTZ;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS admin_override_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS admin_override_notes TEXT;
+
+      ALTER TABLE local_purchases DROP CONSTRAINT IF EXISTS uq_local_purchases_item;
+      ALTER TABLE local_purchases ADD CONSTRAINT uq_local_purchases_item UNIQUE (quotation_item_id);
+
+      UPDATE local_purchases lp
+      SET payment_checked = TRUE,
+          payment_checked_by_name = 'System Auto-Backfill',
+          payment_checked_at = lp.created_at
+      FROM quotations q
+      WHERE lp.quotation_id = q.id 
+        AND (LOWER(q.status) = 'closed' OR lp.purchase_status IN ('AWAITING_DELIVERY', 'ARRIVED_AT_GODOWN'))
+        AND lp.payment_checked IS FALSE;
     `);
   } catch (err: any) {
     logger.warn('Column additions migration warning:', err.message);
@@ -616,7 +638,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.51' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.52' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

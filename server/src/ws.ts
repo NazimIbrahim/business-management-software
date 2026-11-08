@@ -19,6 +19,8 @@ export interface WsEvent {
     | 'DISPATCH_ITEM_CHANGED'
     | 'DISPATCH_CHANGES_ACKNOWLEDGED'
     | 'DASHBOARD_REFRESH'
+    | 'LOCAL_PURCHASE_PAYMENT_VERIFIED'
+    | 'LOCAL_PURCHASE_AVAILABILITY_VERIFIED'
     | 'dispatch:updated'
     | 'item_status:changed'
     | 'payment:recorded'

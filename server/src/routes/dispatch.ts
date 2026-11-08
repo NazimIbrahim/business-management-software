@@ -150,6 +150,19 @@ export async function ensureDispatchSchema(): Promise<void> {
 
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS sourcing_type VARCHAR(50);
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS remaining_quantity NUMERIC(12, 2) DEFAULT 0;
+
+      -- Financial safety gate & stepped verification on local_purchases
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_by_name VARCHAR(120);
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_checked_at TIMESTAMPTZ;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS availability_checked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS availability_checked_at TIMESTAMPTZ;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS admin_override_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS admin_override_notes TEXT;
+
+      ALTER TABLE local_purchases DROP CONSTRAINT IF EXISTS uq_local_purchases_item;
+      ALTER TABLE local_purchases ADD CONSTRAINT uq_local_purchases_item UNIQUE (quotation_item_id);
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -1463,6 +1476,25 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       const progressPercent = totalOrdered > 0 ? Math.min(100, Math.round((totalDispatched / totalOrdered) * 100)) : 0;
       const allDispatched = items.length > 0 && items.every((it: any) => it.dispatch_status === 'Dispatched');
 
+      // Financial safety gate metrics
+      const totalReceivedAmount = parseFloat(q.verified_paid || 0);
+      let readyStockTotalValue = 0;
+      let localPurchaseTotalValue = 0;
+
+      for (const it of items) {
+        const itemVal = parseFloat(it.total_amount || 0);
+        if (it.dispatch_status === 'Ready Stock' || it.dispatch_status === 'Dispatched') {
+          readyStockTotalValue += itemVal;
+        } else if (it.dispatch_status === 'Need to Arrange from Local') {
+          localPurchaseTotalValue += itemVal;
+        }
+      }
+
+      const committedImmediateValue = readyStockTotalValue + localPurchaseTotalValue;
+      const isPaymentSufficient = totalReceivedAmount >= (committedImmediateValue - 0.5);
+      const deficitAmount = isPaymentSufficient ? 0 : Math.round((committedImmediateValue - totalReceivedAmount) * 100) / 100;
+      const paymentCoverageStatus = isPaymentSufficient ? 'COVERED' : 'INSUFFICIENT';
+
       return {
         ...q,
         items,
@@ -1470,6 +1502,13 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         total_dispatched_qty: totalDispatched,
         progress_percent: progressPercent,
         all_items_dispatched: allDispatched,
+        total_received_amount: totalReceivedAmount,
+        ready_stock_total_value: readyStockTotalValue,
+        local_purchase_total_value: localPurchaseTotalValue,
+        committed_immediate_value: committedImmediateValue,
+        is_payment_sufficient: isPaymentSufficient,
+        deficit_amount: deficitAmount,
+        payment_coverage_status: paymentCoverageStatus,
       };
     });
 
@@ -1821,7 +1860,7 @@ dispatchRouter.put('/schedule/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 6. LOCAL PURCHASE TRACKER (Active local sourcing workbench)
+// 6. LOCAL PURCHASE TRACKER (Active local sourcing workbench with Financial Safety Gate)
 dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
   try {
     const rows = await query(
@@ -1853,14 +1892,42 @@ dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
         COALESCE(lp.expected_date, qi.expected_dispatch_date) as expected_date,
         lp.notes as purchase_notes,
         qi.procurement_notes,
-        qi.item_image
+        qi.item_image,
+        COALESCE(lp.payment_checked, false) as payment_checked,
+        lp.payment_checked_by,
+        lp.payment_checked_by_name,
+        lp.payment_checked_at,
+        COALESCE(lp.availability_checked, false) as availability_checked,
+        lp.availability_checked_at,
+        lp.admin_override_by_id,
+        lp.admin_override_notes,
+        COALESCE(p_pay.verified_paid, 0) as parent_verified_paid,
+        COALESCE(q_comm.ready_stock_val, 0) as parent_ready_stock_val,
+        COALESCE(q_comm.local_purchase_val, 0) as parent_local_purchase_val,
+        (COALESCE(q_comm.ready_stock_val, 0) + COALESCE(q_comm.local_purchase_val, 0)) as parent_committed_immediate_value,
+        (COALESCE(p_pay.verified_paid, 0) >= (COALESCE(q_comm.ready_stock_val, 0) + COALESCE(q_comm.local_purchase_val, 0) - 0.5)) as parent_is_payment_sufficient,
+        GREATEST(0, (COALESCE(q_comm.ready_stock_val, 0) + COALESCE(q_comm.local_purchase_val, 0)) - COALESCE(p_pay.verified_paid, 0)) as parent_deficit_amount
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
+      LEFT JOIN (
+        SELECT quotation_id, SUM(amount) as verified_paid
+        FROM payments
+        WHERE status IN ('Cleared', 'Verified')
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          SUM(CASE WHEN dispatch_status IN ('Ready Stock', 'Dispatched') THEN total_amount ELSE 0 END) as ready_stock_val,
+          SUM(CASE WHEN dispatch_status = 'Need to Arrange from Local' THEN total_amount ELSE 0 END) as local_purchase_val
+        FROM quotation_items
+        GROUP BY quotation_id
+      ) q_comm ON q_comm.quotation_id = q.id
       WHERE qi.dispatch_status = 'Need to Arrange from Local'
         AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
         AND LOWER(q.status) IN ('closed', 'approved')
-      ORDER BY COALESCE(lp.expected_date, qi.expected_dispatch_date, qi.id) ASC`
+      ORDER BY COALESCE(lp.expected_date, qi.expected_dispatch_date) ASC, qi.id ASC`
     );
 
     res.json({ success: true, count: rows.length, items: rows });
@@ -1869,11 +1936,11 @@ dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
   }
 });
 
-// Update local purchase item status or details
-dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) => {
+// Stepped Verification: Verify customer payment on a local purchase line item
+dispatchRouter.patch('/local-tracker/:id/verify-payment', async (req: Request, res: Response) => {
   try {
     const itemId = parseInt(req.params.id as string, 10);
-    const { vendor_name, vendor_contact, actual_purchase_rate, invoice_number, expected_date, purchase_status, notes } = req.body;
+    const { verified = true, admin_override = false, override_notes } = req.body;
 
     const itemRows = await query('SELECT * FROM quotation_items WHERE id = $1', [itemId]);
     if (itemRows.length === 0) {
@@ -1882,17 +1949,205 @@ dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) =
     }
     const item = itemRows[0];
 
+    // Compute parent quotation's financial safety status
+    const finRes = await query(
+      `SELECT 
+        q.id,
+        q.quotation_number,
+        COALESCE(p_pay.verified_paid, 0) as verified_paid,
+        COALESCE(q_comm.ready_stock_val, 0) as ready_stock_val,
+        COALESCE(q_comm.local_purchase_val, 0) as local_purchase_val
+       FROM quotations q
+       LEFT JOIN (
+         SELECT quotation_id, SUM(amount) as verified_paid
+         FROM payments
+         WHERE status IN ('Cleared', 'Verified')
+         GROUP BY quotation_id
+       ) p_pay ON p_pay.quotation_id = q.id
+       LEFT JOIN (
+         SELECT 
+           quotation_id,
+           SUM(CASE WHEN dispatch_status IN ('Ready Stock', 'Dispatched') THEN total_amount ELSE 0 END) as ready_stock_val,
+           SUM(CASE WHEN dispatch_status = 'Need to Arrange from Local' THEN total_amount ELSE 0 END) as local_purchase_val
+         FROM quotation_items
+         GROUP BY quotation_id
+       ) q_comm ON q_comm.quotation_id = q.id
+       WHERE q.id = $1`,
+      [item.quotation_id]
+    );
+
+    const fin = finRes[0] || {};
+    const verifiedPaid = parseFloat(fin.verified_paid || '0');
+    const committedVal = parseFloat(fin.ready_stock_val || '0') + parseFloat(fin.local_purchase_val || '0');
+    const isSufficient = verifiedPaid >= (committedVal - 0.5);
+    const deficit = isSufficient ? 0 : Math.round((committedVal - verifiedPaid) * 100) / 100;
+
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
+
+    if (verified && !isSufficient && !admin_override && !isAdminOrManager) {
+      res.status(403).json({
+        error: `Insufficient customer payment: Received ₹${verifiedPaid.toLocaleString('en-IN')}, but committed value is ₹${committedVal.toLocaleString('en-IN')}. Deficit: ₹${deficit.toLocaleString('en-IN')}. Admin override required.`,
+        code: 'PAYMENT_DEFICIT_OVERRIDE_REQUIRED',
+        verified_paid: verifiedPaid,
+        committed_immediate_value: committedVal,
+        deficit_amount: deficit,
+      });
+      return;
+    }
+
+    const paymentChecked = !!verified;
+    const paymentCheckedBy = paymentChecked ? req.user!.id : null;
+    const paymentCheckedByName = paymentChecked ? req.user!.full_name : null;
+    const paymentCheckedAt = paymentChecked ? new Date() : null;
+    const adminOverrideId = (!isSufficient && (admin_override || isAdminOrManager)) ? req.user!.id : null;
+    const adminOverrideNotes = (!isSufficient && (admin_override || isAdminOrManager)) ? (override_notes || `Admin override approved by ${req.user!.full_name}`) : null;
+
+    await query(
+      `INSERT INTO local_purchases (
+        quotation_item_id, quotation_id, required_quantity, quoted_rate,
+        payment_checked, payment_checked_by, payment_checked_by_name, payment_checked_at,
+        admin_override_by_id, admin_override_notes, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+      ON CONFLICT (quotation_item_id) DO UPDATE
+      SET payment_checked = $5,
+          payment_checked_by = $6,
+          payment_checked_by_name = $7,
+          payment_checked_at = $8,
+          admin_override_by_id = COALESCE($9, local_purchases.admin_override_by_id),
+          admin_override_notes = COALESCE($10, local_purchases.admin_override_notes),
+          updated_at = CURRENT_TIMESTAMP`,
+      [
+        itemId,
+        item.quotation_id,
+        item.quantity_boxes || item.quantity_sqft || 1,
+        item.rate_per_box || item.rate_per_sqft || 0,
+        paymentChecked,
+        paymentCheckedBy,
+        paymentCheckedByName,
+        paymentCheckedAt,
+        adminOverrideId,
+        adminOverrideNotes,
+      ]
+    );
+
+    broadcast({
+      type: 'LOCAL_PURCHASE_PAYMENT_VERIFIED',
+      payload: {
+        quotation_id: item.quotation_id,
+        quotation_item_id: itemId,
+        payment_checked: paymentChecked,
+        payment_checked_by_name: paymentCheckedByName,
+        payment_checked_at: paymentCheckedAt,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: paymentChecked ? 'Customer payment verified successfully for this local purchase item.' : 'Customer payment verification removed.',
+      payment_checked: paymentChecked,
+      payment_checked_by_name: paymentCheckedByName,
+      payment_checked_at: paymentCheckedAt,
+      is_payment_sufficient: isSufficient,
+      deficit_amount: deficit,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stepped Verification: Verify local vendor availability
+dispatchRouter.patch('/local-tracker/:id/verify-availability', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id as string, 10);
+    const { checked = true } = req.body;
+
+    const itemRows = await query('SELECT * FROM quotation_items WHERE id = $1', [itemId]);
+    if (itemRows.length === 0) {
+      res.status(404).json({ error: 'Line item not found' });
+      return;
+    }
+    const item = itemRows[0];
+
+    await query(
+      `INSERT INTO local_purchases (
+        quotation_item_id, quotation_id, required_quantity, quoted_rate,
+        availability_checked, availability_checked_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP)
+      ON CONFLICT (quotation_item_id) DO UPDATE
+      SET availability_checked = $5,
+          availability_checked_at = CASE WHEN $5 THEN CURRENT_TIMESTAMP ELSE NULL END,
+          updated_at = CURRENT_TIMESTAMP`,
+      [
+        itemId,
+        item.quotation_id,
+        item.quantity_boxes || item.quantity_sqft || 1,
+        item.rate_per_box || item.rate_per_sqft || 0,
+        !!checked,
+      ]
+    );
+
+    res.json({ success: true, availability_checked: !!checked });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update local purchase item status or details with Safety Gate enforcement
+dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id as string, 10);
+    const {
+      vendor_name,
+      vendor_contact,
+      actual_purchase_rate,
+      invoice_number,
+      expected_date,
+      purchase_status,
+      notes,
+      availability_checked,
+      payment_checked,
+      admin_override,
+      override_notes,
+    } = req.body;
+
+    const itemRows = await query('SELECT * FROM quotation_items WHERE id = $1', [itemId]);
+    if (itemRows.length === 0) {
+      res.status(404).json({ error: 'Line item not found' });
+      return;
+    }
+    const item = itemRows[0];
+
+    // Fetch existing local_purchase state
+    const lpRows = await query('SELECT * FROM local_purchases WHERE quotation_item_id = $1', [itemId]);
+    const currentLp = lpRows[0] || {};
+
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
+    const effectivePaymentChecked = payment_checked !== undefined ? payment_checked : currentLp.payment_checked;
+
+    // Financial Safety Gate Check: Cannot transition to PO_RAISED or AWAITING_DELIVERY without payment checked or admin override
+    if (purchase_status === 'PO_RAISED' || purchase_status === 'AWAITING_DELIVERY') {
+      if (!effectivePaymentChecked && !admin_override && !isAdminOrManager) {
+        res.status(400).json({
+          error: 'Customer Payment Verification required before placing local purchase order. Please verify client payment coverage or request Admin override.',
+          code: 'PAYMENT_VERIFICATION_REQUIRED',
+        });
+        return;
+      }
+    }
+
     const markArrived = purchase_status === 'ARRIVED_AT_GODOWN';
 
     await withTransaction(async (client) => {
-      // Upsert local_purchases
+      // Upsert local_purchases using UNIQUE (quotation_item_id)
       await client.query(
         `INSERT INTO local_purchases (
           quotation_item_id, quotation_id, vendor_name, vendor_contact, required_quantity,
           quoted_rate, actual_purchase_rate, purchase_status, invoice_number, expected_date,
-          completed_date, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (id) DO UPDATE
+          completed_date, notes, availability_checked, payment_checked, admin_override_by_id, admin_override_notes, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
+        ON CONFLICT (quotation_item_id) DO UPDATE
         SET vendor_name = COALESCE($3, local_purchases.vendor_name),
             vendor_contact = COALESCE($4, local_purchases.vendor_contact),
             actual_purchase_rate = COALESCE($7, local_purchases.actual_purchase_rate),
@@ -1901,20 +2156,28 @@ dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) =
             expected_date = COALESCE($10, local_purchases.expected_date),
             completed_date = CASE WHEN $8 = 'ARRIVED_AT_GODOWN' THEN CURRENT_TIMESTAMP ELSE local_purchases.completed_date END,
             notes = COALESCE($12, local_purchases.notes),
+            availability_checked = COALESCE($13, local_purchases.availability_checked),
+            payment_checked = COALESCE($14, local_purchases.payment_checked),
+            admin_override_by_id = COALESCE($15, local_purchases.admin_override_by_id),
+            admin_override_notes = COALESCE($16, local_purchases.admin_override_notes),
             updated_at = CURRENT_TIMESTAMP`,
         [
           itemId,
           item.quotation_id,
-          vendor_name || 'Local Distributor',
-          vendor_contact || null,
+          vendor_name || currentLp.vendor_name || 'Local Distributor',
+          vendor_contact || currentLp.vendor_contact || null,
           item.quantity_boxes || item.quantity_sqft || 1,
           item.rate_per_box || item.rate_per_sqft || 0,
-          actual_purchase_rate || null,
-          purchase_status || 'PO_RAISED',
-          invoice_number || null,
-          expected_date || null,
-          markArrived ? new Date() : null,
-          notes || null,
+          actual_purchase_rate !== undefined ? actual_purchase_rate : currentLp.actual_purchase_rate,
+          purchase_status || currentLp.purchase_status || 'PO_RAISED',
+          invoice_number || currentLp.invoice_number || null,
+          expected_date || currentLp.expected_date || null,
+          markArrived ? new Date() : (currentLp.completed_date || null),
+          notes !== undefined ? notes : currentLp.notes,
+          availability_checked !== undefined ? availability_checked : null,
+          payment_checked !== undefined ? payment_checked : null,
+          admin_override ? req.user!.id : null,
+          override_notes || null,
         ]
       );
 
@@ -1997,7 +2260,7 @@ dispatchRouter.get('/factory-tracker', async (req: Request, res: Response) => {
       WHERE qi.dispatch_status = 'Factory Order'
         AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
         AND LOWER(q.status) IN ('closed', 'approved')
-      ORDER BY COALESCE(fo.eta_date, qi.expected_dispatch_date, qi.id) ASC`
+      ORDER BY COALESCE(fo.eta_date, qi.expected_dispatch_date) ASC, qi.id ASC`
     );
 
     res.json({ success: true, count: rows.length, orders: rows });

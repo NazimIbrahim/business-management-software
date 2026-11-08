@@ -377,8 +377,17 @@ CREATE TABLE IF NOT EXISTS local_purchases (
     expected_date DATE,
     completed_date TIMESTAMPTZ,
     notes TEXT,
+    payment_checked BOOLEAN DEFAULT FALSE,
+    payment_checked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    payment_checked_by_name VARCHAR(120),
+    payment_checked_at TIMESTAMPTZ,
+    availability_checked BOOLEAN DEFAULT FALSE,
+    availability_checked_at TIMESTAMPTZ,
+    admin_override_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    admin_override_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_local_purchases_item UNIQUE (quotation_item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_local_purchases_qid ON local_purchases (quotation_id);
 CREATE INDEX IF NOT EXISTS idx_local_purchases_qiid ON local_purchases (quotation_item_id);

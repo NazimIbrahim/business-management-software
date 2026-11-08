@@ -597,6 +597,38 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
     }
   };
 
+  const handleVerifyLocalPayment = async (
+    itemId: number,
+    payload: { verified: boolean; admin_override?: boolean; override_notes?: string }
+  ) => {
+    try {
+      const res = await fetchApi<any>(`/api/dispatch/local-tracker/${itemId}/verify-payment`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      showToast(res.message || 'Payment status updated');
+      loadLocalTracker();
+      loadProcessing();
+    } catch (err: any) {
+      alert(err.message || 'Failed to verify payment');
+      throw err;
+    }
+  };
+
+  const handleVerifyLocalAvailability = async (itemId: number, available: boolean) => {
+    try {
+      const res = await fetchApi<any>(`/api/dispatch/local-tracker/${itemId}/verify-availability`, {
+        method: 'PATCH',
+        body: JSON.stringify({ available }),
+      });
+      showToast(res.message || 'Availability status updated');
+      loadLocalTracker();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update availability');
+      throw err;
+    }
+  };
+
   // Factory Order Update
   const handleUpdateFactoryOrder = async (itemId: number, payload: any) => {
     try {
@@ -823,6 +855,10 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
             onRecordPartial={handleOpenPartialModal}
             onPrintChallan={(id) => handlePrintChallan(id)}
             canEdit={canEditDispatch}
+            onNavigateToPayments={(quoteNum) => {
+              setCurrentView('payment-tracking');
+            }}
+            userRole={userRole}
           />
         );
       case 'completed':
@@ -851,7 +887,13 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
             loading={localTrackerLoading}
             onRefresh={loadLocalTracker}
             onUpdateItem={handleUpdateLocalItem}
+            onVerifyPayment={handleVerifyLocalPayment}
+            onVerifyAvailability={handleVerifyLocalAvailability}
             canEdit={canEditDispatch}
+            onNavigateToPayments={(quoteNum) => {
+              setCurrentView('payment-tracking');
+            }}
+            userRole={userRole}
           />
         );
       case 'factory-tracker':
