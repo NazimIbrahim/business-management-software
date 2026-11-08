@@ -30,6 +30,7 @@ import {
   Package,
   Factory,
   Layers,
+  AlertCircle,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
@@ -77,14 +78,20 @@ export const QuotationDetail: React.FC<Props> = ({
   // Line items view mode: Default sequence vs Grouped by Availability
   const [itemViewMode, setItemViewMode] = useState<'default' | 'availability'>('default');
   const [verifyingPaymentId, setVerifyingPaymentId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadDetail = async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetchApi(`/api/quotations/${quotationId}`);
+      if (!res || !res.quotation) {
+        throw new Error('Quotation record was not found or returned empty data.');
+      }
       setData(res);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load quotation detail:', err);
+      setError(err?.message || 'Failed to load quotation details.');
     } finally {
       setLoading(false);
     }
@@ -271,12 +278,46 @@ export const QuotationDetail: React.FC<Props> = ({
     }
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
+      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50 min-h-[400px]">
         <div className="text-center">
           <RefreshCw className="animate-spin text-slate-800 mx-auto mb-2" size={24} />
           <p className="text-xs font-semibold text-slate-600">Loading Quotation Record...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50 min-h-[400px]">
+        <div className="card p-6 max-w-md w-full text-center space-y-4 shadow-md border border-slate-200 bg-white rounded-xl">
+          <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+            <AlertCircle size={24} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Unable to Open Quotation</h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              {error || 'The requested quotation record could not be loaded.'}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              onClick={onBack}
+              className="btn btn-secondary btn-sm flex items-center gap-1.5"
+            >
+              <ArrowLeft size={14} />
+              <span>Back to Quotations</span>
+            </button>
+            <button
+              onClick={loadDetail}
+              className="btn btn-primary btn-sm flex items-center gap-1.5"
+            >
+              <RefreshCw size={14} />
+              <span>Try Again</span>
+            </button>
+          </div>
         </div>
       </div>
     );
