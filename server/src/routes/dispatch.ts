@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import PDFDocument from 'pdfkit';
 import * as XLSX from 'xlsx';
 import { Router, Request, Response } from 'express';
@@ -7,6 +10,64 @@ import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 
 export const dispatchRouter = Router();
+
+// Configure storage for Tax Invoice PDFs
+const INVOICES_UPLOAD_DIR = path.resolve(process.cwd(), 'uploads/invoices');
+if (!fs.existsSync(INVOICES_UPLOAD_DIR)) {
+  fs.mkdirSync(INVOICES_UPLOAD_DIR, { recursive: true });
+}
+
+const invoiceStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, INVOICES_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const safeName = `INV_${req.params.quotationId}_${Date.now()}${ext}`;
+    cb(null, safeName);
+  },
+});
+
+const uploadInvoice = multer({
+  storage: invoiceStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF documents are supported for Tax Invoices.'));
+    }
+  },
+});
+
+async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+  try {
+    if (typeof (global as any).DOMMatrix === 'undefined') {
+      (global as any).DOMMatrix = class DOMMatrix {
+        a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+        m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+        m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+        m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+        m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+        is2D = true;
+        isIdentity = true;
+      };
+    }
+    const pdfModule = require('pdf-parse');
+    if (pdfModule.PDFParse) {
+      const parser = new pdfModule.PDFParse({ data: buffer });
+      const res = await parser.getText();
+      return res.text || '';
+    } else if (typeof pdfModule === 'function') {
+      const res = await pdfModule(buffer);
+      return res.text || '';
+    }
+    return '';
+  } catch (err: any) {
+    console.warn('[PDFParse] Error parsing PDF text:', err.message);
+    throw new Error('Unable to parse PDF text: ' + err.message);
+  }
+}
 
 // Protect all dispatch routes
 dispatchRouter.use(authenticateToken);
@@ -163,6 +224,33 @@ export async function ensureDispatchSchema(): Promise<void> {
 
       ALTER TABLE local_purchases DROP CONSTRAINT IF EXISTS uq_local_purchases_item;
       ALTER TABLE local_purchases ADD CONSTRAINT uq_local_purchases_item UNIQUE (quotation_item_id);
+
+      -- Tax Invoice PDF Verification & Auto-Reconciliation Schema
+      CREATE TABLE IF NOT EXISTS dispatch_invoices (
+          id SERIAL PRIMARY KEY,
+          quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+          invoice_number VARCHAR(100) NOT NULL,
+          invoice_date DATE,
+          file_name VARCHAR(255) NOT NULL,
+          file_url TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          customer_phone_detected VARCHAR(50),
+          customer_gstin_detected VARCHAR(30),
+          extracted_raw_data JSONB DEFAULT '{}'::jsonb,
+          reconciliation_summary JSONB DEFAULT '{}'::jsonb,
+          is_verified BOOLEAN DEFAULT TRUE,
+          uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          uploaded_by_name VARCHAR(120),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_qid ON dispatch_invoices (quotation_id);
+      CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_inv_no ON dispatch_invoices (invoice_number);
+
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS pending_quantity NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50) DEFAULT 'PENDING';
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_id INTEGER REFERENCES dispatch_invoices(id) ON DELETE SET NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_number VARCHAR(100);
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -1446,6 +1534,16 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as ordered_quantity,
         COALESCE(qi.dispatched_quantity, 0) as quantity_dispatched,
         GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) as remaining_quantity,
+        COALESCE(qi.pending_quantity, GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0))) as pending_quantity,
+        COALESCE(qi.fulfillment_status, 
+          CASE 
+            WHEN COALESCE(qi.dispatched_quantity, 0) >= COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) AND COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) > 0 THEN 'DISPATCHED'
+            WHEN COALESCE(qi.dispatched_quantity, 0) > 0 THEN 'PARTIALLY_DISPATCHED'
+            ELSE 'PENDING'
+          END
+        ) as fulfillment_status,
+        qi.last_invoice_number,
+        qi.last_invoice_id,
         qi.rate_per_box,
         qi.rate_per_sqft,
         qi.total_amount,
@@ -1461,6 +1559,35 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       [quoteIds]
     );
 
+    // Fetch verified tax invoices for these quotations
+    const invoicesRes = await query(
+      `SELECT 
+        id,
+        quotation_id,
+        invoice_number,
+        invoice_date,
+        file_name,
+        file_url,
+        file_size,
+        customer_phone_detected,
+        customer_gstin_detected,
+        reconciliation_summary,
+        is_verified,
+        uploaded_by_name,
+        created_at
+       FROM dispatch_invoices
+       WHERE quotation_id = ANY($1::int[])
+       ORDER BY created_at DESC`,
+      [quoteIds]
+    );
+
+    const invoicesByQuote = new Map<number, any[]>();
+    for (const inv of invoicesRes) {
+      const arr = invoicesByQuote.get(inv.quotation_id) || [];
+      arr.push(inv);
+      invoicesByQuote.set(inv.quotation_id, arr);
+    }
+
     // Group items by quote and calculate fulfillment %
     const itemsByQuote = new Map<number, any[]>();
     for (const it of itemsRes) {
@@ -1471,6 +1598,7 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
 
     const dispatches = quotes.map((q: any) => {
       const items = itemsByQuote.get(q.id) || [];
+      const invoices = invoicesByQuote.get(q.id) || [];
       const totalOrdered = items.reduce((acc: number, it: any) => acc + parseFloat(it.ordered_quantity || 0), 0);
       const totalDispatched = items.reduce((acc: number, it: any) => acc + parseFloat(it.quantity_dispatched || 0), 0);
       const progressPercent = totalOrdered > 0 ? Math.min(100, Math.round((totalDispatched / totalOrdered) * 100)) : 0;
@@ -1498,6 +1626,9 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       return {
         ...q,
         items,
+        invoices,
+        has_verified_invoice: invoices.length > 0,
+        latest_invoice: invoices[0] || null,
         total_ordered_qty: totalOrdered,
         total_dispatched_qty: totalDispatched,
         progress_percent: progressPercent,
@@ -1565,6 +1696,20 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
     const newDispatched = Math.min(ordered, prevDispatched + qty);
     const isNowFullyDispatched = newDispatched >= ordered - 0.001;
 
+    // Rule 1: Dispatch Lock - Enforce verified Tax Invoice requirement
+    const invCheck = await query(
+      `SELECT count(*) FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true`,
+      [qId]
+    );
+    const hasInvoice = parseInt(invCheck[0].count, 10) > 0;
+    if (!hasInvoice) {
+      res.status(400).json({
+        error: '🚫 Dispatch Blocked: Please upload a valid Tax Invoice PDF before dispatching items.',
+        code: 'TAX_INVOICE_REQUIRED',
+      });
+      return;
+    }
+
     // Generate or use challan number
     const generatedChallan = challan_number?.trim() || `DC-2026-${String(qId).padStart(4, '0')}`;
 
@@ -1573,6 +1718,8 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       await client.query(
         `UPDATE quotation_items
          SET dispatched_quantity = $1,
+             pending_quantity = GREATEST(0, $3 - $1),
+             fulfillment_status = CASE WHEN $2 = true THEN 'DISPATCHED' ELSE 'PARTIALLY_DISPATCHED' END,
              dispatch_status = CASE WHEN $2 = true THEN 'Dispatched' ELSE dispatch_status END,
              dispatched_at = CASE WHEN $2 = true THEN CURRENT_TIMESTAMP ELSE dispatched_at END,
              remaining_quantity = GREATEST(0, $3 - $1)
@@ -1690,6 +1837,432 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       remaining_quantity: Math.max(0, ordered - newDispatched),
       is_item_dispatched: isNowFullyDispatched,
       challan_number: generatedChallan,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =========================================================================
+// TAX INVOICE PDF VERIFICATION & AUTO-RECONCILIATION ENGINE
+// =========================================================================
+
+// 1. Upload & Automated OCR/Text Extraction & Reconciliation
+dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoice_pdf'), async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    if (isNaN(quotationId)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: 'Invalid quotation ID' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'Please upload a Tax Invoice PDF file' });
+      return;
+    }
+
+    // Fetch target quotation & customer details
+    const quoteRows = await query(
+      `SELECT q.*, c.mobile_number as cust_mobile, c.gstin as cust_gstin
+       FROM quotations q
+       LEFT JOIN customers c ON c.id = q.customer_id
+       WHERE q.id = $1`,
+      [quotationId]
+    );
+
+    if (quoteRows.length === 0) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(404).json({ error: 'Quotation not found' });
+      return;
+    }
+    const quotation = quoteRows[0];
+
+    // Extract raw text from PDF
+    const pdfBuffer = fs.readFileSync(req.file.path);
+    let fullText = '';
+    try {
+      fullText = await extractTextFromPdf(pdfBuffer);
+    } catch (parseErr: any) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: 'Failed to extract text from PDF: ' + parseErr.message });
+      return;
+    }
+
+    if (!fullText || fullText.trim().length === 0) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({
+        error: 'PDF contains no readable text or is a scanned image without OCR text. Please upload a digital Tax Invoice PDF.',
+      });
+      return;
+    }
+
+    // Phone Numbers
+    const phoneMatches = Array.from(fullText.matchAll(/(?:\+91[\-\s]?)?([6-9]\d{9})\b/g)).map((m) => m[1]);
+    const detectedPhones = Array.from(new Set(phoneMatches));
+
+    // GSTIN (15 characters)
+    const gstinMatches = fullText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/gi) || [];
+    const detectedGstins = Array.from(new Set(gstinMatches.map((g) => g.toUpperCase())));
+
+    // Invoice Number
+    const invMatch =
+      fullText.match(/(?:Invoice\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
+      fullText.match(/(?:Bill\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
+      fullText.match(/(?:Tax\s*Invoice[\s\S]*?(?:No|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i);
+    const invoiceNumber = invMatch && invMatch[1] ? invMatch[1].trim() : `INV-${Date.now().toString().slice(-6)}`;
+
+    // Invoice Date
+    const dateMatch = fullText.match(/(?:Invoice\s*Date|Dated|Date)[\s.:#]*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4})/i);
+    let invoiceDate: string | null = null;
+    if (dateMatch && dateMatch[1]) {
+      invoiceDate = dateMatch[1];
+    }
+
+    // Validate Customer Identity Match
+    const targetPhoneCandidates = [quotation.customer_phone, quotation.cust_mobile]
+      .filter(Boolean)
+      .map((p: string) => p.replace(/\D/g, '').slice(-10));
+
+    const targetGstinCandidates = [quotation.customer_gstin, quotation.cust_gstin]
+      .filter(Boolean)
+      .map((g: string) => g.trim().toUpperCase());
+
+    const phoneMatched = targetPhoneCandidates.some((tp) => tp && detectedPhones.includes(tp));
+    const gstinMatched = targetGstinCandidates.some((tg) => tg && detectedGstins.includes(tg));
+    const customerMatched = phoneMatched || gstinMatched;
+
+    // Strict Metadata Reconciliation: Reject if neither phone nor GSTIN matches
+    if (!customerMatched) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({
+        matched: false,
+        reason: 'CUSTOMER_MISMATCH',
+        message: '⚠️ Data Mismatch: Customer phone/GSTIN does not match this quotation. Please verify and retry.',
+        detected_phones: detectedPhones,
+        detected_gstins: detectedGstins,
+        expected_phone: quotation.customer_phone || quotation.cust_mobile || 'Not specified',
+        expected_gstin: quotation.customer_gstin || quotation.cust_gstin || 'Not specified',
+      });
+      return;
+    }
+
+    // Line Items Reconciliation Analysis
+    const itemRows = await query(
+      `SELECT * FROM quotation_items WHERE quotation_id = $1 ORDER BY id ASC`,
+      [quotationId]
+    );
+
+    const fullTextLower = fullText.toLowerCase();
+    const matchedItems: any[] = [];
+    const unmatchedItems: any[] = [];
+
+    for (const it of itemRows) {
+      const quotedQty = parseFloat(it.quantity_boxes || it.quantity_sqft || 0);
+      const alreadyDispatched = parseFloat(it.dispatched_quantity || 0);
+      const remainingQty = Math.max(0, quotedQty - alreadyDispatched);
+
+      const descWords = (it.description || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w: string) => w.length > 2 && !['box', 'boxes', 'sqft', 'tile', 'tiles', 'sanitary', 'glazed', 'vitrified', 'series'].includes(w));
+
+      const sizeStr = (it.size || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const brandStr = (it.brand || '').toLowerCase().trim();
+
+      const wordMatches = descWords.filter((w: string) => fullTextLower.includes(w));
+      const hasWordMatch = descWords.length > 0 && (wordMatches.length >= Math.ceil(descWords.length * 0.4) || wordMatches.length >= 2);
+      const hasSizeMatch = sizeStr.length > 3 && fullTextLower.replace(/[^a-z0-9]/g, '').includes(sizeStr);
+      const isDetected = hasWordMatch || (hasSizeMatch && fullTextLower.includes(brandStr));
+
+      if (isDetected) {
+        let detectedInvoiceQty = remainingQty;
+
+        // Search near description in raw text for numbers followed by unit
+        const keywordPattern = descWords.slice(0, 2).join('|');
+        if (keywordPattern) {
+          const qtyRegex = new RegExp(`(?:${keywordPattern})[\\s\\S]{0,90}?(?:(\\d+(?:\\.\\d+)?)\\s*(?:box|boxes|sqft|pcs|nos|mtr)?|qty[\\s.:]*(\\d+(?:\\.\\d+)?))`, 'i');
+          const m = fullText.match(qtyRegex);
+          if (m) {
+            const val = parseFloat(m[1] || m[2]);
+            if (!isNaN(val) && val > 0) {
+              detectedInvoiceQty = val;
+            }
+          }
+        }
+
+        const newDispatched = alreadyDispatched + detectedInvoiceQty;
+        const pending = Math.max(0, quotedQty - newDispatched);
+        const isOverage = newDispatched > quotedQty;
+        const excess = isOverage ? Math.round((newDispatched - quotedQty) * 100) / 100 : 0;
+        const status = newDispatched >= quotedQty ? 'DISPATCHED' : (newDispatched > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING');
+
+        matchedItems.push({
+          quotation_item_id: it.id,
+          description: it.description,
+          brand: it.brand,
+          size: it.size,
+          quoted_qty: quotedQty,
+          already_dispatched_qty: alreadyDispatched,
+          invoice_qty: detectedInvoiceQty,
+          new_dispatched_qty: newDispatched,
+          pending_qty: pending,
+          fulfillment_status: status,
+          is_overage: isOverage,
+          excess_qty: excess,
+        });
+      } else {
+        unmatchedItems.push({
+          quotation_item_id: it.id,
+          description: it.description,
+          quoted_qty: quotedQty,
+          already_dispatched_qty: alreadyDispatched,
+          remaining_qty: remainingQty,
+        });
+      }
+    }
+
+    // Save Invoice Record
+    const relativeFileUrl = `/uploads/invoices/${path.basename(req.file.path)}`;
+    const reconciliationSummary = {
+      invoice_number: invoiceNumber,
+      invoice_date: invoiceDate,
+      customer_matched: true,
+      matched_phones: detectedPhones,
+      matched_gstins: detectedGstins,
+      matched_items: matchedItems,
+      unmatched_items: unmatchedItems,
+      has_overages: matchedItems.some((i) => i.is_overage),
+      total_matched_count: matchedItems.length,
+      total_items_count: itemRows.length,
+    };
+
+    const insertRes = await query(
+      `INSERT INTO dispatch_invoices (
+        quotation_id,
+        invoice_number,
+        invoice_date,
+        file_name,
+        file_url,
+        file_size,
+        customer_phone_detected,
+        customer_gstin_detected,
+        extracted_raw_data,
+        reconciliation_summary,
+        is_verified,
+        uploaded_by,
+        uploaded_by_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12)
+      RETURNING *`,
+      [
+        quotationId,
+        invoiceNumber,
+        invoiceDate || null,
+        req.file.originalname,
+        relativeFileUrl,
+        req.file.size,
+        detectedPhones.join(', ') || null,
+        detectedGstins.join(', ') || null,
+        JSON.stringify({ text_sample: fullText.slice(0, 1500) }),
+        JSON.stringify(reconciliationSummary),
+        req.user?.id || null,
+        req.user?.full_name || 'Staff',
+      ]
+    );
+
+    const savedInvoice = insertRes[0];
+
+    broadcast({
+      type: 'dispatch:invoice_verified',
+      payload: {
+        quotation_id: quotationId,
+        invoice: savedInvoice,
+        reconciliation: reconciliationSummary,
+      },
+    });
+
+    res.json({
+      success: true,
+      matched: true,
+      message: `Tax Invoice #${invoiceNumber} Verified!`,
+      invoice: savedInvoice,
+      reconciliation: reconciliationSummary,
+    });
+  } catch (error: any) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Get verified tax invoices for quotation
+dispatchRouter.get('/:quotationId/invoices', async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    const invoices = await query(
+      `SELECT * FROM dispatch_invoices WHERE quotation_id = $1 ORDER BY created_at DESC`,
+      [quotationId]
+    );
+    res.json({ success: true, count: invoices.length, invoices });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Delete/Remove a Tax Invoice
+dispatchRouter.delete('/invoices/:invoiceId', async (req: Request, res: Response) => {
+  try {
+    const invoiceId = parseInt(req.params.invoiceId as string, 10);
+    const rows = await query('SELECT * FROM dispatch_invoices WHERE id = $1', [invoiceId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Invoice not found' });
+      return;
+    }
+    const inv = rows[0];
+
+    if (inv.file_url) {
+      const localPath = path.resolve(process.cwd(), inv.file_url.replace(/^\//, ''));
+      if (fs.existsSync(localPath)) {
+        try { fs.unlinkSync(localPath); } catch (e) {}
+      }
+    }
+
+    await query('DELETE FROM dispatch_invoices WHERE id = $1', [invoiceId]);
+
+    broadcast({
+      type: 'dispatch:invoice_removed',
+      payload: { quotation_id: inv.quotation_id, invoice_id: invoiceId },
+    });
+
+    res.json({ success: true, message: 'Tax invoice removed successfully.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Reconcile & Commit Dispatch Quantities
+dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    const { items = [], invoice_id, supervisor_override = false, supervisor_notes } = req.body;
+
+    // Rule 1: Must have at least 1 verified invoice
+    const invRows = await query(
+      `SELECT * FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true`,
+      [quotationId]
+    );
+    if (invRows.length === 0) {
+      res.status(400).json({
+        error: '🚫 Dispatch Blocked: Please upload a valid Tax Invoice PDF before dispatching items.',
+      });
+      return;
+    }
+
+    const targetInvoice = invoice_id ? invRows.find((i: any) => i.id === invoice_id) || invRows[0] : invRows[0];
+
+    // Verify overages
+    const itemRows = await query(`SELECT * FROM quotation_items WHERE quotation_id = $1`, [quotationId]);
+    const itemsMap = new Map<number, any>(itemRows.map((it: any) => [it.id, it]));
+
+    let hasOverage = false;
+    for (const reqItem of items) {
+      const dbItem = itemsMap.get(reqItem.quotation_item_id);
+      if (dbItem) {
+        const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 0);
+        const already = parseFloat(dbItem.dispatched_quantity || 0);
+        const willDispatch = parseFloat(reqItem.dispatch_qty || 0);
+        if (already + willDispatch > quoted) {
+          hasOverage = true;
+          break;
+        }
+      }
+    }
+
+    if (hasOverage && !supervisor_override) {
+      const isAdminOrMgr = ['admin', 'manager'].includes((req.user?.role || '').toLowerCase());
+      if (!isAdminOrMgr) {
+        res.status(400).json({
+          error: '⚠️ Extra Quantity Detected: Dispatch quantity exceeds quotation ordered quantity. Warehouse supervisor confirmation required.',
+          code: 'OVERAGE_CONFIRMATION_REQUIRED',
+        });
+        return;
+      }
+    }
+
+    await withTransaction(async (client) => {
+      for (const reqItem of items) {
+        const dbItem = itemsMap.get(reqItem.quotation_item_id);
+        if (!dbItem) continue;
+
+        const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 0);
+        const already = parseFloat(dbItem.dispatched_quantity || 0);
+        const addQty = parseFloat(reqItem.dispatch_qty || 0);
+        const newDispatched = already + addQty;
+        const pending = Math.max(0, quoted - newDispatched);
+        const status = newDispatched >= quoted ? 'DISPATCHED' : (newDispatched > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING');
+        const itemDispatchStatus = newDispatched >= quoted ? 'Dispatched' : 'Ready Stock';
+
+        await client.query(
+          `UPDATE quotation_items
+           SET dispatched_quantity = $1,
+               pending_quantity = $2,
+               fulfillment_status = $3,
+               dispatch_status = $4,
+               last_invoice_id = $5,
+               last_invoice_number = $6,
+               dispatched_at = CURRENT_TIMESTAMP
+           WHERE id = $7`,
+          [
+            newDispatched,
+            pending,
+            status,
+            itemDispatchStatus,
+            targetInvoice.id,
+            targetInvoice.invoice_number,
+            dbItem.id,
+          ]
+        );
+      }
+
+      // Check if all quotation items are now fully dispatched
+      const remainingRes = await client.query(
+        `SELECT COUNT(*) as count 
+         FROM quotation_items 
+         WHERE quotation_id = $1 
+           AND (fulfillment_status != 'DISPATCHED' OR dispatch_status != 'Dispatched')`,
+        [quotationId]
+      );
+
+      const allDispatched = parseInt(remainingRes.rows[0].count, 10) === 0;
+      if (allDispatched) {
+        await client.query(
+          `UPDATE quotations
+           SET dispatch_status = 'Dispatched',
+               closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+               dispatched_at = CURRENT_TIMESTAMP,
+               dispatched_by_id = $2,
+               dispatched_by_name = $3
+           WHERE id = $1`,
+          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff']
+        );
+      }
+    });
+
+    broadcast({
+      type: 'dispatch:item_reconciled',
+      payload: { quotation_id: quotationId, invoice_id: targetInvoice.id, items },
+    });
+
+    broadcast({
+      type: 'dispatch:updated',
+      payload: { quotation_id: quotationId, updated_by: req.user?.full_name },
+    });
+
+    res.json({
+      success: true,
+      message: 'Dispatch quantities reconciled and saved successfully.',
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

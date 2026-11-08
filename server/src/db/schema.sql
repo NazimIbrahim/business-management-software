@@ -420,4 +420,26 @@ CREATE INDEX IF NOT EXISTS idx_factory_orders_status ON factory_orders (status, 
 CREATE INDEX IF NOT EXISTS idx_factory_orders_factory ON factory_orders (factory_name);
 CREATE INDEX IF NOT EXISTS idx_factory_orders_lr ON factory_orders (lr_number);
 
+-- Dispatch Invoices for Tax Invoice PDF Verification & Auto-Reconciliation
+CREATE TABLE IF NOT EXISTS dispatch_invoices (
+    id SERIAL PRIMARY KEY,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(100) NOT NULL,
+    invoice_date DATE,
+    file_name VARCHAR(255) NOT NULL,
+    file_url TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    customer_phone_detected VARCHAR(50),
+    customer_gstin_detected VARCHAR(30),
+    extracted_raw_data JSONB DEFAULT '{}'::jsonb,
+    reconciliation_summary JSONB DEFAULT '{}'::jsonb,
+    is_verified BOOLEAN DEFAULT TRUE,
+    uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    uploaded_by_name VARCHAR(120),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_qid ON dispatch_invoices (quotation_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_inv_no ON dispatch_invoices (invoice_number);
+
 

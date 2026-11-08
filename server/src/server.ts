@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.52',
+    version: '2.4.53',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -81,6 +81,13 @@ app.use('/api/audit-logs', auditRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/dispatch', dispatchRouter);
+
+// Static serving for uploaded tax invoices & receipts
+const invoicesDir = path.resolve(process.cwd(), 'uploads/invoices');
+if (!fs.existsSync(invoicesDir)) {
+  fs.mkdirSync(invoicesDir, { recursive: true });
+}
+app.use('/uploads/invoices', express.static(invoicesDir));
 
 // Static frontend serving (turns central server into an instant web portal for any browser on LAN/web)
 const clientDistCandidates = [
@@ -285,6 +292,44 @@ async function runAutoMigrations() {
       WHERE lp.quotation_id = q.id 
         AND (LOWER(q.status) = 'closed' OR lp.purchase_status IN ('AWAITING_DELIVERY', 'ARRIVED_AT_GODOWN'))
         AND lp.payment_checked IS FALSE;
+
+      -- Tax Invoice PDF Verification & Auto-Reconciliation Schema
+      CREATE TABLE IF NOT EXISTS dispatch_invoices (
+          id SERIAL PRIMARY KEY,
+          quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+          invoice_number VARCHAR(100) NOT NULL,
+          invoice_date DATE,
+          file_name VARCHAR(255) NOT NULL,
+          file_url TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          customer_phone_detected VARCHAR(50),
+          customer_gstin_detected VARCHAR(30),
+          extracted_raw_data JSONB DEFAULT '{}'::jsonb,
+          reconciliation_summary JSONB DEFAULT '{}'::jsonb,
+          is_verified BOOLEAN DEFAULT TRUE,
+          uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          uploaded_by_name VARCHAR(120),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_qid ON dispatch_invoices (quotation_id);
+      CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_inv_no ON dispatch_invoices (invoice_number);
+
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS pending_quantity NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50) DEFAULT 'PENDING';
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_id INTEGER REFERENCES dispatch_invoices(id) ON DELETE SET NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_number VARCHAR(100);
+
+      UPDATE quotation_items
+      SET pending_quantity = GREATEST(0, COALESCE(quantity_boxes, quantity_sqft, 0) - COALESCE(dispatched_quantity, 0))
+      WHERE pending_quantity = 0 AND (COALESCE(quantity_boxes, quantity_sqft, 0) - COALESCE(dispatched_quantity, 0)) > 0;
+
+      UPDATE quotation_items
+      SET fulfillment_status = CASE 
+          WHEN COALESCE(dispatched_quantity, 0) >= COALESCE(quantity_boxes, quantity_sqft, 0) AND COALESCE(quantity_boxes, quantity_sqft, 0) > 0 THEN 'DISPATCHED'
+          WHEN COALESCE(dispatched_quantity, 0) > 0 THEN 'PARTIALLY_DISPATCHED'
+          ELSE 'PENDING'
+      END;
     `);
   } catch (err: any) {
     logger.warn('Column additions migration warning:', err.message);
@@ -638,7 +683,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.52' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.53' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

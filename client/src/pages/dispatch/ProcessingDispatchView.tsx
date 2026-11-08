@@ -20,10 +20,35 @@ import {
   ShieldAlert,
   ArrowRight,
   X,
+  FileText,
+  Upload,
+  Eye,
+  Trash2,
+  AlertCircle,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { formatCurrency } from '../DispatchManagement';
+import { useServer } from '../../context/ServerContext';
+import { useAuth } from '../../context/AuthContext';
 
-interface ProcessingItem {
+export interface DispatchInvoice {
+  id: number;
+  quotation_id: number;
+  invoice_number: string;
+  invoice_date?: string;
+  file_name: string;
+  file_url: string;
+  file_size: number;
+  customer_phone_detected?: string;
+  customer_gstin_detected?: string;
+  reconciliation_summary?: any;
+  is_verified: boolean;
+  uploaded_by_name?: string;
+  created_at: string;
+}
+
+export interface ProcessingItem {
   id: number;
   quotation_id: number;
   area_name?: string;
@@ -34,6 +59,10 @@ interface ProcessingItem {
   ordered_quantity: number;
   quantity_dispatched: number;
   remaining_quantity: number;
+  pending_quantity?: number;
+  fulfillment_status?: 'PENDING' | 'PARTIALLY_DISPATCHED' | 'DISPATCHED' | string;
+  last_invoice_number?: string;
+  last_invoice_id?: number;
   dispatch_status: string;
   procurement_status?: string;
   expected_dispatch_date?: string;
@@ -41,7 +70,7 @@ interface ProcessingItem {
   total_amount?: number;
 }
 
-interface ProcessingQuotation {
+export interface ProcessingQuotation {
   id: number;
   quotation_number: string;
   customer_name: string;
@@ -72,6 +101,9 @@ interface ProcessingQuotation {
   is_payment_sufficient?: boolean;
   deficit_amount?: number;
   payment_coverage_status?: 'COVERED' | 'INSUFFICIENT';
+  invoices?: DispatchInvoice[];
+  has_verified_invoice?: boolean;
+  latest_invoice?: DispatchInvoice | null;
 }
 
 interface Props {
@@ -95,13 +127,52 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   onNavigateToPayments,
   userRole = '',
 }) => {
+  const { serverUrl, fetchApi } = useServer();
+  const { token } = useAuth();
+  const authToken = token || localStorage.getItem('ama_token') || '';
+
   const [search, setSearch] = useState('');
   const [expandedQuotes, setExpandedQuotes] = useState<{ [key: number]: boolean }>({});
+
+  // Financial Safety Modal State
   const [safetyModalItem, setSafetyModalItem] = useState<{
     quote: ProcessingQuotation;
     item: ProcessingItem;
   } | null>(null);
   const [adminOverrideReason, setAdminOverrideReason] = useState('');
+
+  // Tax Invoice Upload & Reconciliation States
+  const [uploadingQuoteId, setUploadingQuoteId] = useState<number | null>(null);
+  const [mismatchErrors, setMismatchErrors] = useState<Record<number, string>>({});
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [reconcileDrawer, setReconcileDrawer] = useState<{
+    quote: ProcessingQuotation;
+    reconciliation: any;
+    invoice: DispatchInvoice;
+  } | null>(null);
+  const [isCommittingReconcile, setIsCommittingReconcile] = useState(false);
+
+  // Safeguard & Enforcement Modals
+  const [dispatchBlockedModal, setDispatchBlockedModal] = useState<{
+    isOpen: boolean;
+    quoteNumber: string;
+    quotationId: number;
+  } | null>(null);
+
+  const [itemNotFoundModal, setItemNotFoundModal] = useState<{
+    isOpen: boolean;
+    itemName: string;
+    quoteNumber: string;
+  } | null>(null);
+
+  const [overageModalItem, setOverageModalItem] = useState<{
+    quote: ProcessingQuotation;
+    item: ProcessingItem;
+    quotedQty: number;
+    invoicedQty: number;
+    excessQty: number;
+  } | null>(null);
+  const [supervisorOverageReason, setSupervisorOverageReason] = useState('');
 
   const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
 
@@ -109,12 +180,146 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     setExpandedQuotes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Upload Tax Invoice handler
+  const handleUploadInvoice = async (quotationId: number, file: File) => {
+    setUploadingQuoteId(quotationId);
+    setMismatchErrors((prev) => ({ ...prev, [quotationId]: '' }));
+
+    try {
+      const formData = new FormData();
+      formData.append('invoice_pdf', file);
+
+      const targetUrl = `${serverUrl || ''}/api/dispatch/${quotationId}/upload-invoice`;
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.reason === 'CUSTOMER_MISMATCH') {
+          setMismatchErrors((prev) => ({
+            ...prev,
+            [quotationId]: data.message || '⚠️ Data Mismatch: Customer phone/GSTIN does not match this quotation. Please verify and retry.',
+          }));
+        } else {
+          alert(data.error || 'Failed to upload Tax Invoice PDF');
+        }
+        return;
+      }
+
+      // Success: open reconciliation review drawer
+      const quote = dispatches.find((q) => q.id === quotationId);
+      if (quote) {
+        setReconcileDrawer({
+          quote,
+          reconciliation: data.reconciliation,
+          invoice: data.invoice,
+        });
+      }
+
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Error uploading tax invoice');
+    } finally {
+      setUploadingQuoteId(null);
+    }
+  };
+
+  // Remove/Delete Tax Invoice
+  const handleDeleteInvoice = async (invoiceId: number) => {
+    if (!window.confirm('Are you sure you want to remove this Tax Invoice?')) return;
+    try {
+      await fetchApi<any>(`/api/dispatch/invoices/${invoiceId}`, { method: 'DELETE' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete invoice');
+    }
+  };
+
+  // Apply Auto-Reconciliation Commit
+  const handleCommitReconciliation = async (quoteId: number, invoiceId: number, items: any[]) => {
+    setIsCommittingReconcile(true);
+    try {
+      await fetchApi<any>(`/api/dispatch/${quoteId}/reconcile-dispatch`, {
+        method: 'POST',
+        body: JSON.stringify({
+          invoice_id: invoiceId,
+          items: items.map((it) => ({
+            quotation_item_id: it.quotation_item_id,
+            dispatch_qty: it.invoice_qty,
+            is_overage: it.is_overage,
+          })),
+          supervisor_override: true,
+          supervisor_notes: supervisorOverageReason || 'Reconciliation approved by user',
+        }),
+      });
+
+      setReconcileDrawer(null);
+      setSupervisorOverageReason('');
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to apply dispatch reconciliation');
+    } finally {
+      setIsCommittingReconcile(false);
+    }
+  };
+
+  // Intercept "Record Dispatch" click with all safety checks
   const handleInitiatePartial = (quote: ProcessingQuotation, item: ProcessingItem) => {
+    // Rule 1: Dispatch Lock - Enforce verified Tax Invoice requirement
+    const hasInvoice = (quote.invoices && quote.invoices.length > 0) || quote.has_verified_invoice;
+    if (!hasInvoice) {
+      setDispatchBlockedModal({
+        isOpen: true,
+        quoteNumber: quote.quotation_number,
+        quotationId: quote.id,
+      });
+      return;
+    }
+
+    // Rule 2: Item presence in invoice check
+    // If invoice exists, check if this item has been matched in an invoice
+    if (quote.latest_invoice && quote.latest_invoice.reconciliation_summary) {
+      const summary = quote.latest_invoice.reconciliation_summary;
+      const matched = (summary.matched_items || []).some((m: any) => m.quotation_item_id === item.id);
+      const isPartiallyOrDispatched = item.fulfillment_status === 'PARTIALLY_DISPATCHED' || item.fulfillment_status === 'DISPATCHED';
+
+      if (!matched && !isPartiallyOrDispatched && !item.last_invoice_number) {
+        setItemNotFoundModal({
+          isOpen: true,
+          itemName: item.description,
+          quoteNumber: quote.quotation_number,
+        });
+        return;
+      }
+    }
+
+    // Rule 3: Financial Payment Safety Gate
     if (quote.is_payment_sufficient === false && (quote.deficit_amount || 0) > 0) {
       setSafetyModalItem({ quote, item });
       setAdminOverrideReason('');
       return;
     }
+
+    // Rule 4: Quantity Overage Check
+    const quoted = item.ordered_quantity || 0;
+    const dispatched = item.quantity_dispatched || 0;
+    if (dispatched > quoted) {
+      setOverageModalItem({
+        quote,
+        item,
+        quotedQty: quoted,
+        invoicedQty: dispatched,
+        excessQty: Math.round((dispatched - quoted) * 100) / 100,
+      });
+      return;
+    }
+
     onRecordPartial(quote, item);
   };
 
@@ -178,12 +383,14 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       ) : (
         <div className="flex-1 min-h-0 w-full overflow-y-auto scrollbar-thin space-y-2.5 sm:space-y-3 pr-1">
           {filtered.map((d) => {
-            const isExpanded = expandedQuotes[d.id] ?? true; // default expanded
+            const isExpanded = expandedQuotes[d.id] ?? true;
             const pct = d.progress_percent || 0;
 
             let barColor = 'bg-amber-500';
             if (pct >= 100) barColor = 'bg-emerald-500';
             else if (pct >= 50) barColor = 'bg-indigo-600';
+
+            const hasInvoice = (d.invoices && d.invoices.length > 0) || d.has_verified_invoice;
 
             return (
               <div key={d.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">
@@ -257,6 +464,96 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   </div>
                 </div>
 
+                {/* Tax Invoice Verification & Auto-Reconciliation Strip */}
+                <div className="px-4 py-2.5 bg-slate-100/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="font-bold text-slate-700 flex items-center space-x-1.5">
+                      <FileText size={14} className="text-indigo-600" />
+                      <span>Tax Invoice Verification:</span>
+                    </span>
+
+                    {d.invoices && d.invoices.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {d.invoices.map((inv) => (
+                          <div
+                            key={inv.id}
+                            className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold shadow-2xs"
+                          >
+                            <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                            <span>Tax Invoice #{inv.invoice_number} Verified</span>
+                            <button
+                              onClick={() => setPreviewPdfUrl(inv.file_url)}
+                              className="text-indigo-600 hover:text-indigo-800 underline text-[11px] ml-1 flex items-center space-x-0.5 cursor-pointer"
+                              title="Preview Invoice PDF"
+                            >
+                              <Eye size={11} />
+                              <span>View</span>
+                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => handleDeleteInvoice(inv.id)}
+                                className="text-slate-400 hover:text-rose-600 cursor-pointer ml-1"
+                                title="Remove Invoice"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-amber-800 font-semibold flex items-center space-x-1 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                        <AlertCircle size={12} className="text-amber-600" />
+                        <span>No Tax Invoice attached. Physical dispatch is locked until invoice is verified.</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Upload Control */}
+                  <div className="flex items-center space-x-2">
+                    {canEdit && (
+                      <label
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer ${
+                          uploadingQuoteId === d.id
+                            ? 'bg-indigo-100 text-indigo-400 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                      >
+                        <Upload size={12} className={uploadingQuoteId === d.id ? 'animate-bounce' : ''} />
+                        <span>{uploadingQuoteId === d.id ? 'Parsing Invoice PDF...' : 'Upload Tax Invoice (PDF)'}</span>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          disabled={uploadingQuoteId === d.id}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUploadInvoice(d.id, e.target.files[0]);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline Metadata Mismatch Error Banner */}
+                {mismatchErrors[d.id] && (
+                  <div className="px-4 py-2.5 bg-rose-50 border-b border-rose-200 text-rose-900 text-xs flex items-center justify-between animate-fadeIn">
+                    <div className="flex items-center space-x-2 font-bold">
+                      <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+                      <span>{mismatchErrors[d.id]}</span>
+                    </div>
+                    <button
+                      onClick={() => setMismatchErrors((prev) => ({ ...prev, [d.id]: '' }))}
+                      className="text-rose-400 hover:text-rose-600 cursor-pointer p-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
                 {/* Financial Safety Summary Banner */}
                 <div
                   className={`px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs border-b ${
@@ -328,16 +625,22 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                           <th className="py-2 px-2.5">Item Description & Specs</th>
                           <th className="py-2 px-2.5">Room / Area</th>
                           <th className="py-2 px-2.5 text-center">Sourcing Status</th>
-                          <th className="py-2 px-2.5 text-right">Ordered</th>
-                          <th className="py-2 px-2.5 text-right">Dispatched</th>
-                          <th className="py-2 px-2.5 text-right">Remaining</th>
-                          <th className="py-2 px-2.5 text-right w-44">Fulfill / Action</th>
+                          <th className="py-2 px-2.5 min-w-[220px]">Quantity Reconciliation (Quoted | Dispatched | Pending)</th>
+                          <th className="py-2 px-2.5 text-center">Fulfillment Status</th>
+                          <th className="py-2 px-2.5 text-right w-44">Dispatch Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {d.items.map((it, idx) => {
-                          const isFullyDispatched = it.dispatch_status === 'Dispatched';
+                          const ordered = Math.round(it.ordered_quantity || 0);
+                          const dispatched = Math.round(it.quantity_dispatched || 0);
+                          const pending = Math.max(0, ordered - dispatched);
+                          const itemPct = ordered > 0 ? Math.min(100, Math.round((dispatched / ordered) * 100)) : 0;
+
+                          const isFullyDispatched = it.dispatch_status === 'Dispatched' || it.fulfillment_status === 'DISPATCHED' || dispatched >= ordered;
+                          const isPartiallyDispatched = it.fulfillment_status === 'PARTIALLY_DISPATCHED' || (dispatched > 0 && dispatched < ordered);
                           const isReady = it.dispatch_status === 'Ready Stock';
+                          const isOverage = dispatched > ordered;
 
                           return (
                             <tr key={it.id} className="hover:bg-slate-50/50">
@@ -347,6 +650,11 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                 <div className="text-[10px] text-slate-500 font-mono flex items-center space-x-2 mt-0.5">
                                   {it.brand && <span>Brand: {it.brand}</span>}
                                   {it.size && <span>Size: {it.size}</span>}
+                                  {it.last_invoice_number && (
+                                    <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                      Inv #{it.last_invoice_number}
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-2.5 px-2.5 text-slate-600 font-medium text-[11px]">
@@ -369,15 +677,78 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                   {it.dispatch_status}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-2.5 text-right font-mono font-semibold text-slate-800">
-                                {Math.round(it.ordered_quantity)} {it.product_type || 'boxes'}
+
+                              {/* Split Badges: Quoted | Dispatched | Pending */}
+                              <td className="py-2.5 px-2.5">
+                                <div className="space-y-1">
+                                  <div className="flex items-center space-x-1.5 text-[11px] font-mono">
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700" title="Quoted Quantity">
+                                      Q: <span className="font-bold">{ordered}</span>
+                                    </span>
+                                    <span className="text-slate-300">|</span>
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold" title="Dispatched Quantity">
+                                      D: {dispatched}
+                                    </span>
+                                    <span className="text-slate-300">|</span>
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded font-bold ${
+                                        pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                                      }`}
+                                      title="Pending Quantity"
+                                    >
+                                      P: {pending}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">{it.product_type || 'boxes'}</span>
+                                  </div>
+
+                                  {/* Item fulfillment progress bar */}
+                                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${
+                                        itemPct >= 100 ? 'bg-emerald-500' : itemPct > 0 ? 'bg-amber-500' : 'bg-slate-300'
+                                      } transition-all duration-300`}
+                                      style={{ width: `${itemPct}%` }}
+                                    />
+                                  </div>
+
+                                  {/* Extra Quantity Alert Pill */}
+                                  {isOverage && (
+                                    <div className="text-[10px] text-rose-700 font-bold flex items-center space-x-1">
+                                      <AlertTriangle size={11} className="text-rose-600" />
+                                      <span>Extra Quantity: +{Math.round(dispatched - ordered)} boxes!</span>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
-                              <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-700">
-                                {Math.round(it.quantity_dispatched)} {it.product_type || 'boxes'}
+
+                              {/* Fulfillment Status Pill */}
+                              <td className="py-2.5 px-2.5 text-center">
+                                <span
+                                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isFullyDispatched
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : isPartiallyDispatched
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  }`}
+                                >
+                                  {isFullyDispatched ? (
+                                    <>
+                                      <Check size={10} />
+                                      <span>Dispatched</span>
+                                    </>
+                                  ) : isPartiallyDispatched ? (
+                                    <>
+                                      <Clock size={10} />
+                                      <span>Partially Dispatched</span>
+                                    </>
+                                  ) : (
+                                    <span>Pending</span>
+                                  )}
+                                </span>
                               </td>
-                              <td className="py-2.5 px-2.5 text-right font-mono font-bold text-amber-700">
-                                {Math.round(it.remaining_quantity)} {it.product_type || 'boxes'}
-                              </td>
+
+                              {/* Dispatch Action Button */}
                               <td className="py-2.5 px-2.5 text-right">
                                 {isFullyDispatched ? (
                                   <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-600">
@@ -387,7 +758,12 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                 ) : canEdit ? (
                                   <button
                                     onClick={() => handleInitiatePartial(d, it)}
-                                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-2xs cursor-pointer transition-colors"
+                                    className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs cursor-pointer transition-colors ${
+                                      hasInvoice
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                        : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                                    }`}
+                                    title={hasInvoice ? 'Record Partial / Full Dispatch' : 'Tax Invoice required before dispatch'}
                                   >
                                     <Truck size={12} />
                                     <span>Record Dispatch</span>
@@ -409,7 +785,308 @@ export const ProcessingDispatchView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Financial Safeguard Warning Modal */}
+      {/* 1. Dispatch Blocked Modal (No Tax Invoice) */}
+      {dispatchBlockedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-rose-200 shadow-2xl flex flex-col space-y-4 animate-fadeIn">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-2xl bg-rose-100 text-rose-600 shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  🚫 Dispatch Blocked: Tax Invoice Required
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Please upload a valid Tax Invoice PDF before dispatching items for quotation{' '}
+                  <span className="font-mono font-bold text-slate-900">{dispatchBlockedModal.quoteNumber}</span>.
+                </p>
+              </div>
+              <button
+                onClick={() => setDispatchBlockedModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+              <div className="font-bold text-slate-800">Compliance & Accuracy Safeguard:</div>
+              <div>
+                All material dispatches require an uploaded Tax Invoice to verify customer phone, GSTIN, and line-item quantities before items leave the godown.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setDispatchBlockedModal(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold text-xs text-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+              <label className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer flex items-center space-x-1.5">
+                <Upload size={13} />
+                <span>Upload Tax Invoice Now</span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const quoteId = dispatchBlockedModal.quotationId;
+                      setDispatchBlockedModal(null);
+                      handleUploadInvoice(quoteId, e.target.files[0]);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Item Not Found in Invoice Modal */}
+      {itemNotFoundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-amber-200 shadow-2xl flex flex-col space-y-4 animate-fadeIn">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700 shrink-0">
+                <AlertCircle size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  ⚠️ Item Not Found in Tax Invoice
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  The item <span className="font-bold text-slate-900">"{itemNotFoundModal.itemName}"</span> was not detected in the uploaded Tax Invoice for quote{' '}
+                  <span className="font-mono font-bold text-slate-900">{itemNotFoundModal.quoteNumber}</span>.
+                </p>
+              </div>
+              <button
+                onClick={() => setItemNotFoundModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+              Please verify that this item is included in the uploaded Tax Invoice or upload a revised/supplementary Tax Invoice PDF.
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setItemNotFoundModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm cursor-pointer"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Auto-Reconciliation Confirmation Drawer / Modal */}
+      {reconcileDrawer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+            {/* Header */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-700">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">
+                    Tax Invoice Verified: #{reconcileDrawer.reconciliation.invoice_number}
+                  </h3>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    Quotation Ref: <span className="font-bold text-slate-800">{reconcileDrawer.quote.quotation_number}</span> | Customer:{' '}
+                    <span className="font-bold text-slate-800">{reconcileDrawer.quote.customer_name}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setReconcileDrawer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 text-xs scrollbar-thin">
+              {/* Customer Match Success Banner */}
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <div>
+                    <div className="font-bold">Customer Identity Verified</div>
+                    <div className="text-[11px] text-emerald-800">
+                      Phone / GSTIN matched the quotation record.
+                    </div>
+                  </div>
+                </div>
+                {reconcileDrawer.invoice.file_url && (
+                  <button
+                    onClick={() => setPreviewPdfUrl(reconcileDrawer.invoice.file_url)}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
+                  >
+                    <Eye size={12} />
+                    <span>View PDF</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Matched Line Items Table */}
+              <div>
+                <h4 className="font-bold text-slate-800 mb-2 uppercase text-[11px] tracking-wider">
+                  Reconciled Line Items ({reconcileDrawer.reconciliation.matched_items?.length || 0} items)
+                </h4>
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Description</th>
+                        <th className="py-2 px-2 text-right">Quoted</th>
+                        <th className="py-2 px-2 text-right">Invoice Qty</th>
+                        <th className="py-2 px-2 text-right">New Dispatched</th>
+                        <th className="py-2 px-2 text-right">Pending</th>
+                        <th className="py-2 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(reconcileDrawer.reconciliation.matched_items || []).map((it: any) => (
+                        <tr key={it.quotation_item_id} className={it.is_overage ? 'bg-rose-50/50' : ''}>
+                          <td className="py-2 px-3 font-semibold text-slate-800">{it.description}</td>
+                          <td className="py-2 px-2 text-right font-mono">{it.quoted_qty}</td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-indigo-700">{it.invoice_qty}</td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">{it.new_dispatched_qty}</td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">{it.pending_qty}</td>
+                          <td className="py-2 px-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                it.fulfillment_status === 'DISPATCHED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {it.fulfillment_status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Unmatched Items Alert */}
+              {reconcileDrawer.reconciliation.unmatched_items?.length > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                  <div className="font-bold flex items-center space-x-1.5 mb-1">
+                    <AlertTriangle size={13} className="text-amber-700" />
+                    <span>Unmatched Items in Tax Invoice ({reconcileDrawer.reconciliation.unmatched_items.length}):</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-800">
+                    {reconcileDrawer.reconciliation.unmatched_items.map((u: any) => (
+                      <li key={u.quotation_item_id}>
+                        {u.description} (Ordered: {u.quoted_qty} boxes)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Overage Warning & Supervisor Input */}
+              {reconcileDrawer.reconciliation.has_overages && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-2">
+                  <div className="font-bold flex items-center space-x-1.5">
+                    <AlertTriangle size={14} className="text-rose-600" />
+                    <span>⚠️ Extra Quantity Detected on one or more items!</span>
+                  </div>
+                  <p className="text-[11px] text-rose-800">
+                    The Tax Invoice specifies higher quantities than the quotation. Supervisor confirmation is required to record overages.
+                  </p>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      Supervisor Approval Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={supervisorOverageReason}
+                      onChange={(e) => setSupervisorOverageReason(e.target.value)}
+                      placeholder="e.g. Additional boxes approved for client site wastage..."
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-2 shrink-0">
+              <button
+                onClick={() => setReconcileDrawer(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold text-xs text-slate-700 cursor-pointer"
+              >
+                Close Without Applying
+              </button>
+              <button
+                onClick={() =>
+                  handleCommitReconciliation(
+                    reconcileDrawer.quote.id,
+                    reconcileDrawer.invoice.id,
+                    reconcileDrawer.reconciliation.matched_items || []
+                  )
+                }
+                disabled={isCommittingReconcile}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+              >
+                <Check size={13} />
+                <span>{isCommittingReconcile ? 'Applying...' : 'Apply Reconciled Dispatch'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. PDF Preview Modal */}
+      {previewPdfUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-4xl w-full h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+            <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2 font-bold text-slate-800 text-xs">
+                <FileText size={15} className="text-indigo-600" />
+                <span>Tax Invoice Document Preview</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <a
+                  href={previewPdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-[11px] flex items-center space-x-1"
+                >
+                  <ExternalLink size={11} />
+                  <span>Open in New Tab</span>
+                </a>
+                <button
+                  onClick={() => setPreviewPdfUrl(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 w-full bg-slate-100">
+              <iframe src={previewPdfUrl} className="w-full h-full border-none" title="Invoice Preview" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Financial Safeguard Warning Modal */}
       {safetyModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-rose-200 shadow-2xl flex flex-col space-y-4 animate-fadeIn">
