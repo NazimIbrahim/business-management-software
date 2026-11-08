@@ -23,17 +23,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { fetchApi } = useServer();
 
   useEffect(() => {
+    let isMounted = true;
+
+    // Hard safety watchdog: isLoading must NEVER hang longer than 2.5s under any condition
+    const safetyWatchdog = setTimeout(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }, 2500);
+
     if (token) {
-      refreshUser().finally(() => setIsLoading(false));
+      refreshUser().finally(() => {
+        if (isMounted) {
+          clearTimeout(safetyWatchdog);
+          setIsLoading(false);
+        }
+      });
     } else {
+      clearTimeout(safetyWatchdog);
       setIsLoading(false);
     }
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyWatchdog);
+    };
   }, [token]);
 
   const refreshUser = async () => {
     try {
-      const data = await fetchApi<{ user: User }>('/api/auth/me');
-      setUser(data.user);
+      const data = await fetchApi<{ user: User }>('/api/auth/me', { timeoutMs: 2000 } as any);
+      if (data && data.user) {
+        setUser(data.user);
+      } else {
+        logout();
+      }
     } catch (err) {
       logout();
     }

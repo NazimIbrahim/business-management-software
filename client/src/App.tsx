@@ -35,6 +35,18 @@ const AppContent: React.FC = () => {
   const [quotationType, setQuotationType] = useState<'tiles' | 'sanitary'>('tiles');
   const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [loadingSlow, setLoadingSlow] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingSlow(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // Always redirect to dashboard upon login
   useEffect(() => {
@@ -47,11 +59,48 @@ const AppContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-100">
-        <div className="text-center">
-          <div className="w-9 h-9 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-xs font-semibold text-slate-700">Loading Quotation System...</p>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-slate-100 p-6 select-none relative overflow-hidden">
+        {/* Background ambient glow matching app brand */}
+        <div className="absolute w-96 h-96 rounded-full bg-blue-600/10 blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col items-center text-center max-w-sm">
+          <div className="w-14 h-14 relative flex items-center justify-center mb-4">
+            <div className="w-14 h-14 rounded-full border-4 border-slate-700 border-t-blue-500 animate-spin"></div>
+            <span className="absolute text-xs font-black tracking-wider text-blue-400">AMA</span>
+          </div>
+
+          <h2 className="text-base font-bold text-white tracking-wide">AMA CERAMICS PVT LTD</h2>
+          <p className="text-xs text-slate-400 mt-1">Commercial Quotation & Dispatch Management</p>
+          <div className="mt-3 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300">
+            Initializing system & session...
+          </div>
+
+          {loadingSlow && (
+            <div className="mt-6 flex flex-col gap-2.5 w-full animate-fade-in">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('ama_token');
+                  } catch {}
+                  window.location.reload();
+                }}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+              >
+                Go to Sign In Screen
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpenServerWizard(true)}
+                className="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition cursor-pointer"
+              >
+                Configure Host Server
+              </button>
+            </div>
+          )}
         </div>
+
+        <ServerSetupModal isOpen={openServerWizard} onClose={() => setOpenServerWizard(false)} />
       </div>
     );
   }

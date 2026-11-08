@@ -55,7 +55,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.30',
+    version: '2.4.36',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -80,6 +80,34 @@ app.use('/api/audit-logs', auditRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/dispatch', dispatchRouter);
+
+// Static frontend serving (turns central server into an instant web portal for any browser on LAN/web)
+const clientDistCandidates = [
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(__dirname, '../client/dist'),
+  path.resolve(process.cwd(), 'client/dist'),
+  path.resolve(process.cwd(), '../client/dist'),
+  path.resolve(process.cwd(), 'dist-client'),
+  'C:\\AMA-Ceramics-Host-Server\\client\\dist',
+];
+
+const clientDist = clientDistCandidates.find(
+  (dir) => fs.existsSync(dir) && fs.existsSync(path.join(dir, 'index.html'))
+);
+
+if (clientDist) {
+  logger.info(`Static web portal enabled! Serving from: ${clientDist}`);
+  app.use(express.static(clientDist));
+  // Catch-all route for Single Page Application navigation
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  logger.info('No client/dist build found. Server running in API-only mode.');
+}
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

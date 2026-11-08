@@ -25,7 +25,7 @@ interface ServerContextType {
   latencyMs: number | null;
   lastSyncTime: Date | null;
   testConnection: (targetUrl?: string) => Promise<{ ok: boolean; message: string; latency: number }>;
-  fetchApi: <T = any>(endpoint: string, options?: RequestInit) => Promise<T>;
+  fetchApi: <T = any>(endpoint: string, options?: RequestInit & { timeoutMs?: number }) => Promise<T>;
   getPdfUrl: (quotationId: number, encrypted?: boolean) => string;
   getVersionPdfUrl: (quotationId: number, versionNumber: number, encrypted?: boolean) => string;
   getReceiptUrl: (paymentId: number) => string;
@@ -38,11 +38,46 @@ interface ServerContextType {
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
 
+const getDefaultServerUrl = (): string => {
+  const envUrl = (import.meta as any).env?.VITE_API_URL?.trim();
+  if (envUrl) return envUrl;
+
+  const saved = localStorage.getItem('ama_server_url')?.trim();
+
+  // If in a browser environment (not Electron)
+  if (typeof window !== 'undefined' && !(window as any).electronAPI && window.location) {
+    const { protocol, hostname, port, origin } = window.location;
+    const isRemoteBrowser = Boolean(hostname && hostname !== 'localhost' && hostname !== '127.0.0.1');
+
+    // If there is a saved URL, check if it's stale/invalid for remote access
+    if (saved) {
+      const savedIsLocal = saved.includes('localhost') || saved.includes('127.0.0.1');
+      if (isRemoteBrowser && savedIsLocal) {
+        // Discard stale localhost saved in a remote browser session
+        try {
+          localStorage.removeItem('ama_server_url');
+        } catch {}
+      } else {
+        return saved;
+      }
+    }
+
+    // Auto-detect based on current window location
+    if (hostname) {
+      // If served via Vite dev server on port 5173, backend is on port 4000
+      if (port === '5173' || port === '3000' || port === '5174') {
+        return `${protocol}//${hostname}:4000`;
+      }
+      // If served directly from Express or reverse proxy (port 4000 or domain)
+      return origin;
+    }
+  }
+
+  return saved || 'http://localhost:4000';
+};
+
 export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const defaultEnvUrl = (import.meta as any).env?.VITE_API_URL?.trim();
-  const [serverUrl, setServerUrlState] = useState<string>(() => {
-    return localStorage.getItem('ama_server_url') || defaultEnvUrl || 'http://localhost:4000';
-  });
+  const [serverUrl, setServerUrlState] = useState<string>(() => getDefaultServerUrl());
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
@@ -63,7 +98,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Auto-normalize user input (supports LAN IP addresses and Cloud URLs like Render, Railway, etc.)
   const normalizeUrl = (input: string): string => {
     let clean = input.trim();
-    if (!clean) return defaultEnvUrl || 'http://localhost:4000';
+    if (!clean) return getDefaultServerUrl();
 
     const isExplicitHttps = clean.startsWith('https://');
     const withoutScheme = clean.replace(/^https?:\/\//, '');
@@ -94,8 +129,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Load persisted server URL from Electron preload if available, or open wizard on first run
   useEffect(() => {
     const hasConfigured = localStorage.getItem('ama_server_url');
-    if (window.electronAPI) {
-      window.electronAPI.getServerUrl().then((savedUrl) => {
+    if ((window as any).electronAPI) {
+      (window as any).electronAPI.getServerUrl().then((savedUrl: string) => {
         if (savedUrl && savedUrl !== serverUrl) {
           const normalized = normalizeUrl(savedUrl);
           setServerUrlState(normalized);
@@ -105,8 +140,6 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setOpenServerWizard(true);
         }
       });
-    } else if (!hasConfigured) {
-      setOpenServerWizard(true);
     }
   }, []);
 
@@ -269,9 +302,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // Central fetch wrapper with JWT token & error handling
+  // Central fetch wrapper with JWT token, timeout watchdog & error handling
   const fetchApi = useCallback(
-    async <T = any>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+    async <T = any>(endpoint: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<T> => {
       const token = localStorage.getItem('ama_token');
       const headers = new Headers(options.headers || {});
 
@@ -285,21 +318,35 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
       const fullUrl = `${serverUrl}${cleanEndpoint}`;
 
-      const response = await fetch(fullUrl, {
-        ...options,
-        headers,
-      });
+      const controller = new AbortController();
+      const timeoutMs = options.timeoutMs ?? 7000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      if (!response.ok) {
-        let errMsg = `Request failed: HTTP ${response.status}`;
-        try {
-          const errData = await response.json();
-          if (errData.error) errMsg = errData.error;
-        } catch (e) {}
-        throw new Error(errMsg);
+      try {
+        const response = await fetch(fullUrl, {
+          ...options,
+          headers,
+          signal: options.signal || controller.signal,
+        });
+
+        if (!response.ok) {
+          let errMsg = `Request failed: HTTP ${response.status}`;
+          try {
+            const errData = await response.json();
+            if (errData.error) errMsg = errData.error;
+          } catch (e) {}
+          throw new Error(errMsg);
+        }
+
+        return (await response.json()) as T;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          throw new Error(`Request timed out after ${timeoutMs}ms: ${cleanEndpoint}`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      return response.json() as Promise<T>;
     },
     [serverUrl]
   );
