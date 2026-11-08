@@ -146,9 +146,9 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   const { user } = useAuth();
   const { fetchApi, subscribeToEvents, company } = useServer();
 
-  const canEditDispatch = ['admin', 'dispatch', 'dispatch_team'].includes(user?.role || '');
-  const isViewOnly = !canEditDispatch;
   const userRole = (user?.role || '').toLowerCase();
+  const canEditDispatch = ['admin', 'manager', 'dispatch', 'dispatch_team'].includes(userRole);
+  const isViewOnly = !canEditDispatch;
   const canSeeModifiedItemsAlert = ['admin', 'manager', 'dispatch', 'dispatch_team', 'accounts', 'accountant'].includes(userRole);
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -393,7 +393,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
     try {
       setUpdatingItemId(itemId);
       await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ procurement_status: newStage }),
       });
       setProcurementItems((prev) =>
@@ -410,7 +410,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       );
       showToast(`Procurement stage updated to "${newStage}"`);
     } catch (err: any) {
-      alert(err.message || 'Failed to update stage');
+      showToast(err.message || 'Failed to update stage');
     } finally {
       setUpdatingItemId(null);
     }
@@ -419,7 +419,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   const handleItemNotesChange = async (itemId: number, notes: string) => {
     try {
       await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ procurement_notes: notes }),
       });
       setProcurementItems((prev) =>
@@ -433,7 +433,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   const handleItemDateChange = async (itemId: number, newDate: string) => {
     try {
       await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ expected_dispatch_date: newDate }),
       });
       setProcurementItems((prev) =>
@@ -441,7 +441,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       );
       showToast(`Expected date updated to ${newDate}`);
     } catch (err: any) {
-      alert(err.message || 'Failed to update expected date');
+      showToast(err.message || 'Failed to update expected date');
     }
   };
 
@@ -449,7 +449,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
     try {
       setMarkingReadyStockId(item.id);
       await fetchApi<any>(`/api/dispatch/items/${item.id}`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ mark_ready_stock: true }),
       });
 
@@ -489,7 +489,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       );
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to mark ready stock');
+      showToast(err.message || 'Failed to mark ready stock');
     } finally {
       setMarkingReadyStockId(null);
     }

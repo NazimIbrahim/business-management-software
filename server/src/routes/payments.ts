@@ -585,7 +585,7 @@ paymentsRouter.post('/', async (req: Request, res: Response) => {
 
 // 3. Accounts Verification Endpoint (Verify / Unverify payment receipt)
 // Only Managers / Admins / Accounts team members can perform this action
-paymentsRouter.patch('/:id/verify', async (req: Request, res: Response) => {
+const handlePaymentVerification = async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string, 10);
     const { verified = true, notes } = req.body;
@@ -705,4 +705,8 @@ paymentsRouter.patch('/:id/verify', async (req: Request, res: Response) => {
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
-});
+};
+
+paymentsRouter.patch('/:id/verify', handlePaymentVerification);
+paymentsRouter.post('/:id/verify', handlePaymentVerification);
+paymentsRouter.put('/:id/verify', handlePaymentVerification);

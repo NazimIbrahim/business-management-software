@@ -967,10 +967,7 @@ dispatchRouter.get('/procurement-items', async (req: Request, res: Response) => 
 });
 
 // 7. Update Single Item Procurement Status & Mark Ready Stock
-dispatchRouter.patch(
-  '/items/:id',
-  requireRole(['admin', 'manager', 'dispatch', 'dispatch_team']),
-  async (req: Request, res: Response) => {
+const handleItemProcurementUpdate = async (req: Request, res: Response) => {
     try {
       await ensureDispatchSchema();
 
@@ -1150,5 +1147,9 @@ dispatchRouter.patch(
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
-  }
-);
+};
+
+const dispatchItemRoles = requireRole(['admin', 'manager', 'dispatch', 'dispatch_team']);
+dispatchRouter.patch('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);
+dispatchRouter.post('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);
+dispatchRouter.put('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);

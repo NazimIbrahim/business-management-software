@@ -344,7 +344,7 @@ export const QuotationDetail: React.FC<Props> = ({
     setVerifyingPaymentId(paymentId);
     try {
       await fetchApi(`/api/payments/${paymentId}/verify`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ verified: targetVerified }),
       });
       loadDetail();

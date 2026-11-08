@@ -149,7 +149,7 @@ export const PaymentManagement: React.FC = () => {
     setVerifyingId(paymentId);
     try {
       await fetchApi(`/api/payments/${paymentId}/verify`, {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({ verified: targetVerified }),
       });
       await loadPayments();

@@ -42,13 +42,30 @@ const getDefaultServerUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_API_URL?.trim();
   if (envUrl) return envUrl;
 
-  // In a browser environment (Chrome / Safari / Edge / Mobile Phone)
+  // 1. Prioritize user's saved server URL from previous configuration
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('ama_server_url')?.trim();
+    if (saved) {
+      return saved;
+    }
+  }
+
+  // 2. In a browser environment (Chrome / Safari / Edge / Mobile Phone)
   if (typeof window !== 'undefined' && !(window as any).electronAPI && window.location) {
     const { protocol, hostname, port, origin } = window.location;
 
-    // If served directly from Express or reverse proxy (port 4000 or custom port/domain)
-    // ALWAYS prioritize the exact origin that served the app
-    if (hostname && (port === '4000' || !port)) {
+    // Detect if running on static frontend hosting (Vercel, Netlify, GitHub Pages, etc.)
+    const isStaticHosting =
+      hostname.endsWith('.vercel.app') ||
+      hostname.endsWith('.netlify.app') ||
+      hostname.endsWith('.github.io');
+
+    if (isStaticHosting) {
+      return 'https://ama-quotation-api.onrender.com';
+    }
+
+    // If served directly from Express Host Server (port 4000) or custom LAN web portal
+    if (hostname && (port === '4000' || (!port && !isStaticHosting))) {
       return origin;
     }
 
@@ -57,18 +74,12 @@ const getDefaultServerUrl = (): string => {
       return `${protocol}//${hostname}:4000`;
     }
 
-    const saved = localStorage.getItem('ama_server_url')?.trim();
-    if (saved) {
-      return saved;
-    }
-
     if (hostname) {
       return origin;
     }
   }
 
-  const saved = localStorage.getItem('ama_server_url')?.trim();
-  return saved || 'http://localhost:4000';
+  return 'https://ama-quotation-api.onrender.com';
 };
 
 export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
