@@ -48,14 +48,18 @@ const AppContent: React.FC = () => {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  // Always redirect to dashboard upon login
+  // Redirect upon login: dispatch team goes directly to Local Purchase, others to dashboard
   useEffect(() => {
     if (user) {
-      setActiveTab('dashboard');
+      if (user.role === 'dispatch' || user.role === 'dispatch_team') {
+        setActiveTab('dispatch-local');
+      } else {
+        setActiveTab('dashboard');
+      }
       setSelectedQuotationId(null);
       setIsEditingQuotation(false);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   if (isLoading) {
     return (
@@ -179,6 +183,14 @@ const AppContent: React.FC = () => {
   };
 
   const renderMainContent = () => {
+    // Restrict dispatch team exclusively to dispatch views
+    const isDispatch = user?.role === 'dispatch' || user?.role === 'dispatch_team';
+    if (isDispatch) {
+      if (activeTab === 'dispatch') return <DispatchManagement initialView="all" />;
+      if (activeTab === 'dispatch-factory') return <DispatchManagement initialView="factory-orders" />;
+      return <DispatchManagement initialView="local-purchase" />;
+    }
+
     // If a quotation is being edited or created
     const isSanitary =
       activeTab === 'quotation-create-sanitary' ||
@@ -249,7 +261,11 @@ const AppContent: React.FC = () => {
           />
         );
       case 'dispatch':
-        return <DispatchManagement />;
+        return <DispatchManagement initialView="all" />;
+      case 'dispatch-local':
+        return <DispatchManagement initialView="local-purchase" />;
+      case 'dispatch-factory':
+        return <DispatchManagement initialView="factory-orders" />;
       case 'salespersons':
         return (
           <SalespersonDashboard

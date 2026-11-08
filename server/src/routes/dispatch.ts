@@ -32,11 +32,22 @@ export async function ensureDispatchSchema(): Promise<void> {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_status VARCHAR(60) DEFAULT NULL;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_notes TEXT DEFAULT NULL;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_updated_at TIMESTAMPTZ DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_category VARCHAR(50) DEFAULT NULL;
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS procurement_updated_by_name VARCHAR(120) DEFAULT NULL;
 
       ALTER TABLE quotations ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
       ALTER TABLE quotation_items ALTER COLUMN dispatch_status SET DEFAULT 'Yet to Update';
       UPDATE quotations SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
       UPDATE quotation_items SET dispatch_status = 'Yet to Update' WHERE dispatch_status IS NULL;
+
+      -- Mark initial procurement category for existing items
+      UPDATE quotation_items
+      SET procurement_category = 'local'
+      WHERE dispatch_status = 'Need to Arrange from Local' AND procurement_category IS NULL;
+
+      UPDATE quotation_items
+      SET procurement_category = 'factory'
+      WHERE dispatch_status = 'Factory Order' AND procurement_category IS NULL;
 
       -- Sync quotation dispatch_status from items whenever items have updated stock availability
       UPDATE quotations q
@@ -105,14 +116,16 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       `SELECT 
          count(*) as total_orders,
          COUNT(CASE WHEN LOWER(q.status) = 'closed' THEN 1 END) as closed_count,
+         COUNT(CASE WHEN LOWER(q.status) = 'approved' THEN 1 END) as approved_count,
          COUNT(CASE WHEN q.has_dispatch_item_changes = true THEN 1 END) as pending_item_changes_count
        FROM quotations q
-       WHERE LOWER(q.status) = 'closed' ${userFilter}`,
+       WHERE LOWER(q.status) IN ('closed', 'approved') ${userFilter}`,
       userParams
     );
     const countRow = ordersCountRes[0] || {};
     const totalOrders = parseInt(countRow.total_orders || '0', 10);
     const closedCount = parseInt(countRow.closed_count || '0', 10);
+    const approvedCount = parseInt(countRow.approved_count || '0', 10);
 
     const userRole = (req.user?.role || '').toLowerCase();
     const canSeeModifiedItemsAlert = ['admin', 'manager', 'dispatch', 'dispatch_team', 'accounts', 'accountant'].includes(userRole);
@@ -136,7 +149,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
           THEN 1 END) as overdue_count
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
-      WHERE LOWER(q.status) = 'closed' ${userFilter}`,
+      WHERE LOWER(q.status) IN ('closed', 'approved') ${userFilter}`,
       userParams
     );
 
@@ -159,7 +172,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
       FROM quotations q
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE LOWER(q.status) = 'closed'
+      WHERE LOWER(q.status) IN ('closed', 'approved')
         AND q.expected_dispatch_date = CURRENT_DATE
         AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
         ${userFilter}
@@ -185,7 +198,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         COUNT(CASE WHEN qi.dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items_count
       FROM quotations q
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE LOWER(q.status) = 'closed'
+      WHERE LOWER(q.status) IN ('closed', 'approved')
         AND q.expected_dispatch_date = CURRENT_DATE + INTERVAL '1 day'
         AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
         ${userFilter}
@@ -204,7 +217,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
         COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as proc_reached_godown
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
-      WHERE LOWER(q.status) = 'closed' ${userFilter}`,
+      WHERE LOWER(q.status) IN ('closed', 'approved') ${userFilter}`,
       userParams
     );
     const procStats = procurementStatsRes[0] || {};
@@ -223,7 +236,7 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
             q.dispatch_change_summary,
             q.updated_at
           FROM quotations q
-          WHERE LOWER(q.status) = 'closed'
+          WHERE LOWER(q.status) IN ('closed', 'approved')
             AND q.has_dispatch_item_changes = true
             ${userFilter}
           ORDER BY q.updated_at DESC`,
@@ -232,10 +245,12 @@ dispatchRouter.get('/stats', async (req: Request, res: Response) => {
       : [];
 
     res.json({
-      total_orders: closedCount,
+      total_orders: totalOrders,
       total_closed_quotations: closedCount,
-      approved_count: 0,
+      approved_count: approvedCount,
       closed_count: closedCount,
+      local_active_count: parseInt(stats.local_arrange_count || '0', 10),
+      factory_active_count: parseInt(stats.factory_order_count || '0', 10),
       pending_item_changes_count: pendingItemChangesCount,
       changed_quotations: changedQuotationsRes.map((cq: any) => ({
         ...cq,
@@ -293,8 +308,8 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       pIdx++;
     }
 
-    // Only Closed quotations are displayed and tracked in Dispatch Management
-    conditions.push(`LOWER(q.status) = 'closed'`);
+    // Approved and Closed quotations are displayed and tracked in Dispatch Management
+    conditions.push(`LOWER(q.status) IN ('closed', 'approved')`);
 
     if (search && typeof search === 'string' && search.trim()) {
       conditions.push(
@@ -431,9 +446,9 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
     }
 
     const quotation = qRows[0];
-    if (quotation.status?.toLowerCase() !== 'closed') {
+    if (!['closed', 'approved'].includes(quotation.status?.toLowerCase())) {
       res.status(400).json({
-        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only closed quotations are managed in the Dispatch module.`,
+        error: `Quotation ${quotation.quotation_number} is in '${quotation.status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
       });
       return;
     }
@@ -557,9 +572,9 @@ dispatchRouter.put(
         res.status(404).json({ error: 'Quotation not found' });
         return;
       }
-      if (qCheck[0].status?.toLowerCase() !== 'closed') {
+      if (!['closed', 'approved'].includes(qCheck[0].status?.toLowerCase())) {
         res.status(400).json({
-          error: `Quotation ${qCheck[0].quotation_number} is in '${qCheck[0].status}' status. Only closed quotations are managed in the Dispatch module.`,
+          error: `Quotation ${qCheck[0].quotation_number} is in '${qCheck[0].status}' status. Only approved or closed quotations are managed in the Dispatch module.`,
         });
         return;
       }
@@ -587,6 +602,13 @@ dispatchRouter.put(
                 : null;
             const itProcurementNotes = it.procurement_notes || null;
 
+            const itProcurementCategory =
+              itStatus === 'Need to Arrange from Local'
+                ? 'local'
+                : itStatus === 'Factory Order'
+                ? 'factory'
+                : null;
+
             await client.query(
               `UPDATE quotation_items
                SET dispatch_status = $1,
@@ -596,9 +618,23 @@ dispatchRouter.put(
                    dispatched_quantity = $5,
                    procurement_status = $6,
                    procurement_notes = $7,
-                   procurement_updated_at = CASE WHEN $6::varchar IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END
-               WHERE id = $8 AND quotation_id = $9`,
-              [itStatus, itDate, it.dispatch_notes || null, isItemDispatched, itDispatchedQty, itProcurementStatus, itProcurementNotes, it.id, id]
+                   procurement_updated_at = CASE WHEN $6::varchar IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END,
+                   procurement_category = COALESCE($8, procurement_category),
+                   procurement_updated_by_name = CASE WHEN $6::varchar IS NOT NULL THEN $9 ELSE procurement_updated_by_name END
+               WHERE id = $10 AND quotation_id = $11`,
+              [
+                itStatus,
+                itDate,
+                it.dispatch_notes || null,
+                isItemDispatched,
+                itDispatchedQty,
+                itProcurementStatus,
+                itProcurementNotes,
+                itProcurementCategory,
+                req.user!.full_name,
+                it.id,
+                id,
+              ]
             );
           }
         }
@@ -766,6 +802,350 @@ dispatchRouter.post(
       res.json({
         success: true,
         message: 'Quotation item changes acknowledged successfully',
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// 6. Get Procurement Items (Dedicated Local Purchase & Factory Orders Line-Item Queues)
+dispatchRouter.get('/procurement-items', async (req: Request, res: Response) => {
+  try {
+    await ensureDispatchSchema();
+
+    const { category, status = 'active', procurement_stage, search } = req.query;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let pIdx = 1;
+
+    // Both Approved and Closed quotations are tracked in procurement
+    conditions.push(`LOWER(q.status) IN ('closed', 'approved')`);
+
+    // Salespersons can only view items from their own quotations
+    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
+    if (isSalesperson) {
+      conditions.push(`(q.sales_person_id = $${pIdx} OR q.assisted_sales_person_id = $${pIdx})`);
+      params.push(req.user!.id);
+      pIdx++;
+    }
+
+    // Category filtering: local purchase vs factory order
+    if (category === 'local') {
+      if (status === 'fulfilled') {
+        conditions.push(`qi.procurement_category = 'local' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')`);
+      } else if (status === 'active') {
+        conditions.push(`(qi.dispatch_status = 'Need to Arrange from Local' OR (qi.procurement_category = 'local' AND qi.dispatch_status NOT IN ('Ready Stock', 'Dispatched')))`);
+      } else {
+        // all
+        conditions.push(`(qi.dispatch_status = 'Need to Arrange from Local' OR qi.procurement_category = 'local')`);
+      }
+    } else if (category === 'factory') {
+      if (status === 'fulfilled') {
+        conditions.push(`qi.procurement_category = 'factory' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')`);
+      } else if (status === 'active') {
+        conditions.push(`(qi.dispatch_status = 'Factory Order' OR (qi.procurement_category = 'factory' AND qi.dispatch_status NOT IN ('Ready Stock', 'Dispatched')))`);
+      } else {
+        // all
+        conditions.push(`(qi.dispatch_status = 'Factory Order' OR qi.procurement_category = 'factory')`);
+      }
+    } else {
+      // both categories
+      if (status === 'fulfilled') {
+        conditions.push(`qi.procurement_category IN ('local', 'factory') AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')`);
+      } else if (status === 'active') {
+        conditions.push(`(qi.dispatch_status IN ('Need to Arrange from Local', 'Factory Order') OR (qi.procurement_category IN ('local', 'factory') AND qi.dispatch_status NOT IN ('Ready Stock', 'Dispatched')))`);
+      } else {
+        conditions.push(`(qi.dispatch_status IN ('Need to Arrange from Local', 'Factory Order') OR qi.procurement_category IN ('local', 'factory'))`);
+      }
+    }
+
+    // Procurement stage filter
+    if (procurement_stage && typeof procurement_stage === 'string' && procurement_stage.trim() !== 'all') {
+      conditions.push(`qi.procurement_status = $${pIdx}`);
+      params.push(procurement_stage.trim());
+      pIdx++;
+    }
+
+    // Search keyword
+    if (search && typeof search === 'string' && search.trim()) {
+      const term = `%${search.trim()}%`;
+      conditions.push(
+        `(q.quotation_number ILIKE $${pIdx} OR q.customer_name ILIKE $${pIdx} OR q.customer_phone ILIKE $${pIdx} OR q.site_location ILIKE $${pIdx} OR qi.description ILIKE $${pIdx} OR qi.brand ILIKE $${pIdx} OR qi.size ILIKE $${pIdx})`
+      );
+      params.push(term);
+      pIdx++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT 
+        qi.id,
+        qi.quotation_id,
+        qi.area_id,
+        COALESCE(qa.area_name, 'Default Area') as area_name,
+        q.quotation_type as item_type,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 0) as quantity,
+        qi.quantity_boxes,
+        qi.quantity_sqft,
+        qi.coverage_area,
+        qi.rate_per_sqft,
+        qi.rate_per_box as rate_per_unit,
+        qi.total_amount as item_total,
+        COALESCE(qi.dispatch_status, 'Yet to Update') as dispatch_status,
+        qi.expected_dispatch_date,
+        qi.dispatch_notes,
+        qi.dispatched_quantity,
+        qi.procurement_status,
+        qi.procurement_notes,
+        qi.procurement_category,
+        qi.procurement_updated_at,
+        qi.procurement_updated_by_name,
+        q.quotation_number,
+        q.quotation_date,
+        q.quotation_type,
+        q.status as quotation_status,
+        q.customer_id,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_id,
+        q.sales_person_name,
+        COALESCE(q.dispatch_status, 'Yet to Update') as quotation_dispatch_status,
+        q.expected_dispatch_date as quotation_expected_date
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
+      ${whereClause}
+      ORDER BY 
+        CASE WHEN qi.expected_dispatch_date IS NULL THEN 1 ELSE 0 END,
+        qi.expected_dispatch_date ASC,
+        qi.id DESC
+      LIMIT 300
+    `;
+
+    const items = await query(sql, params);
+
+    // Compute summary counts for the user
+    const userRoleFilter = isSalesperson
+      ? `AND (q.sales_person_id = $1 OR q.assisted_sales_person_id = $1)`
+      : '';
+    const userRoleParams = isSalesperson ? [req.user!.id] : [];
+
+    const summaryRes = await query(
+      `SELECT 
+         COUNT(CASE WHEN qi.dispatch_status = 'Need to Arrange from Local' THEN 1 END) as local_active_count,
+         COUNT(CASE WHEN qi.procurement_category = 'local' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched') THEN 1 END) as local_fulfilled_count,
+         COUNT(CASE WHEN qi.dispatch_status = 'Factory Order' THEN 1 END) as factory_active_count,
+         COUNT(CASE WHEN qi.procurement_category = 'factory' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched') THEN 1 END) as factory_fulfilled_count
+       FROM quotation_items qi
+       JOIN quotations q ON q.id = qi.quotation_id
+       WHERE LOWER(q.status) IN ('closed', 'approved') ${userRoleFilter}`,
+      userRoleParams
+    );
+
+    const counts = summaryRes[0] || {};
+
+    res.json({
+      items,
+      summary: {
+        local_active_count: parseInt(counts.local_active_count || '0', 10),
+        local_fulfilled_count: parseInt(counts.local_fulfilled_count || '0', 10),
+        factory_active_count: parseInt(counts.factory_active_count || '0', 10),
+        factory_fulfilled_count: parseInt(counts.factory_fulfilled_count || '0', 10),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Update Single Item Procurement Status & Mark Ready Stock
+dispatchRouter.patch(
+  '/items/:id',
+  requireRole(['admin', 'manager', 'dispatch', 'dispatch_team']),
+  async (req: Request, res: Response) => {
+    try {
+      await ensureDispatchSchema();
+
+      const itemId = parseInt(req.params.id as string, 10);
+      const {
+        procurement_status,
+        procurement_notes,
+        expected_dispatch_date,
+        mark_ready_stock,
+      } = req.body;
+
+      // Find item
+      const itemRows = await query(
+        `SELECT qi.*, q.id as quote_id, q.quotation_number, q.customer_name, q.sales_person_id, q.sales_person_name
+         FROM quotation_items qi
+         JOIN quotations q ON q.id = qi.quotation_id
+         WHERE qi.id = $1`,
+        [itemId]
+      );
+
+      if (itemRows.length === 0) {
+        res.status(404).json({ error: 'Quotation item not found' });
+        return;
+      }
+
+      const item = itemRows[0];
+      const quotationId = item.quote_id;
+
+      let nextDispatchStatus = item.dispatch_status;
+      let nextProcurementStatus = item.procurement_status;
+      let nextProcurementCategory = item.procurement_category;
+
+      if (!nextProcurementCategory) {
+        if (item.dispatch_status === 'Need to Arrange from Local') nextProcurementCategory = 'local';
+        else if (item.dispatch_status === 'Factory Order') nextProcurementCategory = 'factory';
+      }
+
+      if (mark_ready_stock === true) {
+        // Transition item directly to Ready Stock in Godown
+        nextDispatchStatus = 'Ready Stock';
+        nextProcurementStatus = 'Reached to Godown';
+      } else if (procurement_status && typeof procurement_status === 'string') {
+        const cleanStage = procurement_status.trim();
+        if (VALID_PROCUREMENT_STATUSES.includes(cleanStage as any)) {
+          nextProcurementStatus = cleanStage;
+        }
+      }
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const nextDate =
+        expected_dispatch_date && dateRegex.test(String(expected_dispatch_date).trim())
+          ? String(expected_dispatch_date).trim()
+          : item.expected_dispatch_date;
+
+      const nextNotes = procurement_notes !== undefined ? procurement_notes : item.procurement_notes;
+
+      // Update item
+      await query(
+        `UPDATE quotation_items
+         SET dispatch_status = $1,
+             procurement_status = $2,
+             procurement_category = $3,
+             procurement_notes = $4,
+             expected_dispatch_date = $5,
+             procurement_updated_at = CURRENT_TIMESTAMP,
+             procurement_updated_by_name = $6
+         WHERE id = $7`,
+        [
+          nextDispatchStatus,
+          nextProcurementStatus,
+          nextProcurementCategory,
+          nextNotes,
+          nextDate,
+          req.user!.full_name,
+          itemId,
+        ]
+      );
+
+      // Recompute parent quotation's overall dispatch status
+      const itemStatusRows = await query(
+        `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
+        [quotationId]
+      );
+      const totalRows = await query(
+        `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
+        [quotationId]
+      );
+      const total = parseInt(totalRows[0]?.count || '0', 10);
+      const dispatched = parseInt(
+        itemStatusRows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0',
+        10
+      );
+      const factory = parseInt(
+        itemStatusRows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0',
+        10
+      );
+      const local = parseInt(
+        itemStatusRows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
+        10
+      );
+      const ready = parseInt(
+        itemStatusRows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
+        10
+      );
+
+      let computedQuotationStatus = 'Yet to Update';
+      if (total > 0 && dispatched === total) {
+        computedQuotationStatus = 'Dispatched';
+      } else if (factory > 0) {
+        computedQuotationStatus = 'Factory Order';
+      } else if (local > 0) {
+        computedQuotationStatus = 'Need to Arrange from Local';
+      } else if (ready > 0) {
+        computedQuotationStatus = 'Ready Stock';
+      }
+
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [computedQuotationStatus, quotationId]
+      );
+
+      // Record audit log
+      await recordAuditLog({
+        userId: req.user!.id,
+        username: req.user!.username,
+        action: mark_ready_stock ? 'ITEM_MARKED_READY_STOCK' : 'ITEM_PROCUREMENT_STAGE_UPDATED',
+        entityType: 'quotation_item',
+        entityId: itemId,
+        details: {
+          quotation_id: quotationId,
+          quotation_number: item.quotation_number,
+          item_id: itemId,
+          item_description: item.description,
+          previous_dispatch_status: item.dispatch_status,
+          new_dispatch_status: nextDispatchStatus,
+          previous_procurement_status: item.procurement_status,
+          new_procurement_status: nextProcurementStatus,
+          quotation_dispatch_status: computedQuotationStatus,
+        },
+      });
+
+      // Broadcast WebSocket notification to keep all dispatch screens instantly synchronized
+      broadcast({
+        type: 'DISPATCH_UPDATED',
+        payload: {
+          quotation_id: quotationId,
+          quotation_number: item.quotation_number,
+          item_id: itemId,
+          dispatch_status: computedQuotationStatus,
+          item_dispatch_status: nextDispatchStatus,
+          procurement_status: nextProcurementStatus,
+          updated_by: req.user!.full_name,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // Fetch fresh updated item row
+      const freshRows = await query(
+        `SELECT qi.*, q.quotation_number, q.customer_name, q.customer_phone, q.site_location
+         FROM quotation_items qi
+         JOIN quotations q ON q.id = qi.quotation_id
+         WHERE qi.id = $1`,
+        [itemId]
+      );
+
+      res.json({
+        success: true,
+        message: mark_ready_stock
+          ? 'Item marked as Ready Stock and moved to Godown inventory.'
+          : 'Procurement status updated successfully.',
+        item: freshRows[0],
+        quotation_dispatch_status: computedQuotationStatus,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

@@ -28,6 +28,7 @@ import {
   Bell,
   ArrowRight,
   Layers,
+  ExternalLink,
 } from 'lucide-react';
 
 export const DISPATCH_STATUS_OPTIONS = [
@@ -99,7 +100,49 @@ interface DispatchStats {
   procurement_stats?: ProcurementStats;
 }
 
-export const DispatchManagement: React.FC = () => {
+export interface ProcurementItem {
+  id: number;
+  quotation_id: number;
+  area_id?: number;
+  area_name?: string;
+  item_type?: string;
+  description: string;
+  brand?: string;
+  size?: string;
+  product_type?: string;
+  quantity: number;
+  coverage_area?: number;
+  rate_per_sqft?: number;
+  rate_per_unit?: number;
+  item_total?: number;
+  dispatch_status: string;
+  expected_dispatch_date?: string;
+  dispatch_notes?: string;
+  dispatched_quantity?: number;
+  procurement_status?: string | null;
+  procurement_notes?: string | null;
+  procurement_category?: string | null;
+  procurement_updated_at?: string;
+  procurement_updated_by_name?: string;
+  quotation_number: string;
+  quotation_date: string;
+  quotation_type: string;
+  quotation_status: string;
+  customer_id?: number;
+  customer_name: string;
+  customer_phone?: string;
+  site_location?: string;
+  sales_person_id?: number;
+  sales_person_name?: string;
+  quotation_dispatch_status?: string;
+  quotation_expected_date?: string;
+}
+
+export interface DispatchManagementProps {
+  initialView?: 'all' | 'local-purchase' | 'factory-orders';
+}
+
+export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialView = 'all' }) => {
   const { user } = useAuth();
   const { fetchApi, subscribeToEvents, company } = useServer();
 
@@ -111,6 +154,44 @@ export const DispatchManagement: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [stats, setStats] = useState<DispatchStats | null>(null);
+
+  // Top View Mode: All Orders vs Dedicated Local Purchase vs Dedicated Factory Orders
+  const [currentView, setCurrentView] = useState<'all' | 'local-purchase' | 'factory-orders'>(initialView);
+
+  useEffect(() => {
+    if (initialView) {
+      setCurrentView(initialView);
+    }
+  }, [initialView]);
+
+  // Dedicated Procurement Queue State
+  const [procurementItems, setProcurementItems] = useState<ProcurementItem[]>([]);
+  const [procurementLoading, setProcurementLoading] = useState<boolean>(false);
+  const [procurementSubTab, setProcurementSubTab] = useState<'active' | 'fulfilled'>('active');
+  const [procurementSearch, setProcurementSearch] = useState<string>('');
+  const [debouncedProcSearch, setDebouncedProcSearch] = useState<string>('');
+  const [procurementStageFilter, setProcurementStageFilter] = useState<string>('all');
+  const [procurementSummary, setProcurementSummary] = useState<{
+    local_active_count: number;
+    local_fulfilled_count: number;
+    factory_active_count: number;
+    factory_fulfilled_count: number;
+  }>({
+    local_active_count: 0,
+    local_fulfilled_count: 0,
+    factory_active_count: 0,
+    factory_fulfilled_count: 0,
+  });
+  const [markingReadyStockId, setMarkingReadyStockId] = useState<number | null>(null);
+  const [updatingItemId, setUpdatingItemId] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((cur) => (cur === msg ? null : cur));
+    }, 4000);
+  };
 
   // Filters
   const [search, setSearch] = useState<string>('');
@@ -246,7 +327,14 @@ export const DispatchManagement: React.FC = () => {
       ]);
 
       setQuotations(quotesRes.quotations || []);
-      setStats(statsRes || null);
+      if (statsRes) {
+        setStats(statsRes);
+        setProcurementSummary((prev) => ({
+          ...prev,
+          local_active_count: statsRes.local_active_count ?? prev.local_active_count,
+          factory_active_count: statsRes.factory_active_count ?? prev.factory_active_count,
+        }));
+      }
     } catch (err: any) {
       console.error('Error loading dispatch data:', err);
     } finally {
@@ -258,6 +346,166 @@ export const DispatchManagement: React.FC = () => {
     loadData();
   }, [debouncedSearch, dispatchStatusFilter, dateFilter, procurementFilter]);
 
+  // Debounce procurement search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedProcSearch(procurementSearch);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [procurementSearch]);
+
+  // Load dedicated procurement items queue
+  const loadProcurementItems = async () => {
+    try {
+      setProcurementLoading(true);
+      const category = currentView === 'local-purchase' ? 'local' : currentView === 'factory-orders' ? 'factory' : 'all';
+      const params = new URLSearchParams({
+        category,
+        status: procurementSubTab,
+      });
+      if (procurementStageFilter !== 'all') {
+        params.append('procurement_stage', procurementStageFilter);
+      }
+      if (debouncedProcSearch.trim()) {
+        params.append('search', debouncedProcSearch.trim());
+      }
+
+      const res = await fetchApi<any>(`/api/dispatch/procurement-items?${params.toString()}`);
+      setProcurementItems(res?.items || []);
+      if (res?.summary) {
+        setProcurementSummary(res.summary);
+      }
+    } catch (err: any) {
+      console.error('Error fetching procurement items:', err);
+    } finally {
+      setProcurementLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'local-purchase' || currentView === 'factory-orders') {
+      loadProcurementItems();
+    }
+  }, [currentView, procurementSubTab, procurementStageFilter, debouncedProcSearch]);
+
+  // Procurement Action Handlers
+  const handleItemStageChange = async (itemId: number, newStage: string) => {
+    try {
+      setUpdatingItemId(itemId);
+      await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ procurement_status: newStage }),
+      });
+      setProcurementItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                procurement_status: newStage,
+                procurement_updated_at: new Date().toISOString(),
+                procurement_updated_by_name: user?.full_name,
+              }
+            : item
+        )
+      );
+      showToast(`Procurement stage updated to "${newStage}"`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update stage');
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  const handleItemNotesChange = async (itemId: number, notes: string) => {
+    try {
+      await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ procurement_notes: notes }),
+      });
+      setProcurementItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, procurement_notes: notes } : item))
+      );
+    } catch (err: any) {
+      console.warn('Failed to save notes:', err);
+    }
+  };
+
+  const handleItemDateChange = async (itemId: number, newDate: string) => {
+    try {
+      await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ expected_dispatch_date: newDate }),
+      });
+      setProcurementItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, expected_dispatch_date: newDate } : item))
+      );
+      showToast(`Expected date updated to ${newDate}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update expected date');
+    }
+  };
+
+  const handleMarkReadyStock = async (item: ProcurementItem) => {
+    try {
+      setMarkingReadyStockId(item.id);
+      await fetchApi<any>(`/api/dispatch/items/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mark_ready_stock: true }),
+      });
+
+      if (procurementSubTab === 'active') {
+        // Remove item from active pending queue immediately
+        setProcurementItems((prev) => prev.filter((it) => it.id !== item.id));
+        setProcurementSummary((prev) => {
+          const isLocal =
+            (item.procurement_category || '').toLowerCase() === 'local' ||
+            item.dispatch_status === 'Need to Arrange from Local';
+          return {
+            ...prev,
+            local_active_count: isLocal ? Math.max(0, prev.local_active_count - 1) : prev.local_active_count,
+            local_fulfilled_count: isLocal ? prev.local_fulfilled_count + 1 : prev.local_fulfilled_count,
+            factory_active_count: !isLocal ? Math.max(0, prev.factory_active_count - 1) : prev.factory_active_count,
+            factory_fulfilled_count: !isLocal ? prev.factory_fulfilled_count + 1 : prev.factory_fulfilled_count,
+          };
+        });
+      } else {
+        setProcurementItems((prev) =>
+          prev.map((it) =>
+            it.id === item.id
+              ? {
+                  ...it,
+                  dispatch_status: 'Ready Stock',
+                  procurement_status: 'Reached to Godown',
+                  procurement_updated_at: new Date().toISOString(),
+                  procurement_updated_by_name: user?.full_name,
+                }
+              : it
+          )
+        );
+      }
+
+      showToast(
+        `✓ Item marked as Ready Stock & moved to godown inventory! Quotation ${item.quotation_number} updated.`
+      );
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark ready stock');
+    } finally {
+      setMarkingReadyStockId(null);
+    }
+  };
+
+  const getDaysDiff = (dateStr?: string) => {
+    if (!dateStr) return null;
+    const target = new Date(dateStr);
+    if (isNaN(target.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    target.setHours(0, 0, 0, 0);
+    const diffTime = target.getTime() - today.getTime();
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  };
+
   // Real-time synchronization
   useEffect(() => {
     const unsubscribe = subscribeToEvents((event) => {
@@ -267,15 +515,24 @@ export const DispatchManagement: React.FC = () => {
         )
       ) {
         loadData();
+        if (currentView === 'local-purchase' || currentView === 'factory-orders') {
+          loadProcurementItems();
+        }
         if (selectedQuotationId && event.payload?.quotation_id === selectedQuotationId) {
           loadQuotationDetail(selectedQuotationId);
         }
       } else if (event.type === 'DISPATCH_ITEM_CHANGED') {
         if (canSeeModifiedItemsAlert) {
           loadData();
+        if (currentView === 'local-purchase' || currentView === 'factory-orders') {
+          loadProcurementItems();
+        }
           setItemChangedAlert(event.payload);
         } else {
           loadData();
+        if (currentView === 'local-purchase' || currentView === 'factory-orders') {
+          loadProcurementItems();
+        }
         }
       }
     });
@@ -660,6 +917,477 @@ export const DispatchManagement: React.FC = () => {
     setProcurementFilter('all');
   };
 
+
+  const renderProcurementWorkspace = () => {
+    const isLocal = currentView === 'local-purchase';
+    const activeCount = isLocal
+      ? procurementSummary.local_active_count
+      : procurementSummary.factory_active_count;
+    const fulfilledCount = isLocal
+      ? procurementSummary.local_fulfilled_count
+      : procurementSummary.factory_fulfilled_count;
+    const categoryLabel = isLocal ? 'Local Purchase' : 'Factory Orders';
+
+    return (
+      <div className="space-y-4 animate-fade-in">
+        {/* Workspace Banner & Metrics */}
+        <div
+          className={`card p-4 sm:p-5 rounded-2xl border shadow-xs ${
+            isLocal
+              ? 'bg-gradient-to-r from-amber-500/10 via-amber-50 to-white border-amber-200'
+              : 'bg-gradient-to-r from-indigo-500/10 via-indigo-50 to-white border-indigo-200'
+          }`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div
+                className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                  isLocal
+                    ? 'bg-amber-500 text-white shadow-amber-500/20'
+                    : 'bg-indigo-600 text-white shadow-indigo-600/20'
+                }`}
+              >
+                {isLocal ? <Package size={24} /> : <Factory size={24} />}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2.5">
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                    {isLocal ? 'Local Purchase Procurement' : 'Factory Orders Procurement'}
+                  </h2>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                      isLocal
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                    }`}
+                  >
+                    {isLocal ? 'Local Market' : 'Mill Production'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                  {isLocal
+                    ? 'Quotation line items to be arranged from local distributors and vendors. Items remain in this active list until arrived in godown and marked as Ready Stock.'
+                    : 'Quotation line items ordered directly from manufacturing factories. Track production, factory dispatch, transit LR, and godown receiving until marked as Ready Stock.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Metrics Strip */}
+            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <div className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-xs text-center min-w-[100px]">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Pending Items
+                </div>
+                <div
+                  className={`text-xl font-black ${
+                    isLocal ? 'text-amber-600' : 'text-indigo-600'
+                  }`}
+                >
+                  {activeCount}
+                </div>
+              </div>
+              <div className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-xs text-center min-w-[100px]">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  In Godown
+                </div>
+                <div className="text-xl font-black text-emerald-600">
+                  {fulfilledCount}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sub-Tabs: Active Pending Queue vs Fulfilled/In Godown */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setProcurementSubTab('active')}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                procurementSubTab === 'active'
+                  ? isLocal
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Clock size={14} />
+              <span>Active Pending Queue</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                  procurementSubTab === 'active'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {activeCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setProcurementSubTab('fulfilled')}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                procurementSubTab === 'fulfilled'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              <span>Fulfilled & Reached Godown</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                  procurementSubTab === 'fulfilled'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {fulfilledCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Search & Stage Filter Toolbar */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div className="relative flex-1 sm:w-64">
+              <Search
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                value={procurementSearch}
+                onChange={(e) => setProcurementSearch(e.target.value)}
+                placeholder="Search quote #, customer, item..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+              />
+              {procurementSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProcurementSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            <select
+              value={procurementStageFilter}
+              onChange={(e) => setProcurementStageFilter(e.target.value)}
+              className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Procurement Stages</option>
+              <option value="Availability Confirmed">Availability Confirmed</option>
+              <option value="Payment Done">Payment Done</option>
+              <option value="Dispatched">Order Dispatched</option>
+              <option value="On the Way">On the Way</option>
+              <option value="Reached to Godown">Reached to Godown</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={loadProcurementItems}
+              disabled={procurementLoading}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 cursor-pointer shrink-0"
+              title="Refresh queue"
+            >
+              <RefreshCw
+                size={14}
+                className={procurementLoading ? 'animate-spin text-indigo-600' : ''}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Queue Items Listing */}
+        {procurementLoading ? (
+          <div className="card p-12 bg-white rounded-2xl border border-slate-200 text-center space-y-3">
+            <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto" />
+            <p className="text-xs font-semibold text-slate-600">
+              Loading {categoryLabel} line items...
+            </p>
+          </div>
+        ) : procurementItems.length === 0 ? (
+          <div className="card p-12 bg-white rounded-2xl border border-dashed border-slate-300 text-center space-y-3">
+            <div
+              className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center ${
+                procurementSubTab === 'active'
+                  ? isLocal
+                    ? 'bg-amber-100 text-amber-600'
+                    : 'bg-indigo-100 text-indigo-600'
+                  : 'bg-emerald-100 text-emerald-600'
+              }`}
+            >
+              {procurementSubTab === 'active' ? (
+                <CheckCircle2 size={28} />
+              ) : (
+                <Package size={28} />
+              )}
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">
+              {procurementSubTab === 'active'
+                ? `No pending ${categoryLabel.toLowerCase()} items`
+                : `No fulfilled ${categoryLabel.toLowerCase()} items yet`}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {procurementSubTab === 'active'
+                ? `When quotation line items are set to "${
+                    isLocal ? 'Need to Arrange from Local' : 'Factory Order'
+                  }" in dispatch, they will automatically appear here until marked as Ready Stock.`
+                : 'Items that have reached the godown and were marked Ready Stock will be cataloged here.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {procurementItems.map((item) => {
+              const diff = getDaysDiff(item.expected_dispatch_date);
+              const isFulfilled = item.dispatch_status === 'Ready Stock';
+
+              return (
+                <div
+                  key={item.id}
+                  className={`card p-4 sm:p-5 bg-white rounded-2xl border transition-all space-y-3.5 shadow-xs hover:shadow-md ${
+                    isFulfilled
+                      ? 'border-emerald-300 border-l-4 border-l-emerald-500'
+                      : isLocal
+                      ? 'border-amber-200 border-l-4 border-l-amber-500'
+                      : 'border-indigo-200 border-l-4 border-l-indigo-600'
+                  }`}
+                >
+                  {/* Item Card Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                    <div className="flex items-center flex-wrap gap-2 text-xs">
+                      {/* Quotation Ref Pill */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedQuotationId(item.quotation_id);
+                          loadQuotationDetail(item.quotation_id);
+                          setCurrentView('all');
+                        }}
+                        className="font-mono font-black text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 cursor-pointer flex items-center space-x-1"
+                        title="View full quotation order"
+                      >
+                        <span>{item.quotation_number}</span>
+                        <ExternalLink size={11} />
+                      </button>
+
+                      {/* Type Badge */}
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          item.quotation_type === 'sanitary'
+                            ? 'bg-teal-100 text-teal-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {item.quotation_type || 'Tile'}
+                      </span>
+
+                      {/* Customer Name */}
+                      <span className="font-extrabold text-slate-900">
+                        {item.customer_name}
+                      </span>
+
+                      {/* Customer Phone */}
+                      {item.customer_phone && (
+                        <a
+                          href={`tel:${item.customer_phone}`}
+                          className="flex items-center space-x-1 text-slate-600 hover:text-indigo-600 text-[11px] font-medium"
+                          title="Call Customer"
+                        >
+                          <Phone size={11} className="text-slate-400" />
+                          <span>{item.customer_phone}</span>
+                        </a>
+                      )}
+
+                      {/* Site Location */}
+                      {item.site_location && (
+                        <span className="flex items-center space-x-1 text-slate-500 text-[11px]">
+                          <MapPin size={11} className="text-slate-400" />
+                          <span className="truncate max-w-[160px]">
+                            {item.site_location}
+                          </span>
+                        </span>
+                      )}
+
+                      {/* Salesperson */}
+                      {item.sales_person_name && (
+                        <span className="flex items-center space-x-1 text-slate-400 text-[10px]">
+                          <User size={10} />
+                          <span>Sales: {item.sales_person_name}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right: Quick Action to open Order */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedQuotationId(item.quotation_id);
+                        loadQuotationDetail(item.quotation_id);
+                        setCurrentView('all');
+                      }}
+                      className="text-xs font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer flex items-center space-x-1 self-start sm:self-auto shrink-0"
+                    >
+                      <Eye size={12} />
+                      <span>Full Order</span>
+                    </button>
+                  </div>
+
+                  {/* Item Description, Specifications, and Ordered Qty */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-200 text-slate-700 uppercase tracking-wide">
+                          {item.area_name || 'Item Area'}
+                        </span>
+                        {item.brand && (
+                          <span className="text-[11px] font-bold text-slate-700">
+                            Brand: {item.brand}
+                          </span>
+                        )}
+                        {item.size && (
+                          <span className="text-[11px] font-mono text-slate-500 font-medium">
+                            • Size: {item.size}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                        {item.description}
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                          Order Qty
+                        </div>
+                        <div className="text-sm sm:text-base font-black text-slate-900">
+                          {parseFloat(item.quantity as any || 0).toFixed(2)}{' '}
+                          <span className="text-xs font-bold text-slate-600 uppercase">
+                            {item.product_type || 'units'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stock Category Badge */}
+                      <span
+                        className={`px-3 py-1 rounded-xl text-xs font-extrabold uppercase ${
+                          isFulfilled
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : isLocal
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                        }`}
+                      >
+                        {isFulfilled
+                          ? '✓ Ready Stock'
+                          : isLocal
+                          ? 'Local Purchase'
+                          : 'Factory Order'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Arrival Date and Mark Ready Stock Top Strip */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-600 flex items-center space-x-1.5">
+                        <Calendar size={13} className="text-slate-400" />
+                        <span>Expected Arrival:</span>
+                      </span>
+                      <input
+                        type="date"
+                        value={
+                          item.expected_dispatch_date
+                            ? String(item.expected_dispatch_date).slice(0, 10)
+                            : ''
+                        }
+                        onChange={(e) => handleItemDateChange(item.id, e.target.value)}
+                        disabled={isViewOnly}
+                        className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg font-medium text-slate-800 bg-white shadow-xs focus:ring-2 focus:ring-indigo-500"
+                      />
+                      {diff !== null && (
+                        <>
+                          {diff < 0 && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
+                              🚨 Overdue by {Math.abs(diff)}d
+                            </span>
+                          )}
+                          {diff === 0 && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                              ⚠️ Due Today
+                            </span>
+                          )}
+                          {diff === 1 && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300">
+                              Tomorrow
+                            </span>
+                          )}
+                          {diff > 1 && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
+                              In {diff} days
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* The Prominent Mark Ready Stock Button */}
+                    {!isFulfilled ? (
+                      !isViewOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkReadyStock(item)}
+                          disabled={markingReadyStockId === item.id}
+                          className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/25 transition-all cursor-pointer hover:scale-[1.02]"
+                          title="Item arrived in godown! Set status to Ready Stock"
+                        >
+                          <CheckCircle2 size={15} />
+                          <span>
+                            {markingReadyStockId === item.id
+                              ? 'Updating...'
+                              : '✓ Mark Ready Stock'}
+                          </span>
+                        </button>
+                      )
+                    ) : (
+                      <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                        <CheckCircle2 size={14} className="text-emerald-600" />
+                        <span>Ready Stock in Godown</span>
+                        {item.procurement_updated_by_name && (
+                          <span className="text-[10px] text-emerald-600 font-normal">
+                            • Verified by {item.procurement_updated_by_name}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 5-Step Interactive Procurement Stepper */}
+                  <div className="pt-1">
+                    <ProcurementStepper
+                      status={item.dispatch_status}
+                      procurementStatus={item.procurement_status}
+                      procurementNotes={item.procurement_notes}
+                      onChangeStatus={(st) => handleItemStageChange(item.id, st)}
+                      onChangeNotes={(notes) => handleItemNotesChange(item.id, notes)}
+                      onMarkReadyStock={() => handleMarkReadyStock(item)}
+                      isViewOnly={isViewOnly}
+                      itemName={item.description}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const totalOrdersCount = stats?.total_orders ?? stats?.total_closed_quotations ?? quotations.length;
 
   return (
@@ -712,6 +1440,71 @@ export const DispatchManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Sub-Navigation: Local Purchase vs Factory Orders vs All Orders */}
+      <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setCurrentView('local-purchase')}
+          className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'local-purchase'
+              ? 'bg-amber-500 text-white shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <Package size={16} />
+          <span>Local Purchase</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+              currentView === 'local-purchase' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+            }`}
+          >
+            {procurementSummary.local_active_count}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentView('factory-orders')}
+          className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'factory-orders'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 ring-2 ring-indigo-400/50'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <Factory size={16} />
+          <span>Factory Orders</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+              currentView === 'factory-orders' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
+            }`}
+          >
+            {procurementSummary.factory_active_count}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentView('all')}
+          className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'all'
+              ? 'bg-slate-900 text-white shadow-md shadow-slate-900/25'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <Truck size={16} />
+          <span>All Dispatch Orders</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+              currentView === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {totalOrdersCount}
+          </span>
+        </button>
+      </div>
+
+      {currentView === 'all' ? (
+        <>
       {/* Formal KPI Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
         {/* Closed Orders */}
@@ -2298,6 +3091,10 @@ export const DispatchManagement: React.FC = () => {
           </table>
         </div>
       </div>
+        </>
+      ) : (
+        renderProcurementWorkspace()
+      )}
 
       {/* PRINT DISPATCH SLIP MODAL */}
       {isPrintSlipOpen && activeQuotation && (
@@ -2563,6 +3360,19 @@ export const DispatchManagement: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 bg-emerald-800 text-white rounded-xl shadow-2xl border border-emerald-600 animate-slide-up">
+          <CheckCircle2 size={18} className="text-emerald-300 shrink-0" />
+          <span className="text-xs font-bold">{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-3 text-white/70 hover:text-white cursor-pointer"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>

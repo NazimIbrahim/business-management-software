@@ -20,6 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   Truck,
+  Package,
+  Factory,
   X,
 } from 'lucide-react';
 
@@ -27,6 +29,8 @@ export type NavTab =
   | 'dashboard'
   | 'quotations'
   | 'dispatch'
+  | 'dispatch-local'
+  | 'dispatch-factory'
   | 'quotation-create'
   | 'quotation-create-tiles'
   | 'quotation-create-sanitary'
@@ -54,6 +58,9 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
   const { company, fetchApi, subscribeToEvents } = useServer();
   const [newQuotationExpanded, setNewQuotationExpanded] = useState<boolean>(true);
   const [dispatchChangesCount, setDispatchChangesCount] = useState<number>(0);
+  const [localActiveCount, setLocalActiveCount] = useState<number>(0);
+  const [factoryActiveCount, setFactoryActiveCount] = useState<number>(0);
+  const [dispatchSubmenuExpanded, setDispatchSubmenuExpanded] = useState<boolean>(true);
 
   if (!user) return null;
 
@@ -86,6 +93,8 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       try {
         const stats = await fetchApi<any>('/api/dispatch/stats');
         setDispatchChangesCount(stats?.pending_item_changes_count || 0);
+        setLocalActiveCount(stats?.local_active_count || 0);
+        setFactoryActiveCount(stats?.factory_active_count || 0);
       } catch {
         // silent
       }
@@ -124,54 +133,158 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
           <span className="sidebar-heading">Operations</span>
         </div>
         <div className="space-y-1">
-          {/* Dashboard */}
-          <button
-            onClick={() => handleNavSelect('dashboard')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
-              activeTab === 'dashboard' ? 'sidebar-nav-active' : 'sidebar-nav-item'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <LayoutDashboard size={16} className="nav-icon" />
-              <span className="tracking-wide">Dashboard</span>
-            </div>
-          </button>
+          {isDispatch ? (
+            /* Dedicated Dispatch Team Navigation */
+            <>
+              {/* Local Purchase */}
+              <button
+                onClick={() => handleNavSelect('dispatch-local')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'dispatch-local' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Package size={16} className={activeTab === 'dispatch-local' ? 'text-amber-300' : 'text-amber-400'} />
+                  <span className="tracking-wide font-semibold">Local Purchase</span>
+                </div>
+                {localActiveCount > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-extrabold shadow-xs">
+                    {localActiveCount}
+                  </span>
+                )}
+              </button>
 
-          {/* Quotations List */}
-          <button
-            onClick={() => handleNavSelect('quotations')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
-              activeTab === 'quotations' ? 'sidebar-nav-active' : 'sidebar-nav-item'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <FileText size={16} className="nav-icon" />
-              <span className="tracking-wide">Quotations</span>
-            </div>
-          </button>
+              {/* Factory Orders */}
+              <button
+                onClick={() => handleNavSelect('dispatch-factory')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'dispatch-factory' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Factory size={16} className={activeTab === 'dispatch-factory' ? 'text-indigo-300' : 'text-indigo-400'} />
+                  <span className="tracking-wide font-semibold">Factory Orders</span>
+                </div>
+                {factoryActiveCount > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500 text-white font-extrabold shadow-xs">
+                    {factoryActiveCount}
+                  </span>
+                )}
+              </button>
 
-          {/* Dispatch Management */}
-          {canDispatch && (
-            <button
-              onClick={() => handleNavSelect('dispatch')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
-                activeTab === 'dispatch' ? 'sidebar-nav-active' : 'sidebar-nav-item'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <Truck size={16} className={activeTab === 'dispatch' ? 'text-teal-300' : 'nav-icon'} />
-                <span className="tracking-wide font-semibold truncate">Dispatch Management</span>
-              </div>
-              {canSeeItemChangesNotice && dispatchChangesCount > 0 ? (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-extrabold shadow-xs shrink-0 ml-1.5">
-                  {dispatchChangesCount}
-                </span>
-              ) : isViewOnly ? (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20 shrink-0 ml-1.5">
-                  View
-                </span>
-              ) : null}
-            </button>
+              {/* All Dispatch Orders */}
+              <button
+                onClick={() => handleNavSelect('dispatch')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'dispatch' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Truck size={16} className={activeTab === 'dispatch' ? 'text-teal-300' : 'nav-icon'} />
+                  <span className="tracking-wide font-semibold">All Dispatch Orders</span>
+                </div>
+                {canSeeItemChangesNotice && dispatchChangesCount > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-extrabold shadow-xs shrink-0 ml-1.5">
+                    {dispatchChangesCount}
+                  </span>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Dashboard */}
+              <button
+                onClick={() => handleNavSelect('dashboard')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'dashboard' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <LayoutDashboard size={16} className="nav-icon" />
+                  <span className="tracking-wide">Dashboard</span>
+                </div>
+              </button>
+
+              {/* Quotations List */}
+              <button
+                onClick={() => handleNavSelect('quotations')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'quotations' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <FileText size={16} className="nav-icon" />
+                  <span className="tracking-wide">Quotations</span>
+                </div>
+              </button>
+
+              {/* Dispatch Management Expandable Group */}
+              {canDispatch && (
+                <div className="pt-0.5 pb-0.5">
+                  <button
+                    onClick={() => handleNavSelect('dispatch')}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                      activeTab === 'dispatch' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Truck size={16} className={activeTab === 'dispatch' ? 'text-teal-300' : 'nav-icon'} />
+                      <span className="tracking-wide font-semibold truncate">Dispatch Management</span>
+                    </div>
+                    {canSeeItemChangesNotice && dispatchChangesCount > 0 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-extrabold shadow-xs shrink-0 ml-1.5">
+                        {dispatchChangesCount}
+                      </span>
+                    ) : isViewOnly ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20 shrink-0 ml-1.5">
+                        View
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {/* Sub-items for Local Purchase & Factory Orders */}
+                  <div className="mt-1 pl-2.5 space-y-1 border-l-2 border-white/10 ml-3.5">
+                    <button
+                      onClick={() => handleNavSelect('dispatch-local')}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] cursor-pointer text-left ${
+                        activeTab === 'dispatch-local'
+                          ? 'sidebar-nav-active font-semibold shadow-xs text-amber-300'
+                          : 'sidebar-nav-item text-[#E0E1DD]/90 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Package size={13} className="text-amber-400" />
+                        <span>Local Purchase</span>
+                      </div>
+                      {localActiveCount > 0 && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/25 text-amber-300 font-bold border border-amber-400/30">
+                          {localActiveCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleNavSelect('dispatch-factory')}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] cursor-pointer text-left ${
+                        activeTab === 'dispatch-factory'
+                          ? 'sidebar-nav-active font-semibold shadow-xs text-indigo-300'
+                          : 'sidebar-nav-item text-[#E0E1DD]/90 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Factory size={13} className="text-indigo-400" />
+                        <span>Factory Orders</span>
+                      </div>
+                      {factoryActiveCount > 0 && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/25 text-indigo-300 font-bold border border-indigo-400/30">
+                          {factoryActiveCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Salesperson Dashboard */}
@@ -275,33 +388,37 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
           )}
 
           {/* Tile Catalog */}
-          <button
-            onClick={() => handleNavSelect('products')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
-              activeTab === 'products' ? 'sidebar-nav-active' : 'sidebar-nav-item'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Layers size={16} className="nav-icon" />
-              <span className="tracking-wide">Tile Catalog</span>
-            </div>
-          </button>
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('products')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'products' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Layers size={16} className="nav-icon" />
+                <span className="tracking-wide">Tile Catalog</span>
+              </div>
+            </button>
+          )}
 
           {/* Sanitary Catalog */}
-          <button
-            onClick={() => handleNavSelect('sanitary-catalog')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
-              activeTab === 'sanitary-catalog' ? 'sidebar-nav-active' : 'sidebar-nav-item'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Bath size={16} className={activeTab === 'sanitary-catalog' ? 'text-teal-300' : 'nav-icon'} />
-              <span className="tracking-wide">Sanitary Catalog</span>
-            </div>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
-              PDF
-            </span>
-          </button>
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('sanitary-catalog')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'sanitary-catalog' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Bath size={16} className={activeTab === 'sanitary-catalog' ? 'text-teal-300' : 'nav-icon'} />
+                <span className="tracking-wide">Sanitary Catalog</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
+                PDF
+              </span>
+            </button>
+          )}
 
           {/* Payments & Receipts */}
           {!isDispatch && (
@@ -393,7 +510,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       </div>
       <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
         <span>App Build:</span>
-        <span className="font-mono text-[#E0E1DD]/80">v2.4.39</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.40</span>
       </div>
     </div>
   );
