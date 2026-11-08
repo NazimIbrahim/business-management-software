@@ -217,17 +217,24 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
       let detectedUnit = 'BOX';
 
       if (rowQtyText && !isSublinePieceCount) {
-        // 1. Primary Billed Unit target (e.g., "7.0 BOX", "49.0 BOX", "2.0 BOX")
-        const primaryUnitMatch = rowQtyText.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*(BOX|BOXES|SQM|SQFT|PCS|NOS)\b/i);
-        if (primaryUnitMatch) {
-          detectedQty = parseFloat(primaryUnitMatch[1]);
-          detectedUnit = primaryUnitMatch[2].toUpperCase();
+        // 1. Prioritize strict BOX quantity: ([0-9]+(?:\.[0-9]+)?)\s*BOX
+        const boxMatch = rowQtyText.match(/(?:^|\s)([0-9]+(?:\.[0-9]+)?)\s*BOX(?:ES)?\b/i);
+        if (boxMatch) {
+          detectedQty = parseFloat(boxMatch[1]);
+          detectedUnit = 'BOX';
         } else {
-          // 2. Number not wrapped in parentheses
-          const cleanQtyText = rowQtyText.replace(/\([^)]*\)/g, '').trim();
-          const numMatch = cleanQtyText.match(/(?:^|\s)(\d+(?:\.\d+)?)\b/);
-          if (numMatch) {
-            detectedQty = parseFloat(numMatch[1]);
+          // 2. Secondary recognized units (SQM, SQFT, PCS, NOS)
+          const unitMatch = rowQtyText.match(/(?:^|\s)([0-9]+(?:\.[0-9]+)?)\s*(SQM|SQFT|PCS|NOS)\b/i);
+          if (unitMatch) {
+            detectedQty = parseFloat(unitMatch[1]);
+            detectedUnit = unitMatch[2].toUpperCase();
+          } else {
+            // 3. Strip any parentheses e.g. "(28 NOS)" and extract standalone number
+            const cleanQtyText = rowQtyText.replace(/\([^)]*\)/g, '').trim();
+            const numMatch = cleanQtyText.match(/(?:^|\s)([0-9]+(?:\.[0-9]+)?)\b/);
+            if (numMatch) {
+              detectedQty = parseFloat(numMatch[1]);
+            }
           }
         }
       }
@@ -258,12 +265,17 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
     for (const line of rawLines) {
       if (/total|invoice|buyer|gstin|transport|vehicle|terms/i.test(line)) continue;
 
-      // Regex matching description followed by billed quantity
-      const lineMatch = line.match(/(.+?)(?:\s+\d{4,8})?\s+(\d+(?:\.\d+)?)\s*(BOX|BOXES|SQM|SQFT|PCS|NOS)\b/i);
+      // Regex matching description followed by billed quantity (prioritize BOX)
+      let lineMatch = line.match(/(.+?)(?:\s+\d{4,8})?\s+([0-9]+(?:\.[0-9]+)?)\s*BOX(?:ES)?\b/i);
+      let unit = 'BOX';
+      if (!lineMatch) {
+        lineMatch = line.match(/(.+?)(?:\s+\d{4,8})?\s+([0-9]+(?:\.[0-9]+)?)\s*(SQM|SQFT|PCS|NOS)\b/i);
+        if (lineMatch) unit = lineMatch[3].toUpperCase();
+      }
+
       if (lineMatch) {
         const desc = lineMatch[1].replace(/^\d+[\s.)-]+/, '').trim();
         const qty = parseFloat(lineMatch[2]);
-        const unit = lineMatch[3].toUpperCase();
 
         if (desc.length > 3 && !isNaN(qty) && qty > 0) {
           parsedItems.push({

@@ -280,6 +280,55 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     });
   };
 
+  // Unbind a matched item back to manual selector state
+  const handleUnbindMatchedItem = (quoteItemId: number) => {
+    if (!reconcileDrawer) return;
+    const matchedItem = (reconcileDrawer.reconciliation.matched_items || []).find(
+      (m: any) => m.quotation_item_id === quoteItemId
+    );
+    if (!matchedItem) return;
+
+    const restoredInvoiceLine = {
+      raw_description: matchedItem.invoice_description || matchedItem.description,
+      clean_description: matchedItem.invoice_description || matchedItem.description,
+      quantity: matchedItem.invoice_qty,
+      unit: matchedItem.unit || 'BOX',
+    };
+
+    const nextMatched = (reconcileDrawer.reconciliation.matched_items || []).filter(
+      (m: any) => m.quotation_item_id !== quoteItemId
+    );
+    const nextUnmapped = [...(reconcileDrawer.reconciliation.unmapped_invoice_lines || []), restoredInvoiceLine];
+
+    const quoteItem = (reconcileDrawer.quote.items || []).find((i) => i.id === quoteItemId);
+    const nextUnmatched = quoteItem
+      ? [
+          ...(reconcileDrawer.reconciliation.unmatched_items || []),
+          {
+            quotation_item_id: quoteItem.id,
+            description: quoteItem.description,
+            brand: quoteItem.brand,
+            size: quoteItem.size,
+            quoted_qty: quoteItem.ordered_quantity,
+            already_dispatched_qty: quoteItem.quantity_dispatched,
+            remaining_qty: Math.max(0, quoteItem.ordered_quantity - quoteItem.quantity_dispatched),
+          },
+        ]
+      : reconcileDrawer.reconciliation.unmatched_items;
+
+    setReconcileDrawer({
+      ...reconcileDrawer,
+      reconciliation: {
+        ...reconcileDrawer.reconciliation,
+        matched_items: nextMatched,
+        unmapped_invoice_lines: nextUnmapped,
+        unmatched_items: nextUnmatched,
+        has_overages: nextMatched.some((m: any) => m.is_overage),
+        total_matched_count: nextMatched.length,
+      },
+    });
+  };
+
   const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
 
   const toggleExpand = (id: number) => {
@@ -1049,7 +1098,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-bold text-slate-800 uppercase text-[11px] tracking-wider">
-                    Reconciled Line Items ({reconcileDrawer.reconciliation.matched_items?.length || 0} items)
+                    Quotation Line Items Reconciliation ({reconcileDrawer.reconciliation.matched_items?.length || 0} of {reconcileDrawer.quote.items?.length || reconcileDrawer.reconciliation.matched_items?.length || 0} mapped)
                   </h4>
                   <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
                     💡 Invoice Qty is editable (recalculates live)
@@ -1068,51 +1117,192 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(reconcileDrawer.reconciliation.matched_items || []).map((it: any) => (
-                        <tr key={it.quotation_item_id} className={it.is_overage ? 'bg-rose-50/50' : ''}>
-                          <td className="py-2 px-3 font-semibold text-slate-800">
-                            <div>{it.description}</div>
-                            {it.invoice_description && it.invoice_description !== it.description && (
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 font-normal">
-                                Invoice: {it.invoice_description}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono text-slate-600">{it.quoted_qty}</td>
-                          <td className="py-2 px-2 text-right">
-                            <div className="flex items-center justify-end space-x-1">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                className="w-20 px-2 py-1 text-right font-mono font-bold text-indigo-700 border border-indigo-300 rounded-lg focus:ring-1 focus:ring-indigo-500 bg-white shadow-2xs"
-                                value={it.invoice_qty}
-                                onChange={(e) =>
-                                  handleInvoiceQtyChange(it.quotation_item_id, parseFloat(e.target.value) || 0)
-                                }
-                              />
-                              <span className="text-[10px] text-slate-400 font-mono">{it.unit || 'BOX'}</span>
-                            </div>
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">
-                            {it.new_dispatched_qty}
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">
-                            {it.pending_qty}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                it.fulfillment_status === 'DISPATCHED'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {it.fulfillment_status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {(() => {
+                        const quoteItems = reconcileDrawer.quote.items || [];
+                        const matchedMap = new Map<number, any>();
+                        (reconcileDrawer.reconciliation.matched_items || []).forEach((m: any) => {
+                          matchedMap.set(m.quotation_item_id, m);
+                        });
+
+                        // If no quote items exist on the quote object, fall back to matched_items
+                        if (quoteItems.length === 0) {
+                          return (reconcileDrawer.reconciliation.matched_items || []).map((it: any) => (
+                            <tr key={it.quotation_item_id} className={it.is_overage ? 'bg-rose-50/50' : ''}>
+                              <td className="py-2 px-3 font-semibold text-slate-800">
+                                <div>{it.description}</div>
+                                {it.invoice_description && it.invoice_description !== it.description && (
+                                  <div className="text-[10px] text-slate-400 font-mono mt-0.5 font-normal">
+                                    Invoice: {it.invoice_description}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-slate-600">{it.quoted_qty}</td>
+                              <td className="py-2 px-2 text-right">
+                                <div className="flex items-center justify-end space-x-1">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    className="w-20 px-2 py-1 text-right font-mono font-bold text-indigo-700 border border-indigo-300 rounded-lg focus:ring-1 focus:ring-indigo-500 bg-white shadow-2xs"
+                                    value={it.invoice_qty}
+                                    onChange={(e) =>
+                                      handleInvoiceQtyChange(it.quotation_item_id, parseFloat(e.target.value) || 0)
+                                    }
+                                  />
+                                  <span className="text-[10px] text-slate-400 font-mono">{it.unit || 'BOX'}</span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">
+                                {it.new_dispatched_qty}
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">
+                                {it.pending_qty}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    it.fulfillment_status === 'DISPATCHED'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {it.fulfillment_status}
+                                </span>
+                              </td>
+                            </tr>
+                          ));
+                        }
+
+                        return quoteItems.map((qIt) => {
+                          const it = matchedMap.get(qIt.id);
+
+                          if (it) {
+                            // MATCHED ITEM ROW (Confidence >= 70% or user mapped)
+                            return (
+                              <tr key={qIt.id} className={it.is_overage ? 'bg-rose-50/50' : 'hover:bg-slate-50/60'}>
+                                <td className="py-2 px-3 font-semibold text-slate-800">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span>{qIt.description}</span>
+                                    {it.confidence && (
+                                      <span
+                                        className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                          it.confidence === 'EXACT'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : it.confidence === 'HIGH'
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'bg-indigo-100 text-indigo-800'
+                                        }`}
+                                      >
+                                        {it.confidence}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {it.invoice_description && (
+                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5 font-normal flex items-center space-x-2">
+                                      <span>Invoice: {it.invoice_description}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnbindMatchedItem(qIt.id)}
+                                        className="text-rose-500 hover:text-rose-700 font-sans font-semibold cursor-pointer text-[10px]"
+                                        title="Unbind to remap manually"
+                                      >
+                                        [Unmap]
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono text-slate-600">{it.quoted_qty}</td>
+                                <td className="py-2 px-2 text-right">
+                                  <div className="flex items-center justify-end space-x-1">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      className="w-20 px-2 py-1 text-right font-mono font-bold text-indigo-700 border border-indigo-300 rounded-lg focus:ring-1 focus:ring-indigo-500 bg-white shadow-2xs"
+                                      value={it.invoice_qty}
+                                      onChange={(e) =>
+                                        handleInvoiceQtyChange(qIt.id, parseFloat(e.target.value) || 0)
+                                      }
+                                    />
+                                    <span className="text-[10px] text-slate-400 font-mono">{it.unit || 'BOX'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">
+                                  {it.new_dispatched_qty}
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">
+                                  {it.pending_qty}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      it.fulfillment_status === 'DISPATCHED'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}
+                                  >
+                                    {it.fulfillment_status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          // UNMATCHED ITEM ROW (Confidence < 70%): Render inline dropdown
+                          const quoted = parseFloat(String(qIt.ordered_quantity || 0));
+                          const already = parseFloat(String(qIt.quantity_dispatched || 0));
+                          const pending = Math.max(0, quoted - already);
+                          const unmappedLines = reconcileDrawer.reconciliation.unmapped_invoice_lines || [];
+
+                          return (
+                            <tr key={qIt.id} className="bg-amber-50/40 hover:bg-amber-50/70 transition-colors">
+                              <td className="py-2 px-3 font-semibold text-slate-800">
+                                <div className="flex items-center space-x-1.5">
+                                  <span>{qIt.description}</span>
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                                    Needs Mapping
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-amber-700 font-sans mt-0.5 font-normal">
+                                  Select matching line from uploaded Tax Invoice
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-slate-600">{quoted}</td>
+                              <td className="py-2 px-2 text-right" colSpan={1}>
+                                <div className="flex items-center justify-end">
+                                  <select
+                                    className="max-w-[210px] w-full text-[11px] px-2 py-1 border border-amber-300 rounded-lg bg-white font-medium text-slate-800 focus:ring-1 focus:ring-amber-500 shadow-2xs cursor-pointer"
+                                    onChange={(e) => {
+                                      if (e.target.value !== '') {
+                                        handleMapUnmappedLine(parseInt(e.target.value, 10), qIt.id);
+                                      }
+                                    }}
+                                    defaultValue=""
+                                  >
+                                    <option value="">Select matching invoice item: ▼</option>
+                                    {unmappedLines.map((unmapped: any, uIdx: number) => (
+                                      <option key={uIdx} value={uIdx}>
+                                        {unmapped.raw_description} ({unmapped.quantity} {unmapped.unit || 'BOX'})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-slate-400">
+                                {already}
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-amber-600 font-bold">
+                                {pending}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
+                                  Pending
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -1175,20 +1365,16 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Unmatched Items Alert */}
+              {/* Unmapped Items Notice */}
               {reconcileDrawer.reconciliation.unmatched_items?.length > 0 && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs">
                   <div className="font-bold flex items-center space-x-1.5 mb-1">
                     <AlertTriangle size={13} className="text-amber-700" />
-                    <span>Unmatched Items in Tax Invoice ({reconcileDrawer.reconciliation.unmatched_items.length}):</span>
+                    <span>Quotation Lines Awaiting Mapping ({reconcileDrawer.reconciliation.unmatched_items.length}):</span>
                   </div>
-                  <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-800">
-                    {reconcileDrawer.reconciliation.unmatched_items.map((u: any) => (
-                      <li key={u.quotation_item_id}>
-                        {u.description} (Ordered: {u.quoted_qty} boxes)
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-[11px] text-amber-800">
+                    Use the <span className="font-bold font-mono">[Select matching invoice item: ▼]</span> dropdowns in the table above to manually bind invoice lines to remaining items.
+                  </p>
                 </div>
               )}
 
