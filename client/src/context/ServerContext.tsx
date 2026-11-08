@@ -42,6 +42,15 @@ const getDefaultServerUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_API_URL?.trim();
   if (envUrl) return envUrl;
 
+  const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI);
+
+  // If in Electron (Windows desktop client)
+  if (isElectron) {
+    const saved = localStorage.getItem('ama_server_url')?.trim();
+    if (saved) return saved;
+    return 'http://localhost:4000';
+  }
+
   // 1. Prioritize user's saved server URL from previous configuration
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('ama_server_url')?.trim();
@@ -51,7 +60,7 @@ const getDefaultServerUrl = (): string => {
   }
 
   // 2. In a browser environment (Chrome / Safari / Edge / Mobile Phone)
-  if (typeof window !== 'undefined' && !(window as any).electronAPI && window.location) {
+  if (typeof window !== 'undefined' && window.location) {
     const { protocol, hostname, port, origin } = window.location;
 
     // Detect if running on static frontend hosting (Vercel, Netlify, GitHub Pages, etc.)
@@ -79,7 +88,7 @@ const getDefaultServerUrl = (): string => {
     }
   }
 
-  return 'https://ama-quotation-api.onrender.com';
+  return 'http://localhost:4000';
 };
 
 export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -132,20 +141,32 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return clean.replace(/\/$/, '');
   };
 
-  // Load persisted server URL from Electron preload if available, or open wizard on first run
+  // Load persisted server URL from Electron preload or auto-connect to localhost:4000
   useEffect(() => {
-    const hasConfigured = localStorage.getItem('ama_server_url');
     if ((window as any).electronAPI) {
-      (window as any).electronAPI.getServerUrl().then((savedUrl: string) => {
-        if (savedUrl && savedUrl !== serverUrl) {
-          const normalized = normalizeUrl(savedUrl);
-          setServerUrlState(normalized);
-          localStorage.setItem('ama_server_url', normalized);
-        } else if (!hasConfigured) {
-          // On client machines where no server URL has ever been configured, open wizard
-          setOpenServerWizard(true);
-        }
-      });
+      // First, test if local host is running
+      fetch('http://localhost:4000/api/health', { method: 'GET' })
+        .then(async (res) => {
+          if (res.ok) {
+            // Local Host Server is running locally! Always prioritize local host on desktop!
+            setServerUrlState('http://localhost:4000');
+            localStorage.setItem('ama_server_url', 'http://localhost:4000');
+            setStatus('connected');
+            if (window.electronAPI) {
+              await window.electronAPI.saveServerUrl('http://localhost:4000');
+            }
+          }
+        })
+        .catch(() => {
+          // If localhost not running, read saved URL or fallback to cloud
+          (window as any).electronAPI.getServerUrl().then((savedUrl: string) => {
+            if (savedUrl && savedUrl !== serverUrl) {
+              const normalized = normalizeUrl(savedUrl);
+              setServerUrlState(normalized);
+              localStorage.setItem('ama_server_url', normalized);
+            }
+          });
+        });
     }
   }, []);
 
@@ -218,6 +239,51 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [serverUrl]);
 
+  // Verify HTTP API connectivity & perform intelligent auto-failover
+  const verifyHttpConnectivity = useCallback(async (url: string) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${url}/api/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'ok' || data.dbConnected) {
+          setStatus('connected');
+          setLastSyncTime(new Date());
+          return true;
+        }
+      }
+    } catch {
+      // Primary URL failed; test alternative auto-failover target before declaring disconnected
+      if (url.includes('onrender.com')) {
+        // Probe local host server
+        try {
+          const lRes = await fetch('http://localhost:4000/api/health');
+          if (lRes.ok) {
+            setServerUrlState('http://localhost:4000');
+            localStorage.setItem('ama_server_url', 'http://localhost:4000');
+            setStatus('connected');
+            return true;
+          }
+        } catch {}
+      } else if (url.includes('localhost') || url.includes('127.0.0.1')) {
+        // Probe cloud server
+        try {
+          const cRes = await fetch('https://ama-quotation-api.onrender.com/api/health');
+          if (cRes.ok) {
+            setServerUrlState('https://ama-quotation-api.onrender.com');
+            localStorage.setItem('ama_server_url', 'https://ama-quotation-api.onrender.com');
+            setStatus('connected');
+            return true;
+          }
+        } catch {}
+      }
+    }
+    setStatus('disconnected');
+    return false;
+  }, []);
+
   // Connect WebSocket for LAN real-time notifications
   const connectWebSocket = useCallback((urlToUse: string) => {
     if (wsRef.current) {
@@ -274,7 +340,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       ws.onclose = () => {
         clearInterval(pingInterval);
-        setStatus('disconnected');
+        // Do NOT instantly flag disconnected: let HTTP check confirm real connectivity
+        verifyHttpConnectivity(urlToUse);
         // Auto-reconnect after 4 seconds
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -283,22 +350,31 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
 
       ws.onerror = () => {
-        setStatus('disconnected');
+        // Do NOT instantly flag disconnected: let HTTP check confirm real connectivity
+        verifyHttpConnectivity(urlToUse);
       };
     } catch (err) {
-      setStatus('disconnected');
+      verifyHttpConnectivity(urlToUse);
     }
-  }, []);
+  }, [verifyHttpConnectivity, reloadCompany]);
 
   useEffect(() => {
     connectWebSocket(serverUrl);
+    verifyHttpConnectivity(serverUrl);
+
+    // Recurring HTTP health heartbeat every 15 seconds
+    const heartbeat = setInterval(() => {
+      verifyHttpConnectivity(serverUrl);
+    }, 15000);
+
     return () => {
+      clearInterval(heartbeat);
       clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
-  }, [serverUrl, connectWebSocket]);
+  }, [serverUrl, connectWebSocket, verifyHttpConnectivity]);
 
   // Subscribe to real-time events
   const subscribeToEvents = useCallback((callback: (event: any) => void) => {

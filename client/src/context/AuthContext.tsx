@@ -67,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const data = await fetchApi<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+      timeoutMs: 35000,
     });
     return data;
   };

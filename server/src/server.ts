@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.44',
+    version: '2.4.45',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -560,4 +560,24 @@ server.listen(config.port, '0.0.0.0', async () => {
     }
   }
   logger.info(`========================================================`);
+
+  // Cloud Keep-Alive Daemon: Keeps Render cloud instance awake 24/7 so it never spins down into sleep
+  const cloudHealthUrl = 'https://ama-quotation-api.onrender.com/api/health';
+  const pingCloudKeepAlive = async () => {
+    try {
+      const res = await fetch(cloudHealthUrl, {
+        method: 'GET',
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.45' },
+      });
+      if (res.ok) {
+        logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');
+      }
+    } catch (err: any) {
+      logger.warn(`[KeepAlive] Cloud ping notice: ${err.message}`);
+    }
+  };
+
+  // Initial ping 15 seconds after boot, then recurring every 7 minutes (Render sleeps after 15 minutes of inactivity)
+  setTimeout(pingCloudKeepAlive, 15000);
+  setInterval(pingCloudKeepAlive, 7 * 60 * 1000);
 });

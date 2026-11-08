@@ -193,8 +193,16 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                   {company?.tagline || 'Commercial Quotation & Dispatch Management'}
                 </p>
 
+                {/* Connecting Indicator */}
+                {status === 'connecting' && (
+                  <div className="flex items-center justify-center space-x-2 py-1.5 px-3 text-xs text-blue-700 bg-blue-50/80 border border-blue-200/60 rounded-md">
+                    <RefreshCw size={13} className="animate-spin text-blue-600 flex-shrink-0" />
+                    <span className="truncate">Connecting to server ({serverUrl})...</span>
+                  </div>
+                )}
+
                 {/* Disconnected Warning */}
-                {!isConnected && (
+                {status === 'disconnected' && (
                   <div className="stream-alert-box warning text-xs">
                     <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
                     <div className="flex-1 space-y-1">
@@ -388,7 +396,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
-        <span className="stream-footer-version">v2.4.44</span>
+        <span className="stream-footer-version">v2.4.45</span>
       </footer>
     </div>
   );
