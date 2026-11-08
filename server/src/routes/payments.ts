@@ -9,10 +9,30 @@ import { numberToWordsIndian } from '../utils/numberToWords';
 
 export const paymentsRouter = Router();
 
+let paymentsSchemaEnsured = false;
+export async function ensurePaymentsSchema() {
+  if (paymentsSchemaEnsured) return;
+  try {
+    await query(`
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+      ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
+      ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
+    `);
+    paymentsSchemaEnsured = true;
+  } catch (err: any) {
+    console.warn('[Payments] Schema ensure notice:', err.message);
+  }
+}
+
 // Stream Payment Receipt (accessible directly via browser tab, print window, or download with optional token)
 // Fixed to standard A4 portrait mode with Recorded By & Accounts Verification details
 const streamReceiptPdf = async (req: Request, res: Response) => {
   try {
+    await ensurePaymentsSchema();
     const id = parseInt(req.params.id as string, 10);
 
     const pRows = await query(
@@ -319,6 +339,7 @@ paymentsRouter.use(authenticateToken);
 // 1. List Payments (Paginated with filters: status, payment_mode, quotation_id, date range)
 paymentsRouter.get('/', async (req: Request, res: Response) => {
   try {
+    await ensurePaymentsSchema();
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
     const offset = (page - 1) * limit;

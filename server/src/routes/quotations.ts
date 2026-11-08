@@ -7,6 +7,7 @@ import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 import { calculateQuotationDiscountAndTotals, isCeraBrand } from '../utils/discountCalculator';
 import { getOrSaveEncryptedProductCodes } from '../utils/encryptedCode';
+import { ensurePaymentsSchema } from './payments';
 
 export const quotationsRouter = Router();
 
@@ -336,20 +337,46 @@ quotationsRouter.get('/:id', async (req: Request, res: Response) => {
       items: items.filter((it) => it.area_id === a.id),
     }));
 
-    // Fetch Payments
-    const payments = await query(
-      `SELECT p.*,
-              u.full_name as recorded_by_name,
-              u.role as recorded_by_role,
-              COALESCE(p.verified_by_name, uv.full_name) as verified_by_name,
-              uv.role as verified_by_role
-       FROM payments p
-       LEFT JOIN users u ON u.id = p.recorded_by_id
-       LEFT JOIN users uv ON uv.id = p.verified_by_id
-       WHERE p.quotation_id = $1
-       ORDER BY p.payment_date DESC, p.id DESC`,
-      [id]
-    );
+    // Fetch Payments with resilient schema fallback
+    let payments: any[] = [];
+    try {
+      await ensurePaymentsSchema();
+      payments = await query(
+        `SELECT p.*,
+                u.full_name as recorded_by_name,
+                u.role as recorded_by_role,
+                COALESCE(p.verified_by_name, uv.full_name) as verified_by_name,
+                uv.role as verified_by_role
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.recorded_by_id
+         LEFT JOIN users uv ON uv.id = p.verified_by_id
+         WHERE p.quotation_id = $1
+         ORDER BY p.payment_date DESC, p.id DESC`,
+        [id]
+      );
+    } catch (paymentErr: any) {
+      console.warn(`[Quotations] Resilient payment fetch fallback for quote ${id}:`, paymentErr.message);
+      try {
+        payments = await query(
+          `SELECT p.*,
+                  u.full_name as recorded_by_name,
+                  u.role as recorded_by_role
+           FROM payments p
+           LEFT JOIN users u ON u.id = p.recorded_by_id
+           WHERE p.quotation_id = $1
+           ORDER BY p.payment_date DESC, p.id DESC`,
+          [id]
+        );
+      } catch (fallbackErr: any) {
+        console.warn(`[Quotations] Secondary fallback payment fetch failed:`, fallbackErr.message);
+        try {
+          payments = await query(`SELECT * FROM payments WHERE quotation_id = $1 ORDER BY id DESC`, [id]);
+        } catch (rawErr: any) {
+          console.error(`[Quotations] Could not query payments:`, rawErr.message);
+          payments = [];
+        }
+      }
+    }
 
     res.json({
       quotation,

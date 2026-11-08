@@ -9,6 +9,7 @@ import {
   buildSalespersonsReportPdf,
   buildPaymentsReportPdf,
 } from '../utils/reportPdfGenerator';
+import { ensurePaymentsSchema } from './payments';
 
 export const reportsRouter = Router();
 
@@ -658,27 +659,53 @@ reportsRouter.get('/payments/export', optionalAuthenticateToken, async (req: Req
       params.push(end_date);
     }
 
-    const rawRows = await query(`
-      SELECT
-        p.payment_number as "Receipt No",
-        TO_CHAR(p.payment_date, 'YYYY-MM-DD') as "Date",
-        q.quotation_number as "Quotation No",
-        COALESCE(q.customer_name, '') as "Customer",
-        COALESCE(p.amount, 0) as "Amount (INR)",
-        COALESCE(p.payment_mode, '') as "Payment Mode",
-        COALESCE(p.reference_number, '') as "Ref / Txn No",
-        CASE WHEN p.status IN ('Cleared', 'Verified') THEN 'Verified' ELSE 'Not Verified' END as "Status",
-        COALESCE(u.full_name, '') as "Recorded By",
-        COALESCE(p.verified_by_name, uv.full_name, '') as "Verified By",
-        TO_CHAR(p.verified_at, 'YYYY-MM-DD') as "Verified Date",
-        COALESCE(p.notes, '') as "Notes"
-      FROM payments p
-      JOIN quotations q ON q.id = p.quotation_id
-      LEFT JOIN users u ON u.id = p.recorded_by_id
-      LEFT JOIN users uv ON uv.id = p.verified_by_id
-      WHERE ${whereClauses.join(' AND ')}
-      ORDER BY p.payment_date DESC
-    `, params);
+    await ensurePaymentsSchema();
+    let rawRows: any[] = [];
+    try {
+      rawRows = await query(`
+        SELECT
+          p.payment_number as "Receipt No",
+          TO_CHAR(p.payment_date, 'YYYY-MM-DD') as "Date",
+          q.quotation_number as "Quotation No",
+          COALESCE(q.customer_name, '') as "Customer",
+          COALESCE(p.amount, 0) as "Amount (INR)",
+          COALESCE(p.payment_mode, '') as "Payment Mode",
+          COALESCE(p.reference_number, '') as "Ref / Txn No",
+          CASE WHEN p.status IN ('Cleared', 'Verified') THEN 'Verified' ELSE 'Not Verified' END as "Status",
+          COALESCE(u.full_name, '') as "Recorded By",
+          COALESCE(p.verified_by_name, uv.full_name, '') as "Verified By",
+          TO_CHAR(p.verified_at, 'YYYY-MM-DD') as "Verified Date",
+          COALESCE(p.notes, '') as "Notes"
+        FROM payments p
+        JOIN quotations q ON q.id = p.quotation_id
+        LEFT JOIN users u ON u.id = p.recorded_by_id
+        LEFT JOIN users uv ON uv.id = p.verified_by_id
+        WHERE ${whereClauses.join(' AND ')}
+        ORDER BY p.payment_date DESC
+      `, params);
+    } catch (err: any) {
+      console.warn('[Reports] Fallback payments export query:', err.message);
+      rawRows = await query(`
+        SELECT
+          p.payment_number as "Receipt No",
+          TO_CHAR(p.payment_date, 'YYYY-MM-DD') as "Date",
+          q.quotation_number as "Quotation No",
+          COALESCE(q.customer_name, '') as "Customer",
+          COALESCE(p.amount, 0) as "Amount (INR)",
+          COALESCE(p.payment_mode, '') as "Payment Mode",
+          COALESCE(p.reference_number, '') as "Ref / Txn No",
+          CASE WHEN p.status IN ('Cleared', 'Verified') THEN 'Verified' ELSE 'Not Verified' END as "Status",
+          COALESCE(u.full_name, '') as "Recorded By",
+          '' as "Verified By",
+          '' as "Verified Date",
+          COALESCE(p.notes, '') as "Notes"
+        FROM payments p
+        JOIN quotations q ON q.id = p.quotation_id
+        LEFT JOIN users u ON u.id = p.recorded_by_id
+        WHERE ${whereClauses.join(' AND ')}
+        ORDER BY p.payment_date DESC
+      `, params);
+    }
 
     let rows = rawRows.map((it: any) => ({
       "Receipt No": String(it["Receipt No"] || ''),

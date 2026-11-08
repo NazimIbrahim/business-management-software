@@ -55,7 +55,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.40',
+    version: '2.4.41',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -204,6 +204,15 @@ async function runAutoMigrations() {
       CREATE INDEX IF NOT EXISTS idx_customers_created_by ON customers (created_by_id);
       CREATE INDEX IF NOT EXISTS idx_quotations_type ON quotations (quotation_type);
       CREATE INDEX IF NOT EXISTS idx_quotations_assisted_sales_person ON quotations (assisted_sales_person_id);
+
+      -- payments columns for accounts verification and recorded by audit
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+      ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
+      ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
     `);
   } catch (err: any) {
     logger.warn('Column additions migration warning:', err.message);
