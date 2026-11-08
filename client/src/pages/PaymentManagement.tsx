@@ -20,7 +20,8 @@ import { PdfPreviewModal } from '../components/PdfPreviewModal';
 export const PaymentManagement: React.FC = () => {
   const { fetchApi, getReceiptUrl, subscribeToEvents } = useServer();
   const { user } = useAuth();
-  const isAccountsOrAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const userRole = (user?.role || '').toLowerCase();
+  const isAccountsOrAdmin = userRole === 'admin' || userRole === 'accounts';
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -638,8 +639,8 @@ export const PaymentManagement: React.FC = () => {
                 <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-[11px] text-amber-800 flex items-start gap-2">
                   <Clock size={14} className="text-amber-600 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Note:</strong> Payment recorded by sales personnel is logged as{' '}
-                    <strong>Not Verified</strong>. The Accounts & Finance Desk will verify the credit upon bank confirmation.
+                    <strong>Notice:</strong> Payment entered by sales personnel or store managers is recorded as{' '}
+                    <strong>Not Verified</strong>. Only the Accounts team can verify payment receipts to credit the customer's quote value.
                   </span>
                 </div>
               )}

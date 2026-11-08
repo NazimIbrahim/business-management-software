@@ -300,7 +300,7 @@ usersRouter.get('/:id/stats', async (req: Request, res: Response) => {
       ), 0) as total_collected
       FROM payments p
       JOIN quotations q ON q.id = p.quotation_id
-      WHERE (q.sales_person_id = $1 OR q.assisted_sales_person_id = $1) AND p.status = 'Cleared'`,
+      WHERE (q.sales_person_id = $1 OR q.assisted_sales_person_id = $1) AND p.status IN ('Cleared', 'Verified')`,
       [userId]
     );
     const totalCollected = parseFloat(payRows[0].total_collected);

@@ -5,6 +5,8 @@ import { Quotation, QuotationItem } from '../types';
 import { ProcurementStepper } from '../components/ProcurementStepper';
 import {
   Truck,
+  AlertCircle,
+  CreditCard,
   Search,
   Filter,
   Calendar,
@@ -30,6 +32,12 @@ import {
   Layers,
   ExternalLink,
 } from 'lucide-react';
+
+export const formatCurrency = (val: any) => {
+  const n = parseFloat(String(val || 0));
+  if (isNaN(n)) return '0.00';
+  return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 export const DISPATCH_STATUS_OPTIONS = [
   'Yet to Update',
@@ -136,6 +144,9 @@ export interface ProcurementItem {
   sales_person_name?: string;
   quotation_dispatch_status?: string;
   quotation_expected_date?: string;
+  quotation_net_total?: number;
+  quotation_verified_paid?: number;
+  quotation_balance_due?: number;
 }
 
 export interface DispatchManagementProps {
@@ -163,6 +174,19 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       setCurrentView(initialView);
     }
   }, [initialView]);
+
+  // Payment Shortfall Warning Confirmation State
+  const [shortfallConfirm, setShortfallConfirm] = useState<{
+    item: ProcurementItem;
+    itemVal: number;
+    verifiedPaid: number;
+    shortfall: number;
+    quoteNetTotal: number;
+    quoteBalanceDue: number;
+    actionDescription: string;
+    actionBadgeText: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Dedicated Procurement Queue State
   const [procurementItems, setProcurementItems] = useState<ProcurementItem[]>([]);
@@ -389,7 +413,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   }, [currentView, procurementSubTab, procurementStageFilter, debouncedProcSearch]);
 
   // Procurement Action Handlers
-  const handleItemStageChange = async (itemId: number, newStage: string) => {
+  const executeItemStageChange = async (itemId: number, newStage: string) => {
     try {
       setUpdatingItemId(itemId);
       await fetchApi<any>(`/api/dispatch/items/${itemId}`, {
@@ -414,6 +438,32 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
     } finally {
       setUpdatingItemId(null);
     }
+  };
+
+  const handleItemStageChange = (itemId: number, newStage: string) => {
+    const item = procurementItems.find((it) => it.id === itemId);
+    if (item) {
+      const itemVal = parseFloat(String(item.item_total || 0));
+      const verifiedPaid = parseFloat(String(item.quotation_verified_paid || 0));
+      if (itemVal > verifiedPaid) {
+        setShortfallConfirm({
+          item,
+          itemVal,
+          verifiedPaid,
+          shortfall: itemVal - verifiedPaid,
+          quoteNetTotal: parseFloat(String(item.quotation_net_total || 0)),
+          quoteBalanceDue: parseFloat(String(item.quotation_balance_due || (item.quotation_net_total || 0) - verifiedPaid)),
+          actionDescription: `Proceed with updating procurement milestone to "${newStage}"`,
+          actionBadgeText: newStage,
+          onConfirm: () => {
+            setShortfallConfirm(null);
+            executeItemStageChange(itemId, newStage);
+          },
+        });
+        return;
+      }
+    }
+    executeItemStageChange(itemId, newStage);
   };
 
   const handleItemNotesChange = async (itemId: number, notes: string) => {
@@ -1236,6 +1286,34 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                     </button>
                   </div>
 
+                  {/* Payment Shortfall Warning Strip on Card */}
+                  {(() => {
+                    const itemVal = parseFloat(String(item.item_total || 0));
+                    const verifiedPaid = parseFloat(String(item.quotation_verified_paid || 0));
+                    if (itemVal <= verifiedPaid) return null;
+                    const shortfall = itemVal - verifiedPaid;
+                    return (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                            ⚠️
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-amber-950">Payment Shortfall Alert: </span>
+                            <span>
+                              Item value (₹ {formatCurrency(itemVal)}) exceeds customer's verified advance (₹ {formatCurrency(verifiedPaid)}).
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-[11px] px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 border border-amber-300">
+                            Shortfall: ₹ {formatCurrency(shortfall)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Item Description, Specifications, and Ordered Qty */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
                     <div className="space-y-1 min-w-0">
@@ -1260,6 +1338,16 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                      {item.item_total !== undefined && item.item_total !== null && (
+                        <div className="text-right">
+                          <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                            Item Value
+                          </div>
+                          <div className="text-sm sm:text-base font-black text-slate-900 tabular-nums">
+                            ₹ {formatCurrency(item.item_total)}
+                          </div>
+                        </div>
+                      )}
                       <div className="text-right">
                         <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
                           Order Qty
@@ -2793,31 +2881,70 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                                                     onChange={(e) => {
                                                       if (isViewOnly) return;
                                                       const newStatus = e.target.value as DispatchStatusType;
-                                                      let autoDispQty = itemState.dispatched_quantity;
-                                                      if (
-                                                        newStatus === 'Dispatched' &&
-                                                        (!autoDispQty || Number(autoDispQty) === 0)
-                                                      ) {
-                                                        autoDispQty = totalItemQty;
-                                                      }
-                                                      const nextEdited = {
-                                                        ...editedItems,
-                                                        [itemId]: {
-                                                          ...itemState,
-                                                          status: newStatus,
-                                                          dispatched_quantity: autoDispQty,
-                                                        },
-                                                      };
-                                                      setEditedItems(nextEdited);
+                                                      const itemVal = parseFloat(String(item.total_amount || 0));
+                                                      const verifiedPaid = parseFloat(String(q.total_paid || 0));
 
-                                                      // Automatically recalculate and update overall dispatch stage
-                                                      const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
-                                                      setOverallStatus(newOverall);
-                                                      if (selectedQuotationId) {
-                                                        setQuotations((prev) =>
-                                                          prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
-                                                        );
+                                                      const applyStatusChange = () => {
+                                                        let autoDispQty = itemState.dispatched_quantity;
+                                                        if (
+                                                          newStatus === 'Dispatched' &&
+                                                          (!autoDispQty || Number(autoDispQty) === 0)
+                                                        ) {
+                                                          autoDispQty = totalItemQty;
+                                                        }
+                                                        const nextEdited = {
+                                                          ...editedItems,
+                                                          [itemId]: {
+                                                            ...itemState,
+                                                            status: newStatus,
+                                                            dispatched_quantity: autoDispQty,
+                                                          },
+                                                        };
+                                                        setEditedItems(nextEdited);
+
+                                                        // Automatically recalculate and update overall dispatch stage
+                                                        const newOverall = computeOverallDispatchStatus(activeItems, nextEdited);
+                                                        setOverallStatus(newOverall);
+                                                        if (selectedQuotationId) {
+                                                          setQuotations((prev) =>
+                                                            prev.map((quot) => (quot.id === selectedQuotationId ? { ...quot, dispatch_status: newOverall as any } : quot))
+                                                          );
+                                                        }
+                                                      };
+
+                                                      if (itemVal > verifiedPaid && ['Need to Arrange from Local', 'Ready Stock', 'Dispatched'].includes(newStatus)) {
+                                                        setShortfallConfirm({
+                                                          item: {
+                                                            id: itemId,
+                                                            quotation_id: q.id,
+                                                            description: item.description,
+                                                            brand: item.brand,
+                                                            size: item.size,
+                                                            quantity: totalItemQty,
+                                                            dispatch_status: newStatus,
+                                                            quotation_number: q.quotation_number || '',
+                                                            quotation_date: q.quotation_date || '',
+                                                            quotation_type: q.quotation_type || 'tiles',
+                                                            quotation_status: q.status || 'approved',
+                                                            customer_name: q.customer_name || '',
+                                                            customer_phone: q.customer_phone,
+                                                          },
+                                                          itemVal,
+                                                          verifiedPaid,
+                                                          shortfall: itemVal - verifiedPaid,
+                                                          quoteNetTotal: parseFloat(String(q.net_total || 0)),
+                                                          quoteBalanceDue: parseFloat(String(q.balance_due || (q.net_total || 0) - verifiedPaid)),
+                                                          actionDescription: `Proceed with setting status to "${newStatus}"`,
+                                                          actionBadgeText: newStatus,
+                                                          onConfirm: () => {
+                                                            setShortfallConfirm(null);
+                                                            applyStatusChange();
+                                                          },
+                                                        });
+                                                        return;
                                                       }
+
+                                                      applyStatusChange();
                                                     }}
                                                     className={`select select-sm text-xs font-semibold w-full focus:outline-none focus:ring-1 focus:ring-teal-400 ${
                                                       isViewOnly ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'
@@ -3362,6 +3489,145 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
           </div>
         </div>
       )}
+      {/* Payment Shortfall Warning Modal */}
+      {shortfallConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShortfallConfirm(null)}
+        >
+          <div
+            className="card max-w-xl w-full p-5 bg-white border border-amber-300 shadow-2xl rounded-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-amber-100 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center text-xl shrink-0">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <span>Payment Shortfall Warning</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      Insufficient Advance
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Verified payment received is less than the value of this item.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShortfallConfirm(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Main Warning Box */}
+            <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1.5 leading-relaxed">
+              <p className="font-bold text-amber-950 flex items-center gap-1.5">
+                <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                <span>Caution: Sufficient funds have not been verified for this item</span>
+              </p>
+              <p>
+                The customer has only paid a verified advance of{' '}
+                <strong className="text-emerald-800 font-bold">
+                  ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
+                </strong>{' '}
+                against this quotation. This item alone is valued at{' '}
+                <strong className="text-slate-900 font-bold">
+                  ₹ {formatCurrency(shortfallConfirm.itemVal)}
+                </strong>
+                , creating an uncovered shortfall of{' '}
+                <strong className="text-rose-700 font-extrabold">
+                  ₹ {formatCurrency(shortfallConfirm.shortfall)}
+                </strong>
+                .
+              </p>
+            </div>
+
+            {/* Financial Comparison Grid */}
+            <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  Item Value
+                </span>
+                <span className="text-sm font-extrabold text-slate-900 block mt-1 tabular-nums">
+                  ₹ {formatCurrency(shortfallConfirm.itemVal)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
+                  Verified Paid
+                </span>
+                <span className="text-sm font-extrabold text-emerald-800 block mt-1 tabular-nums">
+                  ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
+                  Shortfall
+                </span>
+                <span className="text-sm font-extrabold text-rose-700 block mt-1 tabular-nums">
+                  -₹ {formatCurrency(shortfallConfirm.shortfall)}
+                </span>
+              </div>
+            </div>
+
+            {/* Quotation & Customer Meta Details */}
+            <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Customer:</span>
+                <span className="font-semibold text-slate-900">
+                  {shortfallConfirm.item.customer_name}{' '}
+                  {shortfallConfirm.item.customer_phone ? `(${shortfallConfirm.item.customer_phone})` : ''}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Quotation Ref:</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {shortfallConfirm.item.quotation_number}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Quote Total / Balance Due:</span>
+                <span className="font-semibold text-slate-900 tabular-nums">
+                  ₹ {formatCurrency(shortfallConfirm.quoteNetTotal)} / Due: ₹{' '}
+                  {formatCurrency(shortfallConfirm.quoteBalanceDue)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Item:</span>
+                <span className="font-semibold text-slate-900 truncate max-w-[280px]">
+                  {shortfallConfirm.item.description}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Prompt & Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShortfallConfirm(null)}
+                className="btn btn-secondary btn-sm w-full sm:w-auto font-semibold cursor-pointer"
+              >
+                Cancel Action
+              </button>
+              <button
+                type="button"
+                onClick={shortfallConfirm.onConfirm}
+                className="btn btn-sm w-full sm:w-auto bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/20 cursor-pointer"
+              >
+                <span>Proceed Anyway ({shortfallConfirm.actionBadgeText})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 bg-emerald-800 text-white rounded-xl shadow-2xl border border-emerald-600 animate-slide-up">

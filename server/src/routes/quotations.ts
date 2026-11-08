@@ -249,7 +249,7 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
       LEFT JOIN (
         SELECT quotation_id, SUM(amount) as total_paid
         FROM payments
-        WHERE status = 'Cleared'
+        WHERE status IN ('Cleared', 'Verified')
         GROUP BY quotation_id
       ) p ON p.quotation_id = q.id
       WHERE ${whereSql}
@@ -292,7 +292,7 @@ quotationsRouter.get('/:id', async (req: Request, res: Response) => {
        LEFT JOIN users u ON u.id = q.approved_by_id
        LEFT JOIN (
          SELECT quotation_id, SUM(amount) as total_paid
-         FROM payments WHERE status = 'Cleared' GROUP BY quotation_id
+         FROM payments WHERE status IN ('Cleared', 'Verified') GROUP BY quotation_id
        ) p ON p.quotation_id = q.id
        WHERE q.id = $1`,
       [id]

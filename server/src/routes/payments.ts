@@ -462,10 +462,11 @@ paymentsRouter.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
-    // If salesperson: always Recorded (Not Verified)
-    // If admin or manager: default to Cleared unless is_verified is explicitly false
-    const initialStatus = isSalesperson ? 'Recorded' : (is_verified === false ? 'Recorded' : 'Cleared');
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAccountsOrAdmin = userRole === 'accounts' || userRole === 'admin';
+    // Salespeople and Store Managers can enter payment receipts, but they are ALWAYS recorded as 'Recorded' (unverified)
+    // ONLY Accounts team (or Administrator) can record a payment as 'Cleared' / verified directly
+    const initialStatus = isAccountsOrAdmin ? (is_verified === false ? 'Recorded' : 'Cleared') : 'Recorded';
 
     const result = await withTransaction(async (client) => {
       // Validate quotation and check outstanding balance
@@ -590,9 +591,11 @@ const handlePaymentVerification = async (req: Request, res: Response) => {
     const id = parseInt(req.params.id as string, 10);
     const { verified = true, notes } = req.body;
 
-    const userRole = req.user?.role?.toLowerCase();
-    if (userRole === 'salesperson') {
-      res.status(403).json({ error: 'Permission denied: Only Accounts / Management can verify payment receipts.' });
+    const userRole = (req.user?.role || '').toLowerCase();
+    if (userRole !== 'accounts' && userRole !== 'admin') {
+      res.status(403).json({
+        error: 'Permission denied: Only Accounts team (or Administrator) can verify or unverify payment receipts. Store managers and salespersons are not permitted to verify payments.',
+      });
       return;
     }
 

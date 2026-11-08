@@ -140,7 +140,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
         ), 0) as total_collected
       FROM payments p
       JOIN quotations q ON q.id = p.quotation_id
-      WHERE p.status = 'Cleared'
+      WHERE p.status IN ('Cleared', 'Verified')
         AND ${paymentMonthClause}
         ${isSalesperson ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})` : ''}
     `);

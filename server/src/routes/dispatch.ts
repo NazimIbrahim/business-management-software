@@ -374,6 +374,8 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
         q.approved_at,
         q.gross_total,
         q.net_total,
+        COALESCE(p_pay.verified_paid, 0) as total_paid,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due,
         q.version,
         q.updated_at,
         COALESCE(q.has_dispatch_item_changes, false) as has_dispatch_item_changes,
@@ -396,8 +398,14 @@ dispatchRouter.get('/quotations', async (req: Request, res: Response) => {
       FROM quotations q
       LEFT JOIN users u_app ON u_app.id = q.approved_by_id
       LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+      LEFT JOIN (
+        SELECT quotation_id, SUM(amount) as verified_paid
+        FROM payments
+        WHERE status IN ('Cleared', 'Verified')
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
       ${whereClause}
-      GROUP BY q.id, u_app.full_name
+      GROUP BY q.id, u_app.full_name, p_pay.verified_paid
       ORDER BY 
         CASE WHEN q.has_dispatch_item_changes = true THEN 0 ELSE 1 END ASC,
         CASE WHEN q.expected_dispatch_date IS NULL THEN 1 ELSE 0 END ASC,
@@ -433,9 +441,17 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
 
     const id = parseInt(req.params.id as string, 10);
     const qRows = await query(
-      `SELECT q.*, u_app.full_name as approved_by_name
+      `SELECT q.*, u_app.full_name as approved_by_name,
+              COALESCE(p_pay.verified_paid, 0) as total_paid,
+              GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due
        FROM quotations q
        LEFT JOIN users u_app ON u_app.id = q.approved_by_id
+       LEFT JOIN (
+         SELECT quotation_id, SUM(amount) as verified_paid
+         FROM payments
+         WHERE status IN ('Cleared', 'Verified')
+         GROUP BY quotation_id
+       ) p_pay ON p_pay.quotation_id = q.id
        WHERE q.id = $1`,
       [id]
     );
@@ -918,10 +934,19 @@ dispatchRouter.get('/procurement-items', async (req: Request, res: Response) => 
         q.sales_person_id,
         q.sales_person_name,
         COALESCE(q.dispatch_status, 'Yet to Update') as quotation_dispatch_status,
-        q.expected_dispatch_date as quotation_expected_date
+        q.expected_dispatch_date as quotation_expected_date,
+        q.net_total as quotation_net_total,
+        COALESCE(p_pay.verified_paid, 0) as quotation_verified_paid,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as quotation_balance_due
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
+      LEFT JOIN (
+        SELECT quotation_id, SUM(amount) as verified_paid
+        FROM payments
+        WHERE status IN ('Cleared', 'Verified')
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
       ${whereClause}
       ORDER BY 
         CASE WHEN qi.expected_dispatch_date IS NULL THEN 1 ELSE 0 END,
@@ -1129,9 +1154,20 @@ const handleItemProcurementUpdate = async (req: Request, res: Response) => {
 
       // Fetch fresh updated item row
       const freshRows = await query(
-        `SELECT qi.*, q.quotation_number, q.customer_name, q.customer_phone, q.site_location
+        `SELECT qi.*,
+                qi.total_amount as item_total,
+                q.quotation_number, q.customer_name, q.customer_phone, q.site_location,
+                q.net_total as quotation_net_total,
+                COALESCE(p_pay.verified_paid, 0) as quotation_verified_paid,
+                GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as quotation_balance_due
          FROM quotation_items qi
          JOIN quotations q ON q.id = qi.quotation_id
+         LEFT JOIN (
+           SELECT quotation_id, SUM(amount) as verified_paid
+           FROM payments
+           WHERE status IN ('Cleared', 'Verified')
+           GROUP BY quotation_id
+         ) p_pay ON p_pay.quotation_id = q.id
          WHERE qi.id = $1`,
         [itemId]
       );

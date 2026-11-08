@@ -206,7 +206,7 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
         FROM quotations q
         LEFT JOIN users u_app ON u_app.id = q.approved_by_id
         LEFT JOIN (
-          SELECT quotation_id, SUM(amount) as total_paid FROM payments WHERE status = 'Cleared' GROUP BY quotation_id
+          SELECT quotation_id, SUM(amount) as total_paid FROM payments WHERE status IN ('Cleared', 'Verified') GROUP BY quotation_id
         ) p ON p.quotation_id = q.id
         WHERE ${whereClauses.join(' AND ')}
         ORDER BY q.quotation_date DESC, q.id DESC

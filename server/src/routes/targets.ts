@@ -276,7 +276,7 @@ targetsRouter.get('/performance', async (req: Request, res: Response) => {
          FROM payments p
          JOIN quotations q ON q.id = p.quotation_id
          WHERE p.payment_date >= $1 AND p.payment_date <= $2
-           AND p.status = 'Cleared'
+           AND p.status IN ('Cleared', 'Verified')
 
          UNION ALL
 
@@ -290,7 +290,7 @@ targetsRouter.get('/performance', async (req: Request, res: Response) => {
          FROM payments p
          JOIN quotations q ON q.id = p.quotation_id
          WHERE p.payment_date >= $1 AND p.payment_date <= $2
-           AND p.status = 'Cleared'
+           AND p.status IN ('Cleared', 'Verified')
            AND q.assisted_sales_person_id IS NOT NULL
        ) combined_payments
        ${isSalesperson ? `WHERE sp_id = ${req.user!.id}` : ''}
