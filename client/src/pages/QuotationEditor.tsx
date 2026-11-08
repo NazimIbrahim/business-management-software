@@ -68,6 +68,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
   const [siteLocation, setSiteLocation] = useState('');
   const [projectName, setProjectName] = useState('');
   const [quotationDate, setQuotationDate] = useState(new Date().toISOString().split('T')[0]);
+  const [originalQuotationDate, setOriginalQuotationDate] = useState<string | null>(null);
   const [specialNotes, setSpecialNotes] = useState('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
@@ -401,7 +402,11 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
         setDeliveryAddress(q.delivery_address || '');
         setSiteLocation(q.site_location || '');
         setProjectName(q.project_name || '');
-        setQuotationDate(q.quotation_date.split('T')[0]);
+        const origDate = q.quotation_date.split('T')[0];
+        setOriginalQuotationDate(origDate);
+        // Automatically set date to today for quotation updates/revisions
+        const todayStr = new Date().toISOString().split('T')[0];
+        setQuotationDate(todayStr);
         setSpecialNotes(q.special_notes || '');
         setDiscountPercent(parseFloat(String(q.discount_percent)) || 0);
         setDiscountAmount(parseFloat(String(q.discount_amount)) || 0);
@@ -1624,6 +1629,11 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
           <div>
             <label className="flex items-center justify-between text-slate-700 font-semibold h-5 mb-1.5">
               <span>Quotation Date</span>
+              {quotationId && (
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                  Revision v{(version || 1) + 1}
+                </span>
+              )}
             </label>
             <input
               type="date"
@@ -1631,6 +1641,29 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
               value={quotationDate}
               onChange={(e) => setQuotationDate(e.target.value)}
             />
+            {quotationId && (
+              <div className="mt-1 flex items-center justify-between text-[10px] text-slate-600">
+                <span className="text-emerald-700 font-medium">Auto-updated to today</span>
+                {originalQuotationDate && originalQuotationDate !== quotationDate ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuotationDate(originalQuotationDate)}
+                    className="text-indigo-600 hover:text-indigo-800 underline font-medium cursor-pointer"
+                    title={`Revert to original quote date (${new Date(originalQuotationDate).toLocaleDateString('en-GB')})`}
+                  >
+                    Keep Original ({new Date(originalQuotationDate).toLocaleDateString('en-GB')})
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setQuotationDate(new Date().toISOString().split('T')[0])}
+                    className="text-blue-600 hover:text-blue-800 underline font-medium cursor-pointer"
+                  >
+                    Set to Today
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Row 2, Col 1: Project / Villa Name */}

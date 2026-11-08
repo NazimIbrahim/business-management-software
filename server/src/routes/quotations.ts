@@ -967,6 +967,11 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
         });
       }
 
+      // Determine quotation_date: when a quotation is updated/revised, update quotation_date to the update date (today)
+      // or use the explicit date if provided.
+      const todayDate = new Date().toISOString().split('T')[0];
+      const targetQuotationDate = quotation_date ? String(quotation_date).split('T')[0] : todayDate;
+
       // Update Quotation Header and bump version
       const qRes = await client.query(
         `UPDATE quotations
@@ -1023,7 +1028,7 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
          WHERE id = $37 AND version = $38
          RETURNING *`,
         [
-          quotation_date,
+          targetQuotationDate,
           customer_id || null,
           customer_name,
           customer_phone,

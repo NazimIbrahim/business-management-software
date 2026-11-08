@@ -30,6 +30,9 @@ export interface QuotationPdfData {
     quotation_type?: string;
     approved_by_name?: string;
     approved_at?: string | Date;
+    version?: number;
+    created_at?: string | Date;
+    updated_at?: string | Date;
   };
   areas: Array<{
     id: number;
@@ -217,19 +220,34 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
   }
 
   // QUOTATION Title (Right)
-  doc
-    .fontSize(17)
-    .font('Helvetica-Bold')
-    .fillColor(primaryColor)
-    .text('QUOTATION', 390, 32, { align: 'right', width: 165 });
+  const isRevised = (quotation.version || 1) > 1;
+  const qDateFormatted = new Date(quotation.quotation_date).toLocaleDateString('en-GB');
+  const origDateFormatted = quotation.created_at ? new Date(quotation.created_at).toLocaleDateString('en-GB') : null;
 
   doc
-    .fontSize(8.5)
+    .fontSize(16.5)
     .font('Helvetica-Bold')
-    .fillColor(textColor)
-    .text(`Ref: ${quotation.quotation_number}`, 390, 54, { align: 'right', width: 165 })
-    .text(`Date: ${new Date(quotation.quotation_date).toLocaleDateString('en-GB')}`, 390, 67, { align: 'right', width: 165 })
-    .text(`Status: ${quotation.status.toUpperCase()}`, 390, 80, { align: 'right', width: 165 });
+    .fillColor(primaryColor)
+    .text('QUOTATION', 350, 30, { align: 'right', width: 205 });
+
+  if (isRevised) {
+    doc
+      .fontSize(8.5)
+      .font('Helvetica-Bold')
+      .fillColor(textColor)
+      .text(`Ref: ${quotation.quotation_number} (Rev ${quotation.version})`, 330, 50, { align: 'right', width: 225 })
+      .text(`Date: ${qDateFormatted}`, 330, 63, { align: 'right', width: 225 })
+      .text(`Orig. Date: ${origDateFormatted || qDateFormatted}`, 330, 76, { align: 'right', width: 225 })
+      .text(`Status: ${quotation.status.toUpperCase()}`, 330, 89, { align: 'right', width: 225 });
+  } else {
+    doc
+      .fontSize(8.5)
+      .font('Helvetica-Bold')
+      .fillColor(textColor)
+      .text(`Ref: ${quotation.quotation_number}`, 350, 54, { align: 'right', width: 205 })
+      .text(`Date: ${qDateFormatted}`, 350, 67, { align: 'right', width: 205 })
+      .text(`Status: ${quotation.status.toUpperCase()}`, 350, 80, { align: 'right', width: 205 });
+  }
 
   // Customer & Salesperson Info Box
   const customerBoxY = 116;

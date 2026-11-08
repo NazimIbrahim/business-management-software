@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   History,
   Eye,
+  Calendar,
   Truck,
   PackageCheck,
   Package,
@@ -319,15 +320,24 @@ export const QuotationDetail: React.FC<Props> = ({
               </button>
               <span className={`badge badge-${quotation.status}`}>{quotation.status ? quotation.status.replace('_', ' ') : ''}</span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Issued on {new Date(quotation.quotation_date).toLocaleDateString('en-GB')} by{' '}
-              <span className="font-semibold text-slate-700">{quotation.sales_person_name}</span>
-              {quotation.approved_by_name && (
-                <span className="ml-2 font-medium text-emerald-700">
-                  • Approved by Store Manager: <strong className="font-bold">{quotation.approved_by_name}</strong>
+            <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500 mt-0.5">
+              <span>
+                Quotation Date: <strong className="font-semibold text-slate-800">{new Date(quotation.quotation_date).toLocaleDateString('en-GB')}</strong>
+              </span>
+              {(quotation.version || 1) > 1 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md">
+                  <span>Rev v{quotation.version}</span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-500 font-normal">Orig: {new Date(quotation.created_at || quotation.quotation_date).toLocaleDateString('en-GB')}</span>
                 </span>
               )}
-            </p>
+              <span>• Sales Associate: <strong className="font-semibold text-slate-700">{quotation.sales_person_name}</strong></span>
+              {quotation.approved_by_name && (
+                <span className="font-medium text-emerald-700">
+                  • Approved by: <strong className="font-bold">{quotation.approved_by_name}</strong>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -575,9 +585,23 @@ export const QuotationDetail: React.FC<Props> = ({
               </div>
             )}
           </div>
-          <p className="text-slate-600 pt-0.5">
-            Quotation Date: {new Date(quotation.quotation_date).toLocaleDateString('en-GB')}
-          </p>
+          <div className="space-y-1 text-slate-600 pt-0.5">
+            <div className="flex items-center space-x-1.5">
+              <span>Quotation Date:</span>
+              <strong className="text-slate-800 font-semibold">{new Date(quotation.quotation_date).toLocaleDateString('en-GB')}</strong>
+              {(quotation.version || 1) > 1 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  v{quotation.version} Revised Date
+                </span>
+              )}
+            </div>
+            {(quotation.version || 1) > 1 && quotation.created_at && (
+              <div className="text-[11px] text-slate-500 flex items-center space-x-1">
+                <span>Original Issue Date:</span>
+                <span className="font-medium text-slate-700">{new Date(quotation.created_at).toLocaleDateString('en-GB')}</span>
+              </div>
+            )}
+          </div>
           {quotation.approved_by_name && (
             <p className="text-emerald-700 font-medium">Approved by: {quotation.approved_by_name}</p>
           )}
@@ -632,50 +656,68 @@ export const QuotationDetail: React.FC<Props> = ({
           </div>
         </div>
 
-      {/* Revision Notice Banner with Direct Review Button */}
+      {/* Executive Revision & Audit Card */}
       {(quotation.version || 1) > 1 && (
-        <div className="bg-gradient-to-r from-indigo-50/90 via-slate-50 to-amber-50/70 border border-indigo-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-              <History size={16} />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-slate-900 text-xs">
-                  Quotation Revision Active (Version {quotation.version})
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                  Previous Quotation (v{(quotation.version || 2) - 1}) Available
-                </span>
+        <div className="relative overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 p-4 shadow-sm">
+          {/* Left vertical accent bar */}
+          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-indigo-600 via-blue-600 to-amber-500" />
+
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pl-1.5">
+            {/* Left Column: Icon + Badge + Description */}
+            <div className="flex items-start sm:items-center space-x-3.5">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm border border-slate-700">
+                <History size={20} className="text-cyan-400" />
               </div>
-              <p className="text-[11px] text-slate-600">
-                This quotation was edited and updated. You can review previous quotation line items, rates, and values anytime.
-              </p>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-slate-900 text-sm tracking-tight flex items-center gap-1.5">
+                    Quotation Revision Active
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                      Version {quotation.version}
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    <Calendar size={11} className="text-emerald-600" />
+                    Revised: {new Date(quotation.quotation_date).toLocaleDateString('en-GB')}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    Original: {new Date(quotation.created_at || quotation.quotation_date).toLocaleDateString('en-GB')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                  This quotation was updated and re-versioned. The active quotation date reflects the date of revision, while previous quotation snapshots (rates, quantities, line items) remain permanently archived.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => {
-                setHistoryModalInitialVersion((quotation.version || 2) - 1);
-                setHistoryModalOpen(true);
-              }}
-              className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-            >
-              <Eye size={13} />
-              <span>Review Previous Quotation (v{(quotation.version || 2) - 1})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setHistoryModalInitialVersion(null);
-                setHistoryModalOpen(true);
-              }}
-              className="btn btn-secondary btn-sm flex items-center space-x-1 cursor-pointer"
-            >
-              <History size={13} className="text-slate-600" />
-              <span>Full History</span>
-            </button>
+
+            {/* Right Column: High-Contrast Corporate Action Buttons */}
+            <div className="flex items-center flex-wrap gap-2 shrink-0 self-end lg:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryModalInitialVersion((quotation.version || 2) - 1);
+                  setHistoryModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 active:scale-98 transition-all shadow-sm border border-slate-800 cursor-pointer"
+                title={`Review previous Version ${(quotation.version || 2) - 1} snapshot`}
+              >
+                <Eye size={14} className="text-cyan-400" />
+                <span>Review Previous Quote (v{(quotation.version || 2) - 1})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryModalInitialVersion(null);
+                  setHistoryModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 active:scale-98 transition-all border border-slate-300 shadow-2xs cursor-pointer"
+                title="View full audit trail and version comparison"
+              >
+                <History size={14} className="text-indigo-600" />
+                <span>Full History</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

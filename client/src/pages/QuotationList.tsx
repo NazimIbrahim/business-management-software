@@ -582,7 +582,12 @@ export const QuotationList: React.FC<Props> = ({
                       </div>
                     </td>
                     <td className="py-3 px-3 text-slate-600 whitespace-nowrap align-middle font-mono text-xs">
-                      {new Date(q.quotation_date).toLocaleDateString('en-GB')}
+                      <div>{new Date(q.quotation_date).toLocaleDateString('en-GB')}</div>
+                      {(q.version || 1) > 1 && q.created_at && (
+                        <div className="text-[10px] text-slate-400 font-sans" title="Original initial issue date">
+                          Orig: {new Date(q.created_at).toLocaleDateString('en-GB')}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3.5 align-middle">
                       <div className="font-semibold text-[#0D1B2A] text-xs">{q.customer_name}</div>

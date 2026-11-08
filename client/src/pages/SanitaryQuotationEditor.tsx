@@ -74,6 +74,7 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
   const [quotationDate, setQuotationDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  const [originalQuotationDate, setOriginalQuotationDate] = useState<string | null>(null);
   const [version, setVersion] = useState<number>(1);
   const [status, setStatus] = useState<'draft' | 'in_review' | 'approved' | 'closed'>('draft');
 
@@ -210,7 +211,10 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
       const q = data.quotation;
 
       setQuotationNumber(q.quotation_number);
-      setQuotationDate(q.quotation_date.split('T')[0]);
+      const origDate = q.quotation_date.split('T')[0];
+      setOriginalQuotationDate(origDate);
+      const todayStr = new Date().toISOString().split('T')[0];
+      setQuotationDate(todayStr);
       setVersion(q.version);
       setStatus(q.status);
       setCustomerId(q.customer_id || null);
@@ -1229,8 +1233,13 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-[#1B263B] mb-1">
-              Quotation Date
+            <label className="flex items-center justify-between text-[11px] font-semibold text-[#1B263B] mb-1">
+              <span>Quotation Date</span>
+              {quotationId && (
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                  Revision v{(version || 1) + 1}
+                </span>
+              )}
             </label>
             <input
               type="date"
@@ -1238,6 +1247,29 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
               onChange={(e) => setQuotationDate(e.target.value)}
               className="w-full px-3 py-1.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#415A77]"
             />
+            {quotationId && (
+              <div className="mt-1 flex items-center justify-between text-[10px] text-slate-600">
+                <span className="text-emerald-700 font-medium">Auto-updated to today</span>
+                {originalQuotationDate && originalQuotationDate !== quotationDate ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuotationDate(originalQuotationDate)}
+                    className="text-indigo-600 hover:text-indigo-800 underline font-medium cursor-pointer"
+                    title={`Revert to original quote date (${new Date(originalQuotationDate).toLocaleDateString('en-GB')})`}
+                  >
+                    Keep Original ({new Date(originalQuotationDate).toLocaleDateString('en-GB')})
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setQuotationDate(new Date().toISOString().split('T')[0])}
+                    className="text-blue-600 hover:text-blue-800 underline font-medium cursor-pointer"
+                  >
+                    Set to Today
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div>

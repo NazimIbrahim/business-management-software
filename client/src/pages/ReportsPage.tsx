@@ -925,7 +925,12 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                         >
                           <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap">{q.quotation_number}</td>
                           <td className="py-3 px-3 text-slate-600 font-mono text-xs whitespace-nowrap">
-                            {new Date(q.quotation_date).toLocaleDateString('en-GB')}
+                            <div>{new Date(q.quotation_date).toLocaleDateString('en-GB')}</div>
+                            {(q.version || 1) > 1 && q.created_at && (
+                              <div className="text-[10px] text-slate-400 font-sans">
+                                Orig: {new Date(q.created_at).toLocaleDateString('en-GB')}
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-3.5">
                             <div className="font-semibold text-slate-900 text-xs">{q.customer_name}</div>
