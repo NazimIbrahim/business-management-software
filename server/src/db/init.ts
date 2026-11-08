@@ -105,6 +105,16 @@ export async function initializeDatabase(): Promise<void> {
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_customers_created_by ON customers (created_by_id);
 
+      -- payments columns for accounts verification and audit
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
+      ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
+
       CREATE TABLE IF NOT EXISTS product_encrypted_codes (
           id SERIAL PRIMARY KEY,
           item_name VARCHAR(255) NOT NULL,

@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.47',
+    version: '2.4.48',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -212,6 +212,7 @@ async function runAutoMigrations() {
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
       ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
     `);
@@ -567,7 +568,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.47' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.48' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

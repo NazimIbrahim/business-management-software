@@ -21,7 +21,7 @@ export const PaymentManagement: React.FC = () => {
   const { fetchApi, getReceiptUrl, subscribeToEvents } = useServer();
   const { user } = useAuth();
   const userRole = (user?.role || '').toLowerCase();
-  const isAccountsOrAdmin = userRole === 'admin' || userRole === 'accounts';
+  const isAccountsOrAdmin = userRole === 'admin' || userRole === 'accounts' || userRole === 'accountant';
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);

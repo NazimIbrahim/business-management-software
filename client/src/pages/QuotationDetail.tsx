@@ -327,7 +327,7 @@ export const QuotationDetail: React.FC<Props> = ({
   const isApproved = ['approved', 'closed'].includes(quotation.status?.toLowerCase());
   const isSalesperson = user?.role === 'salesperson';
   const isManagerOrAdmin = ['admin', 'manager'].includes(user?.role || '');
-  const isAccountsOrAdmin = ['admin', 'accounts'].includes((user?.role || '').toLowerCase());
+  const isAccountsOrAdmin = ['admin', 'accounts', 'accountant'].includes((user?.role || '').toLowerCase());
   const canExportPdf = !isSalesperson || isApproved;
   const canApprove = isManagerOrAdmin && !isApproved;
 

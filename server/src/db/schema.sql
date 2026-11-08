@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS payments (
     verified_by_name VARCHAR(120),
     verified_at TIMESTAMPTZ,
     verification_notes TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_payments_quotation ON payments (quotation_id);

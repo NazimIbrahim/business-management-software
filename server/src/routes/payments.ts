@@ -592,7 +592,7 @@ const handlePaymentVerification = async (req: Request, res: Response) => {
     const { verified = true, notes } = req.body;
 
     const userRole = (req.user?.role || '').toLowerCase();
-    if (userRole !== 'accounts' && userRole !== 'admin') {
+    if (userRole !== 'accounts' && userRole !== 'accountant' && userRole !== 'admin') {
       res.status(403).json({
         error: 'Permission denied: Only Accounts team (or Administrator) can verify or unverify payment receipts. Store managers and salespersons are not permitted to verify payments.',
       });
@@ -638,8 +638,7 @@ const handlePaymentVerification = async (req: Request, res: Response) => {
              verified_by_id = $2,
              verified_by_name = $3,
              verified_at = $4,
-             verification_notes = COALESCE($5, verification_notes),
-             updated_at = NOW()
+             verification_notes = COALESCE($5, verification_notes)
          WHERE id = $6
          RETURNING *`,
         [newStatus, verifiedById, verifiedByName, verifiedAt, notes || null, id]
