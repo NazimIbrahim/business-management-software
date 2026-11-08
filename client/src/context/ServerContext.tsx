@@ -42,37 +42,32 @@ const getDefaultServerUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_API_URL?.trim();
   if (envUrl) return envUrl;
 
-  const saved = localStorage.getItem('ama_server_url')?.trim();
-
-  // If in a browser environment (not Electron)
+  // In a browser environment (Chrome / Safari / Edge / Mobile Phone)
   if (typeof window !== 'undefined' && !(window as any).electronAPI && window.location) {
     const { protocol, hostname, port, origin } = window.location;
-    const isRemoteBrowser = Boolean(hostname && hostname !== 'localhost' && hostname !== '127.0.0.1');
 
-    // If there is a saved URL, check if it's stale/invalid for remote access
-    if (saved) {
-      const savedIsLocal = saved.includes('localhost') || saved.includes('127.0.0.1');
-      if (isRemoteBrowser && savedIsLocal) {
-        // Discard stale localhost saved in a remote browser session
-        try {
-          localStorage.removeItem('ama_server_url');
-        } catch {}
-      } else {
-        return saved;
-      }
+    // If served directly from Express or reverse proxy (port 4000 or custom port/domain)
+    // ALWAYS prioritize the exact origin that served the app
+    if (hostname && (port === '4000' || !port)) {
+      return origin;
     }
 
-    // Auto-detect based on current window location
+    // If served via Vite dev server on port 5173 / 3000, backend is on port 4000
+    if (port === '5173' || port === '3000' || port === '5174') {
+      return `${protocol}//${hostname}:4000`;
+    }
+
+    const saved = localStorage.getItem('ama_server_url')?.trim();
+    if (saved) {
+      return saved;
+    }
+
     if (hostname) {
-      // If served via Vite dev server on port 5173, backend is on port 4000
-      if (port === '5173' || port === '3000' || port === '5174') {
-        return `${protocol}//${hostname}:4000`;
-      }
-      // If served directly from Express or reverse proxy (port 4000 or domain)
       return origin;
     }
   }
 
+  const saved = localStorage.getItem('ama_server_url')?.trim();
   return saved || 'http://localhost:4000';
 };
 
@@ -319,7 +314,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const fullUrl = `${serverUrl}${cleanEndpoint}`;
 
       const controller = new AbortController();
-      const timeoutMs = options.timeoutMs ?? 7000;
+      const timeoutMs = options.timeoutMs ?? 15000;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {

@@ -21,7 +21,7 @@ interface Props {
 
 export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
   const { authenticate, completeLogin } = useAuth();
-  const { status, serverUrl, company } = useServer();
+  const { status, serverUrl, setServerUrl, company } = useServer();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -195,17 +195,36 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
 
                 {/* Disconnected Warning */}
                 {!isConnected && (
-                  <div className="stream-alert-box warning">
-                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 flex items-center justify-between">
-                      <span>Server is not reachable.</span>
-                      <button
-                        type="button"
-                        onClick={onOpenServerSettings}
-                        className="underline font-semibold ml-2 text-amber-700 hover:text-amber-900"
-                      >
-                        Configure
-                      </button>
+                  <div className="stream-alert-box warning text-xs">
+                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-amber-900">Server is not reachable</span>
+                        <button
+                          type="button"
+                          onClick={onOpenServerSettings}
+                          className="underline font-bold text-amber-800 hover:text-amber-950 ml-2"
+                        >
+                          Configure
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-700/90 break-all font-mono">
+                        Target: {serverUrl}
+                      </p>
+                      {serverUrl !== 'http://localhost:4000' && (
+                        <div className="pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setError(null);
+                              setServerUrl('http://localhost:4000');
+                            }}
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/90 hover:bg-amber-300 text-amber-950 transition-colors"
+                          >
+                            Switch to Local Host (localhost:4000)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -369,7 +388,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
-        <span className="stream-footer-version">v2.4.42</span>
+        <span className="stream-footer-version">v2.4.43</span>
       </footer>
     </div>
   );

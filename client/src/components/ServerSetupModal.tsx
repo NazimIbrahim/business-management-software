@@ -72,6 +72,35 @@ export const ServerSetupModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <p className="text-xs text-gray-500 mt-1">
               Enter your local LAN Server IP (e.g. <code>http://192.168.1.10:4000</code>) or Cloud API URL (e.g. <code>https://ama-quotation.onrender.com</code>).
             </p>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[11px] text-gray-500 font-medium">Quick Presets:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setInputUrl('http://localhost:4000');
+                  setTestResult(null);
+                }}
+                className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-colors"
+                title="Connect to local server on this machine"
+              >
+                localhost:4000
+              </button>
+              {typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputUrl(window.location.origin);
+                    setTestResult(null);
+                  }}
+                  className="px-2 py-0.5 rounded text-[11px] font-mono bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors"
+                  title="Use the address of this web page"
+                >
+                  Current Host ({window.location.origin})
+                </button>
+              )}
+            </div>
           </div>
 
           {testResult && (
