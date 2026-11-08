@@ -34,6 +34,101 @@ interface Props {
   onSelectQuotation?: (id: number) => void;
 }
 
+
+export const getDatePresetRange = (preset: string): { start: string; end: string } => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-based
+
+  switch (preset) {
+    case 'today':
+      return { start: fmt(now), end: fmt(now) };
+    case 'this_month':
+      return {
+        start: fmt(new Date(y, m, 1)),
+        end: fmt(new Date(y, m + 1, 0)),
+      };
+    case 'last_month':
+      return {
+        start: fmt(new Date(y, m - 1, 1)),
+        end: fmt(new Date(y, m, 0)),
+      };
+    case 'last_30': {
+      const prev30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return { start: fmt(prev30), end: fmt(now) };
+    }
+    case 'this_quarter': {
+      const qStartMonth = Math.floor(m / 3) * 3;
+      return {
+        start: fmt(new Date(y, qStartMonth, 1)),
+        end: fmt(new Date(y, qStartMonth + 3, 0)),
+      };
+    }
+    case 'financial_year': {
+      const fyStartYear = m >= 3 ? y : y - 1;
+      return {
+        start: `${fyStartYear}-04-01`,
+        end: `${fyStartYear + 1}-03-31`,
+      };
+    }
+    case 'all':
+    default:
+      return { start: '', end: '' };
+  }
+};
+
+const DatePresetsBar: React.FC<{
+  activeStart: string;
+  activeEnd: string;
+  onSelectPreset: (start: string, end: string, presetName: string) => void;
+}> = ({ activeStart, activeEnd, onSelectPreset }) => {
+  const presets = [
+    { id: 'this_month', label: 'This Month' },
+    { id: 'last_month', label: 'Last Month', highlight: true },
+    { id: 'last_30', label: 'Last 30 Days' },
+    { id: 'this_quarter', label: 'This Quarter' },
+    { id: 'financial_year', label: 'Financial Year (FY)' },
+    { id: 'today', label: 'Today' },
+    { id: 'all', label: 'All Time' },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
+      <span className="text-[11px] font-semibold text-slate-500 mr-1 flex items-center space-x-1">
+        <Calendar size={12} />
+        <span>Quick Period:</span>
+      </span>
+      {presets.map((p) => {
+        const range = getDatePresetRange(p.id);
+        const isSelected =
+          p.id === 'all'
+            ? !activeStart && !activeEnd
+            : activeStart === range.start && activeEnd === range.end;
+
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onSelectPreset(range.start, range.end, p.id)}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+              isSelected
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : p.highlight
+                ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+            }`}
+          >
+            {p.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   const { serverUrl, fetchApi, getPdfUrl } = useServer();
   const { user } = useAuth();
@@ -54,13 +149,21 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
 
-  // General Quotation export filters
+  // General Quotation report filters & live data
   const [qStatus, setQStatus] = useState('');
   const [qSalespersonId, setQSalespersonId] = useState(isSalesperson && user ? String(user.id) : '');
   const [qStartDate, setQStartDate] = useState('');
   const [qEndDate, setQEndDate] = useState('');
   const [qExportMode, setQExportMode] = useState<'standard' | 'encrypted'>('standard');
   const [qItemized, setQItemized] = useState<boolean>(false);
+  const [qQuotations, setQQuotations] = useState<Quotation[]>([]);
+  const [loadingQList, setLoadingQList] = useState<boolean>(false);
+  const [qTotals, setQTotals] = useState<{ count: number; totalAmount: number; totalPaid: number; totalBalance: number }>({
+    count: 0,
+    totalAmount: 0,
+    totalPaid: 0,
+    totalBalance: 0,
+  });
 
   // Payment export filters
   const [pStartDate, setPStartDate] = useState('');
@@ -154,6 +257,37 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     loadSalespersonQuotations();
   }, [selectedSpId, spStatus, spStartDate, spEndDate, user]);
 
+  // Fetch live Quotations list for Tab 2
+  const loadQuotationsReportList = () => {
+    setLoadingQList(true);
+    const params = new URLSearchParams({ limit: '200' });
+    if (qStatus) params.append('status', qStatus);
+    if (isSalesperson && user?.id) {
+      params.append('sales_person_id', String(user.id));
+    } else if (qSalespersonId) {
+      params.append('sales_person_id', qSalespersonId);
+    }
+    if (qStartDate) params.append('startDate', qStartDate);
+    if (qEndDate) params.append('endDate', qEndDate);
+
+    fetchApi(`/api/quotations?${params.toString()}`)
+      .then((res) => {
+        const list: Quotation[] = res.quotations || [];
+        setQQuotations(list);
+        const count = res.summary?.totalQuotations ?? res.pagination?.total ?? list.length;
+        const totalAmount = res.summary?.totalAmount ?? list.reduce((sum: number, q: any) => sum + (parseFloat(q.net_total) || 0), 0);
+        const totalPaid = list.reduce((sum: number, q: any) => sum + (parseFloat(q.total_paid) || 0), 0);
+        const totalBalance = list.reduce((sum: number, q: any) => sum + (parseFloat(q.balance_due) || 0), 0);
+        setQTotals({ count, totalAmount, totalPaid, totalBalance });
+      })
+      .catch((err) => console.error('Failed to load quotations report list:', err))
+      .finally(() => setLoadingQList(false));
+  };
+
+  useEffect(() => {
+    loadQuotationsReportList();
+  }, [qStatus, qSalespersonId, qStartDate, qEndDate, isSalesperson, user]);
+
   // Generic Download Handler
   const handleDownload = async (
     type: 'quotations' | 'payments' | 'salespersons',
@@ -172,29 +306,30 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
       params.set('sales_person_id', String(user.id));
     }
 
-    if (type === 'quotations' && !customParams) {
-      if (qStatus) params.append('status', qStatus);
-      if (isSalesperson && user?.id) {
-        params.set('sales_person_id', String(user.id));
-      } else if (qSalespersonId) {
-        params.append('sales_person_id', qSalespersonId);
+    if (type === 'quotations') {
+      if (activeTab === 'salesperson') {
+        if (spStatus && !params.has('status')) params.append('status', spStatus);
+        if (spStartDate && !params.has('start_date')) params.append('start_date', spStartDate);
+        if (spEndDate && !params.has('end_date')) params.append('end_date', spEndDate);
+        if (selectedSpId && !params.has('sales_person_id') && !isSalesperson) {
+          params.append('sales_person_id', selectedSpId);
+        }
+      } else {
+        if (qStatus && !params.has('status')) params.append('status', qStatus);
+        if (qStartDate && !params.has('start_date')) params.append('start_date', qStartDate);
+        if (qEndDate && !params.has('end_date')) params.append('end_date', qEndDate);
+        if (qSalespersonId && !params.has('sales_person_id') && !isSalesperson) {
+          params.append('sales_person_id', qSalespersonId);
+        }
+        if (qExportMode === 'encrypted' && !params.has('encrypted')) params.append('encrypted', 'true');
+        if (qItemized && !params.has('itemized')) params.append('itemized', 'true');
       }
-      if (qStartDate) params.append('start_date', qStartDate);
-      if (qEndDate) params.append('end_date', qEndDate);
-      if (qExportMode === 'encrypted') params.append('encrypted', 'true');
-      if (qItemized) params.append('itemized', 'true');
-    } else if (type === 'payments' && !customParams) {
-      if (isSalesperson && user?.id) {
-        params.set('sales_person_id', String(user.id));
-      }
-      if (pStartDate) params.append('start_date', pStartDate);
-      if (pEndDate) params.append('end_date', pEndDate);
-    } else if (type === 'salespersons' && !customParams) {
-      if (isSalesperson && user?.id) {
-        params.set('sales_person_id', String(user.id));
-      }
-      if (spStartDate) params.append('start_date', spStartDate);
-      if (spEndDate) params.append('end_date', spEndDate);
+    } else if (type === 'payments') {
+      if (pStartDate && !params.has('start_date')) params.append('start_date', pStartDate);
+      if (pEndDate && !params.has('end_date')) params.append('end_date', pEndDate);
+    } else if (type === 'salespersons') {
+      if (spStartDate && !params.has('start_date')) params.append('start_date', spStartDate);
+      if (spEndDate && !params.has('end_date')) params.append('end_date', spEndDate);
     }
 
     const downloadUrl = `${serverUrl}/api/reports/${type}/export?${params.toString()}`;
@@ -409,6 +544,18 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                   onChange={(e) => setSpEndDate(e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* Quick Period Presets for Salesperson Tab */}
+            <div className="border-t border-slate-100 pt-2">
+              <DatePresetsBar
+                activeStart={spStartDate}
+                activeEnd={spEndDate}
+                onSelectPreset={(s, e) => {
+                  setSpStartDate(s);
+                  setSpEndDate(e);
+                }}
+              />
             </div>
           </div>
 
@@ -866,26 +1013,44 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
         </div>
       )}
 
-      {/* TAB 2: QUOTATIONS REGISTER EXPORT */}
+      {/* TAB 2: QUOTATIONS REGISTER WITH TIME PERIOD PRESETS & LIVE DISPLAY */}
       {activeTab === 'quotations' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          <div className="card p-5 space-y-4">
-            <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-200">
-              <div className="p-2 bg-blue-50 text-primary-900 rounded border border-blue-200">
-                <FileSpreadsheet size={20} />
+        <div className="space-y-4 lg:space-y-5">
+          {/* Filter & Action Card */}
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+                <FileSpreadsheet size={16} className="text-slate-700" />
+                <span>Quotations Register Period & Filter Controls</span>
               </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Quotations Register Export</h2>
-                <p className="text-[11px] text-slate-500">
-                  Customer quotations, area totals, taxes, and salesperson share allocations
-                </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isSalesperson) setQSalespersonId('');
+                    setQStatus('');
+                    setQStartDate('');
+                    setQEndDate('');
+                  }}
+                  className="btn btn-secondary btn-xs text-[10px]"
+                >
+                  Reset Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={loadQuotationsReportList}
+                  className="btn btn-secondary btn-xs text-[10px] flex items-center space-x-1"
+                >
+                  <RefreshCw size={11} className={loadingQList ? 'animate-spin' : ''} />
+                  <span>Refresh</span>
+                </button>
               </div>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               {/* Sales Associate Filter */}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Filter by Sales Associate</label>
+                <label className="block text-slate-700 font-semibold mb-1">Sales Associate</label>
                 {isSalesperson ? (
                   <div className="input input-sm w-full bg-slate-100 text-slate-800 font-bold flex items-center cursor-not-allowed select-none">
                     {user?.full_name} (Restricted to My Account)
@@ -908,119 +1073,274 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
 
               {/* Status Filter */}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Filter by Status</label>
+                <label className="block text-slate-700 font-semibold mb-1">Quotation Status</label>
                 <select className="select select-sm w-full" value={qStatus} onChange={(e) => setQStatus(e.target.value)}>
                   <option value="">All Statuses (Draft, In-Review, Approved, Closed, Rejected)</option>
                   <option value="draft">Draft</option>
                   <option value="in_review">In-Review</option>
                   <option value="approved">Approved</option>
-                  <option value="closed">Closed / Paid</option>
+                  <option value="closed">Closed / Won</option>
                   <option value="not_closed">Not Closed (Active Pipeline)</option>
                   <option value="rejected">Rejected</option>
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">From Date</label>
-                  <input
-                    type="date"
-                    className="input input-sm w-full"
-                    value={qStartDate}
-                    onChange={(e) => setQStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">To Date</label>
-                  <input
-                    type="date"
-                    className="input input-sm w-full"
-                    value={qEndDate}
-                    onChange={(e) => setQEndDate(e.target.value)}
-                  />
-                </div>
+              {/* From Date */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">From Date</label>
+                <input
+                  type="date"
+                  className="input input-sm w-full"
+                  value={qStartDate}
+                  onChange={(e) => setQStartDate(e.target.value)}
+                />
               </div>
 
-              {/* Export Mode: Standard vs Encrypted */}
-              <div className="p-3 bg-slate-900 text-white rounded-lg border border-slate-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-xs text-white flex items-center space-x-1.5">
-                    <ShieldAlert size={14} className="text-amber-400" />
-                    <span>Export Product Mode</span>
+              {/* To Date */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">To Date</label>
+                <input
+                  type="date"
+                  className="input input-sm w-full"
+                  value={qEndDate}
+                  onChange={(e) => setQEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Quick Period Presets (This Month, Last Month, etc.) */}
+            <div className="border-t border-slate-100 pt-2">
+              <DatePresetsBar
+                activeStart={qStartDate}
+                activeEnd={qEndDate}
+                onSelectPreset={(s, e) => {
+                  setQStartDate(s);
+                  setQEndDate(e);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* KPI Stat Cards for Filtered Period */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="card p-3.5 space-y-1 bg-white">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Matching Quotations</span>
+              <div className="text-xl font-bold text-slate-900 tabular-nums">
+                {qTotals.count} {qTotals.count === 1 ? 'quote' : 'quotes'}
+              </div>
+              <p className="text-[10px] text-slate-500">
+                {qStartDate || qEndDate ? `${qStartDate || 'Start'} to ${qEndDate || 'End'}` : 'Across All Dates'}
+              </p>
+            </div>
+
+            <div className="card p-3.5 space-y-1 bg-blue-50/60 border border-blue-200">
+              <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider">Total Quoted Value</span>
+              <div className="text-xl font-bold text-blue-900 tabular-nums">
+                ₹ {formatCurrency(qTotals.totalAmount)}
+              </div>
+              <p className="text-[10px] text-blue-700 font-medium">Net aggregate quoted</p>
+            </div>
+
+            <div className="card p-3.5 space-y-1 bg-emerald-50/60 border border-emerald-200">
+              <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">Payments Collected</span>
+              <div className="text-xl font-bold text-emerald-900 tabular-nums">
+                ₹ {formatCurrency(qTotals.totalPaid)}
+              </div>
+              <p className="text-[10px] text-emerald-700 font-medium">Cleared on matching quotes</p>
+            </div>
+
+            <div className="card p-3.5 space-y-1 bg-amber-50/60 border border-amber-200">
+              <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Balance Due</span>
+              <div className="text-xl font-bold text-amber-900 tabular-nums">
+                ₹ {formatCurrency(qTotals.totalBalance)}
+              </div>
+              <p className="text-[10px] text-amber-700 font-medium">Outstanding receivables</p>
+            </div>
+          </div>
+
+          {/* Live Quotations Table & Export Action Header */}
+          <div className="card overflow-hidden">
+            <div className="p-3.5 bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <FileSpreadsheet size={16} className="text-blue-400" />
+                  <span className="font-bold text-xs uppercase tracking-wider text-white">
+                    Quotations Generated in Selected Period ({qQuotations.length} records)
                   </span>
-                  <div className="flex items-center bg-slate-800 p-0.5 rounded text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setQExportMode('standard')}
-                      className={`px-2 py-0.5 rounded ${
-                        qExportMode === 'standard' ? 'bg-white text-slate-900 font-bold' : 'text-slate-300'
-                      }`}
-                    >
-                      Standard
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQExportMode('encrypted')}
-                      className={`px-2 py-0.5 rounded ${
-                        qExportMode === 'encrypted' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-300'
-                      }`}
-                    >
-                      Encrypted (-AMA)
-                    </button>
-                  </div>
                 </div>
-                <p className="text-[11px] text-slate-300">
-                  {qExportMode === 'encrypted'
-                    ? 'Encrypted mode masks product descriptions with random uppercase codes ending with -AMA (e.g. HSDS-AMA) and hides tile brands.'
-                    : 'Standard mode exports with original brand names and full surface tile descriptions.'}
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  View, audit, or export report for any specific month or custom timeframe.
                 </p>
-                <label className="flex items-center space-x-2 text-[11px] text-slate-200 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={qItemized}
-                    onChange={(e) => setQItemized(e.target.checked)}
-                    className="checkbox checkbox-xs"
-                  />
-                  <span>Itemized Materials & Slabs Export (1 row per tile line item)</span>
-                </label>
               </div>
 
-              <div className="flex space-x-2 pt-3 border-t border-slate-200">
+              {/* Export Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleDownload('quotations', 'pdf')}
                   disabled={exportingKey !== null}
-                  className={`btn btn-sm bg-rose-600 hover:bg-rose-500 text-white font-bold border-none shadow flex-1 flex items-center justify-center space-x-1.5 ${
-                    exportingKey === 'quotations-pdf' ? 'btn-exporting' : ''
-                  }`}
-                  title="Download publication-quality PDF report (landscape layout with company branding and summary)"
+                  className="btn btn-xs bg-rose-600 hover:bg-rose-500 text-white font-bold border-none shadow flex items-center space-x-1"
+                  title="Download publication-quality PDF report for selected period"
                 >
-                  <Printer size={13} className={exportingKey === 'quotations-pdf' ? 'animate-bounce' : ''} />
-                  <span>Download PDF (.pdf)</span>
+                  <Printer size={12} />
+                  <span>Export PDF</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => handleDownload('quotations', 'xlsx')}
                   disabled={exportingKey !== null}
-                  className={`btn btn-primary btn-sm flex-1 flex items-center justify-center space-x-1 ${
-                    exportingKey === 'quotations-xlsx' ? 'btn-exporting' : ''
-                  }`}
+                  className="btn btn-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold border-none shadow flex items-center space-x-1"
                 >
-                  <Download size={13} className={exportingKey === 'quotations-xlsx' ? 'animate-bounce' : ''} />
-                  <span>Download Excel (.xlsx)</span>
+                  <Download size={12} />
+                  <span>Export Excel</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => handleDownload('quotations', 'csv')}
                   disabled={exportingKey !== null}
-                  className={`btn btn-secondary btn-sm flex-1 flex items-center justify-center space-x-1 ${
-                    exportingKey === 'quotations-csv' ? 'btn-exporting' : ''
-                  }`}
+                  className="btn btn-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 flex items-center space-x-1"
                 >
-                  <Download size={13} className={exportingKey === 'quotations-csv' ? 'animate-bounce' : ''} />
-                  <span>Download CSV</span>
+                  <Download size={12} />
+                  <span>Export CSV</span>
                 </button>
+
+                {/* Encrypted Export Dropdown */}
+                <div className="relative group">
+                  <button
+                    type="button"
+                    disabled={exportingKey !== null}
+                    className="btn btn-xs bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold border-none shadow flex items-center space-x-1"
+                    title="Export report with encrypted product codes (-AMA)"
+                  >
+                    <ShieldAlert size={12} className="text-slate-950" />
+                    <span>Encrypted</span>
+                  </button>
+                  <div className="dropdown-menu absolute right-0 top-full mt-1 hidden group-hover:block z-30 bg-white border border-slate-300 rounded-md shadow-xl p-1 min-w-[190px]">
+                    <button
+                      type="button"
+                      onClick={() => handleDownload('quotations', 'pdf', { encrypted: 'true', itemized: 'true' })}
+                      className="w-full text-left px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-rose-50 hover:text-rose-700 rounded flex items-center space-x-2"
+                    >
+                      <Printer size={12} className="text-rose-600" />
+                      <span>Encrypted PDF (.pdf)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownload('quotations', 'xlsx', { encrypted: 'true', itemized: 'true' })}
+                      className="w-full text-left px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-emerald-50 hover:text-emerald-700 rounded flex items-center space-x-2"
+                    >
+                      <Download size={12} className="text-emerald-600" />
+                      <span>Encrypted Excel (.xlsx)</span>
+                    </button>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Live Table */}
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-100/75 text-slate-700 font-semibold text-[11px] uppercase tracking-wider">
+                    <th className="py-2.5 px-3 w-36 font-mono">Quotation #</th>
+                    <th className="py-2.5 px-3 w-28">Date</th>
+                    <th className="py-2.5 px-3.5 min-w-[150px]">Customer</th>
+                    <th className="py-2.5 px-3.5 min-w-[140px]">Salesperson</th>
+                    <th className="py-2.5 px-2 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Net Total</th>
+                    <th className="py-2.5 px-3 text-right">Paid</th>
+                    <th className="py-2.5 px-3 text-right">Balance Due</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingQList ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        <RefreshCw size={18} className="animate-spin mx-auto mb-1 text-slate-400" />
+                        <span>Loading quotations for selected period...</span>
+                      </td>
+                    </tr>
+                  ) : qQuotations.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        No quotations found matching the selected period.
+                      </td>
+                    </tr>
+                  ) : (
+                    qQuotations.map((q: any) => (
+                      <tr
+                        key={q.id}
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                        onClick={() => onSelectQuotation && onSelectQuotation(q.id)}
+                      >
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {q.quotation_number}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                          {q.quotation_date ? new Date(q.quotation_date).toLocaleDateString('en-GB') : '-'}
+                        </td>
+                        <td className="py-2.5 px-3.5">
+                          <div className="font-semibold text-slate-900">{q.customer_name}</div>
+                          {q.customer_phone && <div className="text-[10px] text-slate-500">{q.customer_phone}</div>}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-slate-700">
+                          {q.sales_person_name || 'System'}
+                          {q.assisted_sales_person_name && (
+                            <div className="text-[10px] text-blue-600">Assisted: {q.assisted_sales_person_name}</div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                          <span className={`badge badge-${q.status}`}>{q.status ? q.status.replace('_', ' ') : ''}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                          ₹ {formatCurrency(q.net_total)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-emerald-700 font-semibold tabular-nums whitespace-nowrap">
+                          ₹ {formatCurrency(q.total_paid || 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-amber-700 font-semibold tabular-nums whitespace-nowrap">
+                          ₹ {formatCurrency(q.balance_due || 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center justify-end space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPdf(q, false)}
+                              title="Standard PDF"
+                              className="btn btn-secondary btn-xs px-2 py-0.5 text-[10px] font-semibold text-[#1B263B] border border-slate-300"
+                            >
+                              <Printer size={11} className="mr-0.5 text-[#415A77]" />
+                              <span>PDF</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPdf(q, true)}
+                              title="Encrypted PDF (-AMA)"
+                              className="btn btn-xs px-2 py-0.5 text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80"
+                            >
+                              <ShieldAlert size={11} className="mr-0.5 text-amber-600" />
+                              <span>Encrypted</span>
+                            </button>
+                            {onSelectQuotation && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectQuotation(q.id)}
+                                title="View Details"
+                                className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                              >
+                                <Eye size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1062,6 +1382,18 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                     onChange={(e) => setPEndDate(e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* Quick Period Presets for Payments Tab */}
+              <div className="border-t border-slate-100 pt-2">
+                <DatePresetsBar
+                  activeStart={pStartDate}
+                  activeEnd={pEndDate}
+                  onSelectPreset={(s, e) => {
+                    setPStartDate(s);
+                    setPEndDate(e);
+                  }}
+                />
               </div>
 
               <div className="p-3 bg-slate-50 rounded border border-slate-200 text-slate-600 text-[11px] space-y-1">

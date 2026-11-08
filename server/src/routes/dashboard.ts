@@ -9,11 +9,30 @@ dashboardRouter.use(authenticateToken);
 dashboardRouter.get('/summary', async (req: Request, res: Response) => {
   try {
     const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
-    const filterUser = isSalesperson
-      ? `WHERE (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})`
-      : '';
 
-    // Status breakdown (split-aware when salesperson)
+    // Calculate current month in YYYY-MM
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const currentMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+
+    // Parse requested month from query: ?month=YYYY-MM, ?month=current, or ?month=all
+    const requestedMonth = req.query.month ? String(req.query.month).trim() : 'current';
+    const selectedMonth = requestedMonth === 'current' || !requestedMonth ? currentMonthStr : requestedMonth;
+    const isAllTime = selectedMonth === 'all';
+
+    // Date filters for quotations and payments
+    const quoteMonthClause = isAllTime ? '1=1' : `TO_CHAR(q.quotation_date, 'YYYY-MM') = '${selectedMonth}'`;
+    const paymentMonthClause = isAllTime
+      ? '1=1'
+      : `(TO_CHAR(COALESCE(p.payment_date, p.created_at::date), 'YYYY-MM') = '${selectedMonth}')`;
+
+    const userQuoteClause = isSalesperson
+      ? `(q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})`
+      : '1=1';
+
+    const filterUser = `WHERE ${userQuoteClause} AND ${quoteMonthClause}`;
+
+    // Status breakdown (split-aware when salesperson, filtered by selected month)
     const statusCounts = await query(`
       SELECT LOWER(q.status) as status, count(*) as count,
         COALESCE(SUM(
@@ -42,7 +61,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       GROUP BY LOWER(q.status)
     `);
 
-    // Financial totals (split-aware)
+    // Financial totals (split-aware, filtered by selected month)
     const financialTotals = await query(`
       SELECT
         COALESCE(SUM(
@@ -95,7 +114,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       ${filterUser}
     `);
 
-    // Payments collected (split-aware)
+    // Payments collected (split-aware, filtered by selected month)
     const paymentTotals = await query(`
       SELECT
         COALESCE(SUM(
@@ -121,7 +140,9 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
         ), 0) as total_collected
       FROM payments p
       JOIN quotations q ON q.id = p.quotation_id
-      WHERE p.status = 'Cleared' ${isSalesperson ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})` : ''}
+      WHERE p.status = 'Cleared'
+        AND ${paymentMonthClause}
+        ${isSalesperson ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})` : ''}
     `);
 
     // Total outstanding on approved/closed quotations
@@ -142,7 +163,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       LIMIT 10
     `);
 
-    // Leaderboard (split-aware for managers/admins/accounts)
+    // Leaderboard (split-aware for managers/admins/accounts, filtered by selected month)
     let leaderboard: any[] = [];
     if (!isSalesperson) {
       leaderboard = await query(`
@@ -161,7 +182,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
               ELSE q.net_total
             END as credited_amount
           FROM quotations q
-          WHERE LOWER(q.status) IN ('approved', 'closed')
+          WHERE LOWER(q.status) IN ('approved', 'closed') AND ${quoteMonthClause}
 
           UNION ALL
 
@@ -177,6 +198,7 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
           FROM quotations q
           WHERE LOWER(q.status) IN ('approved', 'closed')
             AND q.assisted_sales_person_id IS NOT NULL
+            AND ${quoteMonthClause}
         ) combined ON combined.user_id = u.id
         WHERE u.role IN ('salesperson', 'manager') AND u.is_active = true
         GROUP BY u.id, u.full_name
@@ -265,7 +287,38 @@ dashboardRouter.get('/summary', async (req: Request, res: Response) => {
       };
     }
 
+    // Available quotation months for quick month switcher
+    const monthListRes = await query(`
+      SELECT DISTINCT TO_CHAR(quotation_date, 'YYYY-MM') as month_str
+      FROM quotations
+      WHERE quotation_date IS NOT NULL
+      ORDER BY month_str DESC
+    `);
+    const availableMonths: string[] = monthListRes.map((r: any) => r.month_str).filter(Boolean);
+    if (!availableMonths.includes(currentMonthStr)) {
+      availableMonths.unshift(currentMonthStr);
+    }
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    let monthLabel = 'All Time';
+    if (!isAllTime && selectedMonth) {
+      const parts = selectedMonth.split('-');
+      if (parts.length === 2) {
+        const y = parts[0];
+        const mIdx = parseInt(parts[1], 10) - 1;
+        monthLabel = `${monthNames[mIdx] || parts[1]} ${y}`;
+      }
+    }
+
     res.json({
+      selectedMonth,
+      monthLabel,
+      currentMonth: currentMonthStr,
+      isCurrentMonth: selectedMonth === currentMonthStr,
+      availableMonths,
       statusCounts,
       financials: {
         totalQuoted: parseFloat(financialTotals[0]?.total_quoted || '0'),

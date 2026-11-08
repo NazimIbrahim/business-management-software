@@ -18,6 +18,9 @@ import {
   Lock,
   Truck,
   X,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 
@@ -53,11 +56,62 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
     updated_at?: string;
   } | null>(null);
 
-  const loadDashboard = async () => {
+  const [selectedMonth, setSelectedMonth] = useState<string>('current');
+
+  const formatMonthLabel = (mStr?: string) => {
+    if (!mStr || mStr === 'all') return 'All-Time';
+    const parts = mStr.split('-');
+    if (parts.length !== 2) return mStr;
+    const year = parts[0];
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    const names = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${names[monthIdx] || parts[1]} ${year}`;
+  };
+
+  const handlePrevMonth = () => {
+    const cur = data?.selectedMonth || selectedMonth;
+    if (cur === 'all') return;
+    const [yStr, mStr] = cur.split('-');
+    let y = parseInt(yStr, 10);
+    let m = parseInt(mStr, 10);
+    m -= 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    const prevKey = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(prevKey);
+    loadDashboard(prevKey);
+  };
+
+  const handleNextMonth = () => {
+    const cur = data?.selectedMonth || selectedMonth;
+    if (cur === 'all') return;
+    const [yStr, mStr] = cur.split('-');
+    let y = parseInt(yStr, 10);
+    let m = parseInt(mStr, 10);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    const nextKey = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(nextKey);
+    loadDashboard(nextKey);
+  };
+
+  const loadDashboard = async (monthToLoad: string = selectedMonth) => {
     try {
       setLoading(true);
-      const res = await fetchApi('/api/dashboard/summary');
+      const queryParam = monthToLoad && monthToLoad !== 'current' ? `?month=${encodeURIComponent(monthToLoad)}` : '?month=current';
+      const res = await fetchApi(`/api/dashboard/summary${queryParam}`);
       setData(res);
+      if (res.selectedMonth && monthToLoad === 'current') {
+        setSelectedMonth(res.selectedMonth);
+      }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -154,25 +208,85 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
 
   return (
     <div className="flex-1 p-4 sm:p-5 lg:p-6 space-y-4 lg:space-y-5 overflow-y-auto w-full min-w-0">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Top Header with Month Navigator & Auto-Reset Status */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-            Dashboard Overview
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Logged in as <span className="font-semibold text-slate-800">{user?.full_name}</span> ({user?.role})
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              Dashboard Overview
+            </h1>
+            <span
+              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center space-x-1 ${
+                data?.isCurrentMonth
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${data?.isCurrentMonth ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+              <span>{data?.isCurrentMonth ? 'Monthly Live (Auto-Resets Each Month)' : `Historical: ${data?.monthLabel}`}</span>
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Logged in as <span className="font-semibold text-slate-800">{user?.full_name}</span> ({user?.role}) &bull; Showing monthly performance for <strong className="text-slate-800 font-semibold">{data?.monthLabel || 'Current Month'}</strong>
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
+        {/* Month Navigation & Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Month Navigator */}
+          <div className="flex items-center bg-slate-100/90 rounded-lg p-1 border border-slate-200/90 shadow-2xs">
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded transition cursor-pointer"
+              title="Previous Month"
+            >
+              <ChevronLeft size={15} />
+            </button>
+
+            <div className="flex items-center px-1.5 space-x-1.5">
+              <Calendar size={13} className="text-slate-500" />
+              <select
+                value={data?.selectedMonth || selectedMonth}
+                onChange={(e) => {
+                  const m = e.target.value;
+                  setSelectedMonth(m);
+                  loadDashboard(m);
+                }}
+                className="bg-transparent text-xs font-bold text-slate-800 border-none outline-none cursor-pointer py-0.5 pr-1"
+              >
+                <option value="current">Current Month ({formatMonthLabel(data?.currentMonth)})</option>
+                {(data?.availableMonths || []).map((m: string) => (
+                  <option key={m} value={m}>
+                    {formatMonthLabel(m)} {m === data?.currentMonth ? '(Current)' : ''}
+                  </option>
+                ))}
+                <option value="all">All-Time Cumulative</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              disabled={data?.isCurrentMonth}
+              className={`p-1.5 rounded transition ${
+                data?.isCurrentMonth
+                  ? 'text-slate-300 cursor-not-allowed'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white cursor-pointer'
+              }`}
+              title="Next Month"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+
           <button
-            onClick={loadDashboard}
+            onClick={() => loadDashboard(selectedMonth)}
             className="btn btn-secondary btn-sm"
             title="Refresh dashboard data"
           >
-            <RefreshCw size={12} />
-            <span>Refresh</span>
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={onCreateQuotation}
@@ -337,7 +451,7 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
         </div>
       )}
 
-      {/* KPI Stat Cards */}
+      {/* KPI Stat Cards (Scoped to Selected Month) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Approved Sales */}
         <div className="card card-hover p-4 flex items-center justify-between">
@@ -349,7 +463,7 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
               ₹ {formatCurrency(data?.financials?.approvedRevenue)}
             </div>
             <p className="text-[10px] text-emerald-700 font-medium mt-1">
-              ✓ Ready for order execution
+              ✓ Ready for order execution ({data?.monthLabel || 'This Month'})
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
@@ -367,7 +481,7 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
               ₹ {formatCurrency(data?.financials?.totalCollected)}
             </div>
             <p className="text-[10px] text-[#415A77] font-medium mt-1">
-              Cleared advances & settlements
+              Cleared in {data?.monthLabel || 'This Month'}
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#415A77] flex items-center justify-center shrink-0 border border-blue-100">
@@ -385,7 +499,7 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
               ₹ {formatCurrency(data?.financials?.totalOutstanding)}
             </div>
             <p className="text-[10px] text-amber-700 font-medium mt-1">
-              Due on approved quotes
+              Due on {data?.monthLabel || 'This Month'} orders
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
@@ -403,7 +517,7 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
               ₹ {formatCurrency(data?.financials?.totalQuoted)}
             </div>
             <p className="text-[10px] text-[#415A77] font-medium mt-1">
-              Across all quotation requests
+              Quoted in {data?.monthLabel || 'This Month'}
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-slate-100 text-[#1B263B] flex items-center justify-center shrink-0 border border-[#E0E1DD]">
@@ -411,6 +525,24 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
           </div>
         </div>
       </div>
+
+      {/* Auto-Reset Month Alert if current month is fresh and at 0 */}
+      {data?.financials?.totalQuoted === 0 && data?.isCurrentMonth && (
+        <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-900">
+          <div className="flex items-center space-x-2">
+            <Clock size={16} className="text-blue-600 shrink-0" />
+            <span>
+              <strong>{data?.monthLabel} has started:</strong> Dashboard values have reset to zero for the new month. Prior month quotations can be reviewed anytime via the month selector above or Reports.
+            </span>
+          </div>
+          <button
+            onClick={onCreateQuotation}
+            className="btn btn-xs bg-blue-600 text-white hover:bg-blue-700 shrink-0 self-start sm:self-auto cursor-pointer"
+          >
+            + Create First Quote for {data?.monthLabel}
+          </button>
+        </div>
+      )}
 
       {/* Quotation Pipeline Distribution Bar */}
       <div className="card p-4">
