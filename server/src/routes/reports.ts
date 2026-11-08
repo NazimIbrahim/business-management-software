@@ -667,12 +667,15 @@ reportsRouter.get('/payments/export', optionalAuthenticateToken, async (req: Req
         COALESCE(p.amount, 0) as "Amount (INR)",
         COALESCE(p.payment_mode, '') as "Payment Mode",
         COALESCE(p.reference_number, '') as "Ref / Txn No",
-        COALESCE(p.status, '') as "Status",
+        CASE WHEN p.status IN ('Cleared', 'Verified') THEN 'Verified' ELSE 'Not Verified' END as "Status",
         COALESCE(u.full_name, '') as "Recorded By",
+        COALESCE(p.verified_by_name, uv.full_name, '') as "Verified By",
+        TO_CHAR(p.verified_at, 'YYYY-MM-DD') as "Verified Date",
         COALESCE(p.notes, '') as "Notes"
       FROM payments p
       JOIN quotations q ON q.id = p.quotation_id
       LEFT JOIN users u ON u.id = p.recorded_by_id
+      LEFT JOIN users uv ON uv.id = p.verified_by_id
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY p.payment_date DESC
     `, params);
@@ -687,6 +690,8 @@ reportsRouter.get('/payments/export', optionalAuthenticateToken, async (req: Req
       "Ref / Txn No": String(it["Ref / Txn No"] || ''),
       "Status": String(it["Status"] || ''),
       "Recorded By": String(it["Recorded By"] || ''),
+      "Verified By": String(it["Verified By"] || ''),
+      "Verified Date": String(it["Verified Date"] || ''),
       "Notes": String(it["Notes"] || ''),
     }));
 
@@ -701,6 +706,8 @@ reportsRouter.get('/payments/export', optionalAuthenticateToken, async (req: Req
         "Ref / Txn No": "",
         "Status": "",
         "Recorded By": "",
+        "Verified By": "",
+        "Verified Date": "",
         "Notes": "",
       }];
     }

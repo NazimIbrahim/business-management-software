@@ -19,6 +19,8 @@ import {
   Lock,
   CheckCircle,
   CheckCircle2,
+  Clock,
+  Check,
   AlertTriangle,
   History,
   Eye,
@@ -74,6 +76,7 @@ export const QuotationDetail: React.FC<Props> = ({
 
   // Line items view mode: Default sequence vs Grouped by Availability
   const [itemViewMode, setItemViewMode] = useState<'default' | 'availability'>('default');
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<number | null>(null);
 
   const loadDetail = async () => {
     try {
@@ -282,8 +285,34 @@ export const QuotationDetail: React.FC<Props> = ({
   const { quotation, areas = [], payments = [] } = data;
   const isApproved = ['approved', 'closed'].includes(quotation.status?.toLowerCase());
   const isSalesperson = user?.role === 'salesperson';
+  const isManagerOrAdmin = ['admin', 'manager'].includes(user?.role || '');
   const canExportPdf = !isSalesperson || isApproved;
-  const canApprove = ['admin', 'manager'].includes(user?.role || '') && !isApproved;
+  const canApprove = isManagerOrAdmin && !isApproved;
+
+  const unverifiedPaid = (payments || [])
+    .filter((p) => p.status === 'Recorded')
+    .reduce((sum, p) => sum + parseFloat(String(p.amount || 0)), 0);
+
+  const handleVerifyPayment = async (paymentId: number, targetVerified: boolean) => {
+    if (
+      !targetVerified &&
+      !window.confirm('Are you sure you want to revert this payment to Unverified (Pending Accounts)?')
+    ) {
+      return;
+    }
+    setVerifyingPaymentId(paymentId);
+    try {
+      await fetchApi(`/api/payments/${paymentId}/verify`, {
+        method: 'PATCH',
+        body: JSON.stringify({ verified: targetVerified }),
+      });
+      loadDetail();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update payment verification status');
+    } finally {
+      setVerifyingPaymentId(null);
+    }
+  };
 
   return (
     <div className="flex-1 p-4 sm:p-5 lg:p-6 space-y-4 lg:space-y-5 overflow-y-auto w-full min-w-0">
@@ -645,11 +674,20 @@ export const QuotationDetail: React.FC<Props> = ({
             </span>
           </div>
           <div className="flex justify-between text-emerald-700 font-medium">
-            <span>Total Paid:</span>
+            <span>Verified Paid:</span>
             <span className="tabular-nums font-semibold">
               ₹ {formatCurrency(quotation.total_paid || 0)}
             </span>
           </div>
+          {unverifiedPaid > 0 && (
+            <div className="flex justify-between text-amber-800 text-[11px] font-medium bg-amber-50 px-2 py-1 rounded border border-amber-200">
+              <span className="flex items-center gap-1">
+                <Clock size={11} className="text-amber-600" />
+                <span>Pending Accounts Verification:</span>
+              </span>
+              <span className="tabular-nums font-bold">₹ {formatCurrency(unverifiedPaid)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-amber-700 font-bold border-t border-slate-200 pt-1.5">
             <span>Balance Due:</span>
             <span className="tabular-nums">₹ {formatCurrency(quotation.balance_due || 0)}</span>
@@ -1190,44 +1228,121 @@ export const QuotationDetail: React.FC<Props> = ({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600 bg-slate-50 text-[11px]">
-                  <th className="py-2 px-3">Receipt Ref</th>
-                  <th className="py-2 px-3">Payment Date</th>
-                  <th className="py-2 px-3">Mode</th>
-                  <th className="py-2 px-3">Reference / Txn #</th>
-                  <th className="py-2 px-3 text-right">Amount Received</th>
-                  <th className="py-2 px-3">Status</th>
-                  <th className="py-2 px-3 text-center">Receipt PDF</th>
+                  <th className="py-2.5 px-3">Receipt Ref</th>
+                  <th className="py-2.5 px-3">Payment Date</th>
+                  <th className="py-2.5 px-3">Mode</th>
+                  <th className="py-2.5 px-3">Reference / Txn #</th>
+                  <th className="py-2.5 px-3 text-right">Amount Received</th>
+                  <th className="py-2.5 px-3">Recorded By</th>
+                  <th className="py-2.5 px-3 text-center">Accounts Verification</th>
+                  <th className="py-2.5 px-3 text-center">Receipt PDF & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-2 px-3 font-mono font-semibold text-slate-900">
-                      {p.payment_number}
-                    </td>
-                    <td className="py-2 px-3 text-slate-600">
-                      {new Date(p.payment_date).toLocaleDateString('en-GB')}
-                    </td>
-                    <td className="py-2 px-3 text-slate-700">{p.payment_mode}</td>
-                    <td className="py-2 px-3 text-slate-500 font-mono">{p.reference_number || '-'}</td>
-                    <td className="py-2 px-3 text-right font-bold text-emerald-700 tabular-nums">
-                      ₹ {formatCurrency(p.amount)}
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className="badge badge-approved">{p.status}</span>
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <button
-                        onClick={() => handleOpenReceiptPdf(p)}
-                        className="btn btn-secondary btn-xs"
-                        title="View Official Receipt"
-                      >
-                        <Receipt size={12} />
-                        <span>Receipt</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {payments.map((p) => {
+                  const isVerified = ['Cleared', 'Verified'].includes(p.status);
+                  const isPending = p.status === 'Recorded';
+
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                        {p.payment_number}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                        {new Date(p.payment_date).toLocaleDateString('en-GB')}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap">{p.payment_mode}</td>
+                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                        {p.reference_number || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold tabular-nums whitespace-nowrap">
+                        <span className={isVerified ? 'text-emerald-700' : 'text-amber-800'}>
+                          ₹ {formatCurrency(p.amount)}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-slate-800">
+                            {p.recorded_by_name || 'System'}
+                          </span>
+                          {p.recorded_by_role && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 border border-slate-200 capitalize">
+                              {p.recorded_by_role}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {isVerified ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <CheckCircle2 size={12} className="text-emerald-600" />
+                              <span>Verified</span>
+                            </span>
+                            {p.verified_by_name && (
+                              <span className="text-[10px] text-slate-400 mt-0.5">
+                                by {p.verified_by_name}
+                              </span>
+                            )}
+                          </div>
+                        ) : isPending ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                              <Clock size={12} className="text-amber-600" />
+                              <span>Not Verified</span>
+                            </span>
+                            <span className="text-[10px] text-amber-700/80 mt-0.5">
+                              Pending Accounts
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="badge badge-secondary">{p.status}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 justify-center">
+                          <button
+                            onClick={() => handleOpenReceiptPdf(p)}
+                            className="btn btn-secondary btn-xs flex items-center gap-1"
+                            title="View Standard A4 Portrait Receipt"
+                          >
+                            <Receipt size={12} />
+                            <span>Receipt</span>
+                          </button>
+
+                          {isManagerOrAdmin && (
+                            <>
+                              {isPending ? (
+                                <button
+                                  onClick={() => handleVerifyPayment(p.id, true)}
+                                  disabled={verifyingPaymentId === p.id}
+                                  className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1 shadow-xs"
+                                  title="Verify Amount Received in Bank Account"
+                                >
+                                  {verifyingPaymentId === p.id ? (
+                                    <RefreshCw size={11} className="animate-spin" />
+                                  ) : (
+                                    <Check size={11} />
+                                  )}
+                                  <span>Verify</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleVerifyPayment(p.id, false)}
+                                  disabled={verifyingPaymentId === p.id}
+                                  className="text-[11px] text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded transition-colors"
+                                  title="Revert to Not Verified"
+                                >
+                                  Unverify
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -222,11 +222,16 @@ export interface Payment {
   amount: number;
   payment_mode: 'Cash' | 'Cheque' | 'Bank Transfer (NEFT/RTGS/IMPS)' | 'UPI (GPay/PhonePe/Paytm)' | 'Card';
   payment_date: string;
-  status: 'Recorded' | 'Cleared' | 'Bounced' | 'Refunded';
+  status: 'Recorded' | 'Cleared' | 'Bounced' | 'Refunded' | 'Verified';
   reference_number?: string;
   notes?: string;
   recorded_by_id?: number;
   recorded_by_name?: string;
+  recorded_by_role?: string;
+  verified_by_id?: number;
+  verified_by_name?: string;
+  verified_at?: string;
+  verification_notes?: string;
   created_at: string;
 }
 

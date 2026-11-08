@@ -235,10 +235,14 @@ CREATE TABLE IF NOT EXISTS payments (
     amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
     payment_mode VARCHAR(50) NOT NULL CHECK (payment_mode IN ('Cash', 'Cheque', 'Bank Transfer (NEFT/RTGS/IMPS)', 'UPI (GPay/PhonePe/Paytm)', 'Card')),
     payment_date DATE NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'Cleared' CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded')),
+    status VARCHAR(30) NOT NULL DEFAULT 'Recorded' CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified')),
     reference_number VARCHAR(100),
     notes TEXT,
     recorded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    verified_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    verified_by_name VARCHAR(120),
+    verified_at TIMESTAMPTZ,
+    verification_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_payments_quotation ON payments (quotation_id);

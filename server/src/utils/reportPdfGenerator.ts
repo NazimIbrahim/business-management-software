@@ -438,16 +438,17 @@ export function buildPaymentsReportPdf(
   });
 
   const columns: ColumnDefinition[] = [
-    { header: 'Receipt No', key: 'Receipt No', width: 75, align: 'left' },
-    { header: 'Date', key: 'Date', width: 60, align: 'center' },
-    { header: 'Quote No', key: 'Quotation No', width: 75, align: 'left' },
-    { header: 'Customer', key: 'Customer', width: 110, align: 'left' },
-    { header: 'Amount (Rs.)', key: 'Amount (INR)', width: 85, align: 'right', format: formatCurrency },
-    { header: 'Payment Mode', key: 'Payment Mode', width: 100, align: 'left' },
-    { header: 'Ref / Txn No', key: 'Ref / Txn No', width: 95, align: 'left' },
-    { header: 'Status', key: 'Status', width: 60, align: 'center' },
-    { header: 'Recorded By', key: 'Recorded By', width: 85, align: 'left' },
-    { header: 'Notes', key: 'Notes', width: 75, align: 'left' },
+    { header: 'Receipt No', key: 'Receipt No', width: 72, align: 'left' },
+    { header: 'Date', key: 'Date', width: 55, align: 'center' },
+    { header: 'Quote No', key: 'Quotation No', width: 70, align: 'left' },
+    { header: 'Customer', key: 'Customer', width: 95, align: 'left' },
+    { header: 'Amount (Rs.)', key: 'Amount (INR)', width: 80, align: 'right', format: formatCurrency },
+    { header: 'Payment Mode', key: 'Payment Mode', width: 85, align: 'left' },
+    { header: 'Ref / Txn No', key: 'Ref / Txn No', width: 75, align: 'left' },
+    { header: 'Status', key: 'Status', width: 65, align: 'center' },
+    { header: 'Recorded By', key: 'Recorded By', width: 75, align: 'left' },
+    { header: 'Verified By', key: 'Verified By', width: 75, align: 'left' },
+    { header: 'Notes', key: 'Notes', width: 60, align: 'left' },
   ];
 
   const totalAmount = cleanRows.reduce((s, r) => s + (Number(r['Amount (INR)']) || 0), 0);

@@ -338,9 +338,14 @@ quotationsRouter.get('/:id', async (req: Request, res: Response) => {
 
     // Fetch Payments
     const payments = await query(
-      `SELECT p.*, u.full_name as recorded_by_name
+      `SELECT p.*,
+              u.full_name as recorded_by_name,
+              u.role as recorded_by_role,
+              COALESCE(p.verified_by_name, uv.full_name) as verified_by_name,
+              uv.role as verified_by_role
        FROM payments p
        LEFT JOIN users u ON u.id = p.recorded_by_id
+       LEFT JOIN users uv ON uv.id = p.verified_by_id
        WHERE p.quotation_id = $1
        ORDER BY p.payment_date DESC, p.id DESC`,
       [id]
