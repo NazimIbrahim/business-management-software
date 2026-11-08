@@ -137,6 +137,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
 
   // Active Tab: 'salesperson' | 'quotations' | 'payments'
   const [activeTab, setActiveTab] = useState<'salesperson' | 'quotations' | 'payments'>('salesperson');
+  const [salesCategoryFilter, setSalesCategoryFilter] = useState<string>('all');
 
   // Sales team state
   const [salesTeam, setSalesTeam] = useState<User[]>([]);
@@ -204,6 +205,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     const params = new URLSearchParams();
     if (spStartDate) params.append('start_date', spStartDate);
     if (spEndDate) params.append('end_date', spEndDate);
+    if (salesCategoryFilter && salesCategoryFilter !== 'all') params.append('sales_category', salesCategoryFilter);
     if (isSalesperson && user?.id) {
       params.append('sales_person_id', String(user.id));
     } else if (selectedSpId) {
@@ -255,7 +257,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
   useEffect(() => {
     loadSalespersonSummary();
     loadSalespersonQuotations();
-  }, [selectedSpId, spStatus, spStartDate, spEndDate, user]);
+  }, [selectedSpId, spStatus, spStartDate, spEndDate, salesCategoryFilter, user]);
 
   // Fetch live Quotations list for Tab 2
   const loadQuotationsReportList = () => {
@@ -286,7 +288,7 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
 
   useEffect(() => {
     loadQuotationsReportList();
-  }, [qStatus, qSalespersonId, qStartDate, qEndDate, isSalesperson, user]);
+  }, [qStatus, qSalespersonId, qStartDate, qEndDate, salesCategoryFilter, isSalesperson, user]);
 
   // Generic Download Handler
   const handleDownload = async (
@@ -300,6 +302,9 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
     const token = localStorage.getItem('ama_token');
     const params = new URLSearchParams({ format, ...(customParams || {}) });
     if (token) params.set('token', token);
+    if (salesCategoryFilter && salesCategoryFilter !== 'all' && !params.has('sales_category')) {
+      params.append('sales_category', salesCategoryFilter);
+    }
 
     // If caller is a salesperson, STRICTLY scope exports to their own user id
     if (isSalesperson && user?.id) {
@@ -520,6 +525,22 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                   <option value="in_review">In Review</option>
                   <option value="draft">Draft</option>
                   <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Filter by Sales Category */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Filter by Sales Category</label>
+                <select
+                  className="select select-sm w-full font-semibold"
+                  value={salesCategoryFilter}
+                  onChange={(e) => setSalesCategoryFilter(e.target.value)}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="RETAIL">Retail (Showroom floor)</option>
+                  <option value="PROJECT">Project (Architect / B2B)</option>
+                  <option value="MANAGEMENT">Management (Leads / Coordinators)</option>
+                  <option value="COMPANY">Company (Executive accounts)</option>
                 </select>
               </div>
 
@@ -1087,6 +1108,22 @@ export const ReportsPage: React.FC<Props> = ({ onSelectQuotation }) => {
                   <option value="closed">Closed / Won</option>
                   <option value="not_closed">Not Closed (Active Pipeline)</option>
                   <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Filter by Sales Category */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Filter by Sales Category</label>
+                <select
+                  className="select select-sm w-full font-semibold"
+                  value={salesCategoryFilter}
+                  onChange={(e) => setSalesCategoryFilter(e.target.value)}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="RETAIL">Retail (Showroom floor)</option>
+                  <option value="PROJECT">Project (Architect / B2B)</option>
+                  <option value="MANAGEMENT">Management (Leads / Coordinators)</option>
+                  <option value="COMPANY">Company (Executive accounts)</option>
                 </select>
               </div>
 

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(120) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'salesperson',
+    sales_category VARCHAR(50) NOT NULL DEFAULT 'RETAIL' CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY')),
     email VARCHAR(120),
     phone VARCHAR(30),
     monthly_target NUMERIC(14, 2) DEFAULT 0.00,
@@ -131,6 +132,7 @@ CREATE TABLE IF NOT EXISTS quotations (
     assisted_sales_share_amount NUMERIC(12, 2) DEFAULT 0.00,
     project_name VARCHAR(150),
     quotation_type VARCHAR(30) NOT NULL DEFAULT 'tiles',
+    sales_category VARCHAR(50) DEFAULT 'RETAIL' CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY')),
     status VARCHAR(30) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'closed')),
     manager_approval_note TEXT,
     approved_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -251,21 +253,26 @@ CREATE INDEX IF NOT EXISTS idx_payments_date ON payments (payment_date);
 
 CREATE TABLE IF NOT EXISTS sales_targets (
     id SERIAL PRIMARY KEY,
-    sales_person_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    target_type VARCHAR(30) NOT NULL CHECK (target_type IN ('Daily', 'Weekly', 'Monthly', 'Custom')),
+    category VARCHAR(50) NOT NULL DEFAULT 'RETAIL' CHECK (category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY')),
+    sales_person_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    target_type VARCHAR(30) NOT NULL CHECK (target_type IN ('Daily', 'Weekly', 'Monthly', 'Custom', 'Quarterly', 'Annual')),
+    period_type VARCHAR(20) NOT NULL DEFAULT 'MONTHLY' CHECK (period_type IN ('MONTHLY', 'QUARTERLY', 'YEARLY')),
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     year INTEGER,
     month INTEGER,
     week_number INTEGER,
     period_label VARCHAR(150) NOT NULL,
-    target_amount NUMERIC(14, 2) NOT NULL CHECK (target_amount >= 0),
+    target_amount NUMERIC(15, 2) NOT NULL CHECK (target_amount >= 0),
+    target_volume_sqft NUMERIC(15, 2) DEFAULT 0.00,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_sales_targets_person ON sales_targets (sales_person_id);
 CREATE INDEX IF NOT EXISTS idx_sales_targets_dates ON sales_targets (start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_sales_targets_cat_period ON sales_targets (category, start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_sales_targets_user_period ON sales_targets (sales_person_id, start_date, end_date);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,

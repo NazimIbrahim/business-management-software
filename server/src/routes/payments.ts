@@ -19,6 +19,7 @@ export async function ensurePaymentsSchema() {
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_name VARCHAR(120);
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
       ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
     `);
@@ -454,6 +455,7 @@ paymentsRouter.get('/', async (req: Request, res: Response) => {
 // Accounts/Admins can record directly as 'Cleared' (Verified) or 'Recorded'
 paymentsRouter.post('/', async (req: Request, res: Response) => {
   try {
+    await ensurePaymentsSchema();
     const { quotation_id, amount, payment_mode, payment_date, reference_number, notes, is_verified } = req.body;
 
     const parsedAmount = parseFloat(amount);
@@ -588,6 +590,7 @@ paymentsRouter.post('/', async (req: Request, res: Response) => {
 // Only Managers / Admins / Accounts team members can perform this action
 const handlePaymentVerification = async (req: Request, res: Response) => {
   try {
+    await ensurePaymentsSchema();
     const id = parseInt(req.params.id as string, 10);
     const { verified = true, notes } = req.body;
 

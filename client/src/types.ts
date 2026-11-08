@@ -1,10 +1,13 @@
 // Client TypeScript Data Types
 
+export type SalesCategory = 'RETAIL' | 'PROJECT' | 'MANAGEMENT' | 'COMPANY';
+
 export interface User {
   id: number;
   username: string;
   full_name: string;
   role: 'admin' | 'manager' | 'salesperson' | 'accounts' | string;
+  sales_category?: SalesCategory;
   email?: string;
   phone?: string;
   monthly_target?: number;
@@ -170,6 +173,7 @@ export interface Quotation {
   assisted_sales_share_amount?: number;
   project_name?: string;
   quotation_type?: QuotationType;
+  sales_category?: SalesCategory;
   status: 'draft' | 'in_review' | 'approved' | 'rejected' | 'closed';
   manager_approval_note?: string;
   approved_by_id?: number;
@@ -237,13 +241,19 @@ export interface Payment {
 
 export interface SalesTarget {
   id: number;
-  sales_person_id: number;
-  sales_person_name?: string;
-  target_type: 'Daily' | 'Weekly' | 'Monthly' | 'Custom';
+  sales_person_id?: number | null;
+  sales_person_name?: string | null;
+  sales_person_role?: string;
+  category: SalesCategory;
+  period_type?: 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+  target_type: 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Annual' | 'Custom';
   start_date: string;
   end_date: string;
+  year?: number;
+  month?: number;
   period_label: string;
   target_amount: number;
+  target_volume_sqft?: number;
   notes?: string;
 }
 

@@ -273,6 +273,7 @@ export function buildQuotationsReportPdf(
     { header: 'Phone', key: 'Phone', width: 70, align: 'left' },
     { header: 'Project', key: 'Project', width: 75, align: 'left' },
     { header: 'Salesperson', key: 'Salesperson', width: 85, align: 'left' },
+    { header: 'Category', key: 'Sales Category', width: 60, align: 'center' },
     { header: 'Status', key: 'Status', width: 55, align: 'center' },
     { header: 'Approved By', key: 'Approved By', width: 75, align: 'left' },
     { header: 'Gross (Rs.)', key: 'Gross Total (INR)', width: 65, align: 'right', format: formatCurrency },
@@ -380,8 +381,9 @@ export function buildSalespersonsReportPdf(
   });
 
   const columns: ColumnDefinition[] = [
-    { header: 'Salesperson', key: 'Salesperson', width: 110, align: 'left' },
-    { header: 'Role', key: 'Role', width: 70, align: 'left' },
+    { header: 'Salesperson', key: 'Salesperson', width: 105, align: 'left' },
+    { header: 'Role', key: 'Role', width: 65, align: 'left' },
+    { header: 'Category', key: 'Sales Category', width: 65, align: 'center' },
     { header: 'Target (Rs.)', key: 'Monthly Target (INR)', width: 85, align: 'right', format: formatCurrency },
     { header: 'Achieved %', key: 'Target Achievement', width: 65, align: 'center' },
     { header: 'Quotes', key: 'Total Quotes', width: 50, align: 'center' },

@@ -129,10 +129,16 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
     const salesPersonId = req.query.sales_person_id ? parseInt(req.query.sales_person_id as string, 10) : null;
     const startDate = req.query.start_date as string;
     const endDate = req.query.end_date as string;
+    const salesCategory = (req.query.sales_category as string || '').trim().toUpperCase();
 
     const whereClauses: string[] = ['1=1'];
     const params: any[] = [];
     let idx = 1;
+
+    if (salesCategory && salesCategory !== 'ALL' && ['RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'].includes(salesCategory)) {
+      whereClauses.push(`q.sales_category = $${idx++}`);
+      params.push(salesCategory);
+    }
 
     if (quotationType === 'tiles' || quotationType === 'sanitary') {
       whereClauses.push(`q.quotation_type = $${idx++}`);
@@ -232,6 +238,7 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
         q.assisted_sales_share_amount,
         q.project_name,
         q.quotation_type,
+        COALESCE(q.sales_category, 'RETAIL') as sales_category,
         q.status,
         q.approved_by_id,
         u_app.full_name as approved_by_name,
@@ -568,6 +575,20 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
         }
       }
 
+      // Determine Sales Category (inherit from user profile or explicit payload)
+      let finalSalesCategory = 'RETAIL';
+      const validCategories = ['RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'];
+      if (req.body.sales_category && validCategories.includes(String(req.body.sales_category).toUpperCase())) {
+        finalSalesCategory = String(req.body.sales_category).toUpperCase();
+      } else if (req.user?.sales_category && validCategories.includes(String(req.user.sales_category).toUpperCase())) {
+        finalSalesCategory = String(req.user.sales_category).toUpperCase();
+      } else {
+        const uCatRes = await client.query('SELECT sales_category FROM users WHERE id = $1', [req.user!.id]);
+        if (uCatRes.rows[0]?.sales_category) {
+          finalSalesCategory = uCatRes.rows[0].sales_category;
+        }
+      }
+
       const qRes = await client.query(
         `INSERT INTO quotations (
           quotation_number, quotation_date, customer_id, sales_person_id,
@@ -578,7 +599,7 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           project_name, quotation_type, status, approved_by_id, approved_at, gross_total, discount_percent,
           discount_amount, taxable_amount, tax_type, cgst_rate, cgst_amount,
           sgst_rate, sgst_amount, igst_rate, igst_amount, round_off, net_total,
-          special_notes, version
+          special_notes, version, sales_category
         ) VALUES (
           $1, $2, $3, $4,
           $5, $6, $7, $8, $9,
@@ -588,7 +609,7 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           $18, $19, $20, $21, $22, $23, $24,
           $25, $26, $27, $28, $29,
           $30, $31, $32, $33, $34, $35,
-          $36, 1
+          $36, 1, $37
         ) RETURNING *`,
         [
           qNumber,
@@ -627,6 +648,7 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           totals.roundOff,
           totals.netTotal,
           special_notes || '',
+          finalSalesCategory,
         ]
       );
 

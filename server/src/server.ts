@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.49',
+    version: '2.4.50',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -215,6 +215,36 @@ async function runAutoMigrations() {
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
       ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN ('Recorded', 'Cleared', 'Bounced', 'Refunded', 'Verified'));
+
+      -- Sales Categories on users and quotations
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sales_category VARCHAR(50) NOT NULL DEFAULT 'RETAIL';
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS check_users_sales_category;
+      ALTER TABLE users ADD CONSTRAINT check_users_sales_category CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'));
+      CREATE INDEX IF NOT EXISTS idx_users_sales_category ON users(sales_category);
+
+      UPDATE users SET sales_category = 'MANAGEMENT' WHERE role IN ('admin', 'manager') AND sales_category = 'RETAIL';
+
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS sales_category VARCHAR(50) DEFAULT 'RETAIL';
+      ALTER TABLE quotations DROP CONSTRAINT IF EXISTS check_quotations_sales_category;
+      ALTER TABLE quotations ADD CONSTRAINT check_quotations_sales_category CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'));
+      CREATE INDEX IF NOT EXISTS idx_quotations_sales_category ON quotations(sales_category);
+
+      UPDATE quotations q
+      SET sales_category = COALESCE(u.sales_category, 'RETAIL')
+      FROM users u
+      WHERE q.sales_person_id = u.id AND (q.sales_category IS NULL OR q.sales_category = 'RETAIL');
+
+      -- Group & Individual Sales Targets upgrade
+      ALTER TABLE sales_targets ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'RETAIL';
+      ALTER TABLE sales_targets ALTER COLUMN sales_person_id DROP NOT NULL;
+      ALTER TABLE sales_targets ADD COLUMN IF NOT EXISTS target_volume_sqft NUMERIC(15, 2) DEFAULT 0.00;
+      ALTER TABLE sales_targets ADD COLUMN IF NOT EXISTS period_type VARCHAR(20) NOT NULL DEFAULT 'MONTHLY';
+      ALTER TABLE sales_targets DROP CONSTRAINT IF EXISTS check_sales_targets_category;
+      ALTER TABLE sales_targets ADD CONSTRAINT check_sales_targets_category CHECK (category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'));
+      ALTER TABLE sales_targets DROP CONSTRAINT IF EXISTS check_sales_targets_period_type;
+      ALTER TABLE sales_targets ADD CONSTRAINT check_sales_targets_period_type CHECK (period_type IN ('MONTHLY', 'QUARTERLY', 'YEARLY'));
+      CREATE INDEX IF NOT EXISTS idx_sales_targets_cat_period ON sales_targets (category, start_date, end_date);
+      CREATE INDEX IF NOT EXISTS idx_sales_targets_user_period ON sales_targets (sales_person_id, start_date, end_date);
     `);
   } catch (err: any) {
     logger.warn('Column additions migration warning:', err.message);
@@ -568,7 +598,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.49' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.50' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

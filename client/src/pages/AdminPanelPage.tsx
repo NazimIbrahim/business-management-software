@@ -114,6 +114,7 @@ export const AdminPanelPage: React.FC = () => {
   const [newFullName, setNewFullName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('salesperson');
+  const [newUserSalesCategory, setNewUserSalesCategory] = useState<'RETAIL' | 'PROJECT' | 'MANAGEMENT' | 'COMPANY'>('RETAIL');
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserTarget, setNewUserTarget] = useState('500000');
@@ -123,6 +124,7 @@ export const AdminPanelPage: React.FC = () => {
   const [editUsername, setEditUsername] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editRole, setEditRole] = useState('');
+  const [editSalesCategory, setEditSalesCategory] = useState<'RETAIL' | 'PROJECT' | 'MANAGEMENT' | 'COMPANY'>('RETAIL');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editTarget, setEditTarget] = useState('0');
@@ -222,6 +224,7 @@ export const AdminPanelPage: React.FC = () => {
           password: newUserPassword.trim(),
           full_name: newFullName.trim(),
           role: newUserRole,
+          sales_category: newUserSalesCategory,
           phone: newUserPhone.trim(),
           email: newUserEmail.trim(),
           monthly_target: parseFloat(newUserTarget) || 0,
@@ -235,6 +238,7 @@ export const AdminPanelPage: React.FC = () => {
       setNewUserPassword('');
       setNewUserPhone('');
       setNewUserEmail('');
+      setNewUserSalesCategory('RETAIL');
       setNewUserTarget('500000');
       loadData();
     } catch (err: any) {
@@ -250,6 +254,7 @@ export const AdminPanelPage: React.FC = () => {
     setEditUsername(u.username);
     setEditFullName(u.full_name);
     setEditRole(u.role);
+    setEditSalesCategory((u.sales_category as any) || (['admin', 'manager'].includes(u.role) ? 'MANAGEMENT' : 'RETAIL'));
     setEditPhone(u.phone || '');
     setEditEmail(u.email || '');
     setEditTarget(String(u.monthly_target || 0));
@@ -269,6 +274,7 @@ export const AdminPanelPage: React.FC = () => {
           username: editUsername.trim(),
           full_name: editFullName.trim(),
           role: editRole,
+          sales_category: editSalesCategory,
           phone: editPhone.trim(),
           email: editEmail.trim(),
           monthly_target: parseFloat(editTarget) || 0,
@@ -505,6 +511,7 @@ export const AdminPanelPage: React.FC = () => {
                     <th className="py-3 px-4">User / Salesperson</th>
                     <th className="py-3 px-3">Unique Username</th>
                     <th className="py-3 px-3">Assigned Role</th>
+                    <th className="py-3 px-3">Sales Category</th>
                     <th className="py-3 px-3">Phone & Email</th>
                     <th className="py-3 px-3 text-right">Target (₹)</th>
                     <th className="py-3 px-3 text-center">Status</th>
@@ -514,7 +521,7 @@ export const AdminPanelPage: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                      <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
                         No users found matching your criteria.
                       </td>
                     </tr>
@@ -565,6 +572,22 @@ export const AdminPanelPage: React.FC = () => {
                               }`}
                             >
                               {roleObj ? roleObj.display_name : u.role}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                                u.sales_category === 'PROJECT'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : u.sales_category === 'MANAGEMENT'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : u.sales_category === 'COMPANY'
+                                  ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}
+                            >
+                              {u.sales_category || 'RETAIL'}
                             </span>
                           </td>
 
@@ -988,18 +1011,35 @@ export const AdminPanelPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Monthly Sales Target (INR)
-                </label>
-                <input
-                  type="number"
-                  step="50000"
-                  className="input input-sm text-xs font-mono font-bold w-full"
-                  value={newUserTarget}
-                  onChange={(e) => setNewUserTarget(e.target.value)}
-                  placeholder="500000"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Sales Category *
+                  </label>
+                  <select
+                    className="input input-sm text-xs w-full font-semibold"
+                    value={newUserSalesCategory}
+                    onChange={(e) => setNewUserSalesCategory(e.target.value as any)}
+                  >
+                    <option value="RETAIL">Retail (Walk-in showroom)</option>
+                    <option value="PROJECT">Project (Architect / B2B)</option>
+                    <option value="MANAGEMENT">Management (Senior / Leads)</option>
+                    <option value="COMPANY">Company (Executive accounts)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Monthly Sales Target (INR)
+                  </label>
+                  <input
+                    type="number"
+                    step="50000"
+                    className="input input-sm text-xs font-mono font-bold w-full"
+                    value={newUserTarget}
+                    onChange={(e) => setNewUserTarget(e.target.value)}
+                    placeholder="500000"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
@@ -1129,17 +1169,34 @@ export const AdminPanelPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Monthly Sales Target (INR)
-                </label>
-                <input
-                  type="number"
-                  step="50000"
-                  className="input input-sm text-xs font-mono font-bold w-full"
-                  value={editTarget}
-                  onChange={(e) => setEditTarget(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Sales Category *
+                  </label>
+                  <select
+                    className="input input-sm text-xs w-full font-semibold"
+                    value={editSalesCategory}
+                    onChange={(e) => setEditSalesCategory(e.target.value as any)}
+                  >
+                    <option value="RETAIL">Retail (Walk-in showroom)</option>
+                    <option value="PROJECT">Project (Architect / B2B)</option>
+                    <option value="MANAGEMENT">Management (Senior / Leads)</option>
+                    <option value="COMPANY">Company (Executive accounts)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Monthly Sales Target (INR)
+                  </label>
+                  <input
+                    type="number"
+                    step="50000"
+                    className="input input-sm text-xs font-mono font-bold w-full"
+                    value={editTarget}
+                    onChange={(e) => setEditTarget(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">

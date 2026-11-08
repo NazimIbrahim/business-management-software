@@ -21,7 +21,9 @@ export interface WsEvent {
     | 'DASHBOARD_REFRESH'
     | 'dispatch:updated'
     | 'item_status:changed'
-    | 'payment:recorded';
+    | 'payment:recorded'
+    | 'target:updated'
+    | 'sale:closed';
   payload?: any;
   timestamp: string;
 }

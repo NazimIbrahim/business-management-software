@@ -241,9 +241,11 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Verify HTTP API connectivity & perform intelligent auto-failover
   const verifyHttpConnectivity = useCallback(async (url: string) => {
+    const isCloudUrl = url.includes('onrender.com');
+    const healthTimeout = isCloudUrl ? 25000 : 8000;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), healthTimeout);
       const res = await fetch(`${url}/api/health`, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
@@ -256,10 +258,13 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch {
       // Primary URL failed; test alternative auto-failover target before declaring disconnected
-      if (url.includes('onrender.com')) {
+      if (isCloudUrl) {
         // Probe local host server
         try {
-          const lRes = await fetch('http://localhost:4000/api/health');
+          const lController = new AbortController();
+          const lTimeout = setTimeout(() => lController.abort(), 3000);
+          const lRes = await fetch('http://localhost:4000/api/health', { signal: lController.signal });
+          clearTimeout(lTimeout);
           if (lRes.ok) {
             setServerUrlState('http://localhost:4000');
             localStorage.setItem('ama_server_url', 'http://localhost:4000');
@@ -270,7 +275,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else if (url.includes('localhost') || url.includes('127.0.0.1')) {
         // Probe cloud server
         try {
-          const cRes = await fetch('https://ama-quotation-api.onrender.com/api/health');
+          const cController = new AbortController();
+          const cTimeout = setTimeout(() => cController.abort(), 5000);
+          const cRes = await fetch('https://ama-quotation-api.onrender.com/api/health', { signal: cController.signal });
+          clearTimeout(cTimeout);
           if (cRes.ok) {
             setServerUrlState('https://ama-quotation-api.onrender.com');
             localStorage.setItem('ama_server_url', 'https://ama-quotation-api.onrender.com');
@@ -400,34 +408,61 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
       const fullUrl = `${serverUrl}${cleanEndpoint}`;
 
-      const controller = new AbortController();
-      const timeoutMs = options.timeoutMs ?? 15000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const isCloud = serverUrl.includes('onrender.com');
+      const defaultTimeout = isCloud ? 35000 : 15000;
+      const timeoutMs = options.timeoutMs ?? defaultTimeout;
+
+      const performFetch = async (currentTimeout: number): Promise<T> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), currentTimeout);
+
+        try {
+          const response = await fetch(fullUrl, {
+            ...options,
+            headers,
+            signal: options.signal || controller.signal,
+          });
+
+          if (!response.ok) {
+            let errMsg = `Request failed: HTTP ${response.status}`;
+            try {
+              const errData = await response.json();
+              if (errData.error) errMsg = errData.error;
+            } catch (e) {}
+            throw new Error(errMsg);
+          }
+
+          return (await response.json()) as T;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
 
       try {
-        const response = await fetch(fullUrl, {
-          ...options,
-          headers,
-          signal: options.signal || controller.signal,
-        });
+        return await performFetch(timeoutMs);
+      } catch (err: any) {
+        const isNetworkErr =
+          err.name === 'AbortError' ||
+          (err.message && err.message.toLowerCase().includes('failed to fetch')) ||
+          (err.message && err.message.toLowerCase().includes('network'));
 
-        if (!response.ok) {
-          let errMsg = `Request failed: HTTP ${response.status}`;
+        // If cloud cold-start caused timeout or network error, retry once with a warm-up grace period
+        if (isCloud && isNetworkErr) {
           try {
-            const errData = await response.json();
-            if (errData.error) errMsg = errData.error;
-          } catch (e) {}
-          throw new Error(errMsg);
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            return await performFetch(35000);
+          } catch (retryErr: any) {
+            if (retryErr.name === 'AbortError') {
+              throw new Error(`Cloud server is starting up. Please try again in a few moments.`);
+            }
+            throw retryErr;
+          }
         }
 
-        return (await response.json()) as T;
-      } catch (err: any) {
         if (err.name === 'AbortError') {
           throw new Error(`Request timed out after ${timeoutMs}ms: ${cleanEndpoint}`);
         }
         throw err;
-      } finally {
-        clearTimeout(timeoutId);
       }
     },
     [serverUrl]

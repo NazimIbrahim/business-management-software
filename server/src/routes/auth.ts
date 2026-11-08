@@ -48,6 +48,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
         username: user.username,
         full_name: user.full_name,
         role: user.role,
+        sales_category: user.sales_category || 'MANAGEMENT',
         email: user.email,
         phone: user.phone,
       };
@@ -76,7 +77,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     let rows: any[];
     try {
       rows = await query(
-        `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.email, u.phone, u.is_active,
+        `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                 COALESCE(r.permissions, '{}'::jsonb) as permissions
          FROM users u
          LEFT JOIN roles r ON r.name = u.role
@@ -89,7 +90,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
         await ensureRolesSchema().catch(() => {});
         try {
           rows = await query(
-            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.email, u.phone, u.is_active,
+            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                     COALESCE(r.permissions, '{}'::jsonb) as permissions
              FROM users u
              LEFT JOIN roles r ON r.name = u.role
@@ -99,7 +100,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
           );
         } catch {
           rows = await query(
-            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.email, u.phone, u.is_active,
+            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                     '{}'::jsonb as permissions
              FROM users u
              WHERE LOWER(u.username) = LOWER($1) OR (u.email IS NOT NULL AND LOWER(u.email) = LOWER($1))
@@ -132,6 +133,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       username: user.username,
       full_name: user.full_name,
       role: user.role,
+      sales_category: user.sales_category || (['admin', 'manager'].includes(user.role) ? 'MANAGEMENT' : 'RETAIL'),
       email: user.email,
       phone: user.phone,
     };

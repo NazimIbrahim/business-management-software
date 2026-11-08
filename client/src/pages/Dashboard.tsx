@@ -21,6 +21,11 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Target,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  Users,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 
@@ -57,6 +62,8 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
   } | null>(null);
 
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
+  const [targetProgress, setTargetProgress] = useState<any | null>(null);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const formatMonthLabel = (mStr?: string) => {
     if (!mStr || mStr === 'all') return 'All-Time';
@@ -112,6 +119,16 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
       if (res.selectedMonth && monthToLoad === 'current') {
         setSelectedMonth(res.selectedMonth);
       }
+
+      try {
+        let progUrl = '/api/targets/progress';
+        if (monthToLoad && monthToLoad !== 'current' && monthToLoad !== 'all') {
+          const [y, m] = monthToLoad.split('-');
+          if (y && m) progUrl += `?year=${y}&month=${parseInt(m, 10)}`;
+        }
+        const prog = await fetchApi(progUrl);
+        setTargetProgress(prog);
+      } catch (pErr) {}
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -525,6 +542,139 @@ export const Dashboard: React.FC<Props> = ({ onSelectQuotation, onCreateQuotatio
           </div>
         </div>
       </div>
+
+      {/* Target vs. Achievement Tracker Section */}
+      {targetProgress?.categories && targetProgress.categories.length > 0 && (
+        <div className="card p-4.5 bg-white border border-slate-200/90 shadow-2xs space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                <Target size={15} />
+              </div>
+              <div>
+                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <span>Target vs. Achievement Tracker</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {targetProgress.summary?.grand_achievement_pct || 0}% Grand Progress
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Real-time sales velocity by category group • {targetProgress.period?.days_elapsed || 0} of {targetProgress.period?.total_days || 30} days elapsed
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {targetProgress.categories.map((cat: any) => {
+              const isSurplus = cat.shortfall_or_surplus >= 0;
+              const isExpanded = expandedCategory === cat.category;
+
+              let colorStyles = {
+                bar: 'bg-rose-500',
+                text: 'text-rose-700',
+                badge: 'bg-rose-100 text-rose-800 border-rose-200',
+              };
+              if (cat.achievement_pct >= 100) {
+                colorStyles = {
+                  bar: 'bg-purple-600',
+                  text: 'text-purple-700',
+                  badge: 'bg-purple-100 text-purple-800 border-purple-200',
+                };
+              } else if (cat.achievement_pct >= 80) {
+                colorStyles = {
+                  bar: 'bg-emerald-500',
+                  text: 'text-emerald-700',
+                  badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                };
+              } else if (cat.achievement_pct >= 50) {
+                colorStyles = {
+                  bar: 'bg-amber-500',
+                  text: 'text-amber-700',
+                  badge: 'bg-amber-100 text-amber-800 border-amber-200',
+                };
+              }
+
+              return (
+                <div
+                  key={cat.category}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3.5 space-y-2.5 transition-all hover:bg-white hover:shadow-xs"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-200 text-slate-800">
+                      {cat.category}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black font-mono border ${colorStyles.badge}`}>
+                      {cat.achievement_pct}%
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-500 ${colorStyles.bar}`}
+                        style={{ width: `${Math.min(100, Math.max(2, cat.achievement_pct))}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs pt-1 border-t border-slate-200/60 font-mono">
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>Target:</span>
+                      <span className="font-bold text-slate-700">₹ {formatCurrency(cat.allocated_target)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600 text-[11px]">
+                      <span>Achieved:</span>
+                      <span className="font-bold">₹ {formatCurrency(cat.achieved_revenue)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-400">{isSurplus ? 'Surplus:' : 'Shortfall:'}</span>
+                      <span className={`font-bold ${isSurplus ? 'text-purple-700' : 'text-rose-600'}`}>
+                        {isSurplus ? '+' : '-'}₹ {formatCurrency(Math.abs(cat.shortfall_or_surplus))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-md p-1.5 border border-slate-200/60 flex items-center justify-between text-[10px]">
+                    <div className="flex items-center space-x-1 text-slate-500">
+                      <Zap size={11} className="text-amber-500" />
+                      <span>Run-rate:</span>
+                    </div>
+                    <span className="font-mono font-bold text-indigo-700">
+                      ₹ {formatCurrency(cat.projected_month_end)}
+                    </span>
+                  </div>
+
+                  {cat.contributors && cat.contributors.length > 0 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCategory(isExpanded ? null : cat.category)}
+                        className="w-full text-center text-[10px] font-bold text-slate-500 hover:text-indigo-600 flex items-center justify-center space-x-1 pt-1"
+                      >
+                        <Users size={11} />
+                        <span>{cat.contributors.length} Staff</span>
+                        {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-2 pt-2 border-t border-slate-200 space-y-1.5 max-h-40 overflow-y-auto">
+                          {cat.contributors.map((c: any) => (
+                            <div key={c.id} className="text-[10px] bg-white p-1.5 rounded border border-slate-100 flex justify-between items-center">
+                              <span className="font-medium text-slate-700 truncate max-w-[90px]">{c.name}</span>
+                              <span className="font-mono font-bold text-emerald-600">₹ {formatCurrency(c.achieved_amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Auto-Reset Month Alert if current month is fresh and at 0 */}
       {data?.financials?.totalQuoted === 0 && data?.isCurrentMonth && (

@@ -16,11 +16,16 @@ export const reportsRouter = Router();
 // Export Quotations as XLSX or CSV (supports optional auth or query token)
 reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
-    const { format = 'xlsx', status, start_date, end_date, sales_person_id, search, encrypted, itemized, quotation_type } = req.query;
+    const { format = 'xlsx', status, start_date, end_date, sales_person_id, search, encrypted, itemized, quotation_type, sales_category } = req.query;
 
     const whereClauses = ['1=1'];
     const params: any[] = [];
     let idx = 1;
+
+    if (sales_category && String(sales_category).toLowerCase() !== 'all') {
+      whereClauses.push(`q.sales_category = $${idx++}::text`);
+      params.push(String(sales_category).toUpperCase());
+    }
 
     const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
     const targetSpId = isSalesperson
@@ -80,6 +85,7 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
           COALESCE(q.customer_name, '') as "Customer",
           COALESCE(q.sales_person_name, '') as "Salesperson",
           COALESCE(q.assisted_sales_person_name, '') as "Assisted By",
+          COALESCE(q.sales_category, 'RETAIL') as "Sales Category",
           COALESCE(q.status, '') as "Status",
           COALESCE(qa.area_name, 'General') as "Area / Room",
           COALESCE(qi.sl_no, 1) as "Item No",
@@ -175,6 +181,7 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
           COALESCE(q.project_name, '') as "Project",
           COALESCE(q.sales_person_name, '') as "Salesperson",
           COALESCE(q.assisted_sales_person_name, '') as "Assisted By",
+          COALESCE(q.sales_category, 'RETAIL') as "Sales Category",
           COALESCE(q.status, '') as "Status",
           COALESCE(u_app.full_name, CASE WHEN LOWER(q.status) IN ('approved', 'closed') THEN 'Store Manager' ELSE 'Pending Approval' END) as "Approved By",
           COALESCE(q.gross_total, 0) as "Gross Total (INR)",
@@ -220,6 +227,7 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
         "Project": String(it["Project"] || ''),
         "Salesperson": String(it["Salesperson"] || ''),
         "Assisted By": String(it["Assisted By"] || ''),
+        "Sales Category": String(it["Sales Category"] || 'RETAIL'),
         "Status": String(it["Status"] || ''),
         "Approved By": String(it["Approved By"] || ''),
         "Gross Total (INR)": Number(it["Gross Total (INR)"]) || 0,
@@ -315,7 +323,7 @@ reportsRouter.get('/quotations/export', optionalAuthenticateToken, async (req: R
 // Salesperson Quotation Summary & Breakdown Report (JSON for dashboard/charts)
 reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
-    const { start_date, end_date, sales_person_id } = req.query;
+    const { start_date, end_date, sales_person_id, sales_category } = req.query;
     const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
     const targetSpId = isSalesperson
       ? req.user!.id
@@ -337,8 +345,12 @@ reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req
     const dateFilter = dateClauses.length > 0 ? `AND ${dateClauses.join(' AND ')}` : '';
     let userFilter = '';
     if (targetSpId) {
-      userFilter = `AND u.id = $${idx++}::integer`;
+      userFilter += ` AND u.id = $${idx++}::integer`;
       params.push(targetSpId);
+    }
+    if (sales_category && String(sales_category).toLowerCase() !== 'all') {
+      userFilter += ` AND u.sales_category = $${idx++}::text`;
+      params.push(String(sales_category).toUpperCase());
     }
 
     const rows = await query(`
@@ -346,6 +358,7 @@ reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req
         u.id as user_id,
         u.full_name as sales_person_name,
         u.role,
+        COALESCE(u.sales_category, 'RETAIL') as sales_category,
         u.email,
         u.phone,
         COALESCE(u.monthly_target, 0) as monthly_target,
@@ -453,7 +466,7 @@ reportsRouter.get('/salespersons/summary', optionalAuthenticateToken, async (req
 // Export Salesperson Performance Summary to XLSX or CSV
 reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req: Request, res: Response) => {
   try {
-    const { format = 'xlsx', start_date, end_date, sales_person_id } = req.query;
+    const { format = 'xlsx', start_date, end_date, sales_person_id, sales_category } = req.query;
     const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
     const targetSpId = isSalesperson
       ? req.user!.id
@@ -475,14 +488,19 @@ reportsRouter.get('/salespersons/export', optionalAuthenticateToken, async (req:
     const dateFilter = dateClauses.length > 0 ? `AND ${dateClauses.join(' AND ')}` : '';
     let userFilter = '';
     if (targetSpId) {
-      userFilter = `AND u.id = $${idx++}::integer`;
+      userFilter += ` AND u.id = $${idx++}::integer`;
       params.push(targetSpId);
+    }
+    if (sales_category && String(sales_category).toLowerCase() !== 'all') {
+      userFilter += ` AND u.sales_category = $${idx++}::text`;
+      params.push(String(sales_category).toUpperCase());
     }
 
     const rows = await query(`
       SELECT
         u.full_name as "Salesperson",
         u.role as "Role",
+        COALESCE(u.sales_category, 'RETAIL') as "Sales Category",
         COALESCE(u.monthly_target, 0) as "Monthly Target (INR)",
         COUNT(DISTINCT q.id) as "Total Quotes",
         COUNT(DISTINCT CASE WHEN LOWER(q.status) = 'closed' THEN q.id END) as "Closed Quotes",
