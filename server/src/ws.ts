@@ -18,7 +18,10 @@ export interface WsEvent {
     | 'DISPATCH_UPDATED'
     | 'DISPATCH_ITEM_CHANGED'
     | 'DISPATCH_CHANGES_ACKNOWLEDGED'
-    | 'DASHBOARD_REFRESH';
+    | 'DASHBOARD_REFRESH'
+    | 'dispatch:updated'
+    | 'item_status:changed'
+    | 'payment:recorded';
   payload?: any;
   timestamp: string;
 }

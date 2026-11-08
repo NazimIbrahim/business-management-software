@@ -1,3 +1,5 @@
+import PDFDocument from 'pdfkit';
+import * as XLSX from 'xlsx';
 import { Router, Request, Response } from 'express';
 import { query, withTransaction } from '../db/connection';
 import { authenticateToken, requireRole } from '../middleware/auth';
@@ -67,6 +69,87 @@ export async function ensureDispatchSchema(): Promise<void> {
       ) sub
       WHERE q.id = sub.quotation_id
         AND COALESCE(q.dispatch_status, 'Yet to Update') != sub.computed_status;
+
+      -- Additional Subsystem Tables
+      CREATE TABLE IF NOT EXISTS dispatch_records (
+        id SERIAL PRIMARY KEY,
+        dispatch_number VARCHAR(60) UNIQUE NOT NULL,
+        quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+        status VARCHAR(40) NOT NULL DEFAULT 'PROCESSING',
+        scheduled_date DATE,
+        completed_date TIMESTAMPTZ,
+        vehicle_no VARCHAR(50),
+        driver_name VARCHAR(120),
+        driver_phone VARCHAR(30),
+        delivery_address TEXT,
+        challan_number VARCHAR(80),
+        notes TEXT,
+        dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        dispatched_by_name VARCHAR(120),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS dispatch_items (
+        id SERIAL PRIMARY KEY,
+        dispatch_id INTEGER NOT NULL REFERENCES dispatch_records(id) ON DELETE CASCADE,
+        quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+        ordered_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        quantity_dispatched NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        unit VARCHAR(30) DEFAULT 'boxes',
+        status VARCHAR(40) NOT NULL DEFAULT 'PENDING',
+        remarks TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS local_purchases (
+        id SERIAL PRIMARY KEY,
+        quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+        quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+        vendor_name VARCHAR(180) NOT NULL DEFAULT 'Local Distributor',
+        vendor_contact VARCHAR(50),
+        required_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        quoted_rate NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        actual_purchase_rate NUMERIC(12, 2) DEFAULT 0,
+        purchase_status VARCHAR(40) NOT NULL DEFAULT 'PO_RAISED',
+        invoice_number VARCHAR(100),
+        expected_date DATE,
+        completed_date TIMESTAMPTZ,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS factory_orders (
+        id SERIAL PRIMARY KEY,
+        quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+        quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+        factory_name VARCHAR(180) NOT NULL DEFAULT 'Factory / Morbi Plant',
+        brand_name VARCHAR(120),
+        batch_shade_code VARCHAR(100),
+        lr_number VARCHAR(100),
+        transporter_name VARCHAR(150),
+        truck_number VARCHAR(50),
+        order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        eta_date DATE,
+        unloaded_date TIMESTAMPTZ,
+        status VARCHAR(40) NOT NULL DEFAULT 'ORDER_PLACED',
+        freight_cost NUMERIC(12, 2) DEFAULT 0,
+        total_pallets NUMERIC(10, 2) DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS scheduled_dispatch_date DATE;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS dispatch_progress_percent NUMERIC(5, 2) DEFAULT 0.00;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS delivery_challan_number VARCHAR(80);
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS delivery_address TEXT;
+
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS sourcing_type VARCHAR(50);
+      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS remaining_quantity NUMERIC(12, 2) DEFAULT 0;
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -1189,3 +1272,1158 @@ const dispatchItemRoles = requireRole(['admin', 'manager', 'dispatch', 'dispatch
 dispatchRouter.patch('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);
 dispatchRouter.post('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);
 dispatchRouter.put('/items/:id', dispatchItemRoles, handleItemProcurementUpdate);
+
+
+// =========================================================================
+// DISPATCH MANAGEMENT 10 CORE MODULE ENDPOINTS
+// =========================================================================
+
+// 1. ALL CLOSED QUOTATIONS (Strict FIFO ordering: First-In, First-Out by closed_at ASC)
+dispatchRouter.get('/all-closed', async (req: Request, res: Response) => {
+  try {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSalesperson = userRole === 'salesperson';
+    const userFilter = isSalesperson ? 'AND q.sales_person_id = $1' : '';
+    const userParams = isSalesperson ? [req.user!.id] : [];
+
+    const rows = await query(
+      `SELECT 
+        q.id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.customer_gstin,
+        q.site_location,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        q.project_name,
+        q.quotation_type,
+        q.sales_person_name,
+        q.net_total,
+        q.status as quotation_status,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+        q.expected_dispatch_date,
+        q.scheduled_dispatch_date,
+        q.dispatch_notes,
+        COALESCE(q.closed_at, q.updated_at, q.created_at) as closed_at,
+        q.created_at,
+        q.has_dispatch_item_changes,
+        q.dispatch_change_summary,
+        COALESCE(qi_agg.total_items, 0) as total_items,
+        COALESCE(qi_agg.ready_items, 0) as ready_items,
+        COALESCE(qi_agg.local_items, 0) as local_items,
+        COALESCE(qi_agg.factory_items, 0) as factory_items,
+        COALESCE(qi_agg.dispatched_items, 0) as dispatched_items,
+        COALESCE(qi_agg.total_ordered_qty, 0) as total_ordered_qty,
+        COALESCE(qi_agg.total_dispatched_qty, 0) as total_dispatched_qty,
+        COALESCE(p_pay.verified_paid, 0) as verified_paid,
+        COALESCE(p_pay.unverified_paid, 0) as unverified_paid,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due,
+        CASE 
+          WHEN COALESCE(p_pay.verified_paid, 0) >= q.net_total - 0.5 THEN 'CLEARED'
+          WHEN COALESCE(p_pay.verified_paid, 0) > 0 THEN 'PARTIAL'
+          ELSE 'PENDING'
+        END as payment_status
+      FROM quotations q
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          COUNT(*) as total_items,
+          COUNT(CASE WHEN dispatch_status = 'Ready Stock' THEN 1 END) as ready_items,
+          COUNT(CASE WHEN dispatch_status = 'Need to Arrange from Local' THEN 1 END) as local_items,
+          COUNT(CASE WHEN dispatch_status = 'Factory Order' THEN 1 END) as factory_items,
+          COUNT(CASE WHEN dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items,
+          SUM(COALESCE(quantity_boxes, quantity_sqft, 1)) as total_ordered_qty,
+          SUM(COALESCE(dispatched_quantity, 0)) as total_dispatched_qty
+        FROM quotation_items
+        GROUP BY quotation_id
+      ) qi_agg ON qi_agg.quotation_id = q.id
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          SUM(CASE WHEN status IN ('Cleared', 'Verified') THEN amount ELSE 0 END) as verified_paid,
+          SUM(CASE WHEN status = 'Recorded' THEN amount ELSE 0 END) as unverified_paid
+        FROM payments
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
+      WHERE LOWER(q.status) IN ('closed', 'approved')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+        ${userFilter}
+      ORDER BY COALESCE(q.closed_at, q.updated_at, q.created_at) ASC`,
+      userParams
+    );
+
+    res.json({
+      success: true,
+      count: rows.length,
+      quotations: rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. PROCESSING DISPATCH (Active pool with item-level partial quantities and live % progress)
+dispatchRouter.get('/processing', async (req: Request, res: Response) => {
+  try {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSalesperson = userRole === 'salesperson';
+    const userFilter = isSalesperson ? 'AND q.sales_person_id = $1' : '';
+    const userParams = isSalesperson ? [req.user!.id] : [];
+
+    const quotes = await query(
+      `SELECT 
+        q.id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        q.sales_person_name,
+        q.net_total,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+        q.expected_dispatch_date,
+        q.scheduled_dispatch_date,
+        q.dispatch_notes,
+        COALESCE(p_pay.verified_paid, 0) as verified_paid,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due,
+        COALESCE(dr.vehicle_no, '') as vehicle_no,
+        COALESCE(dr.driver_name, '') as driver_name,
+        COALESCE(dr.driver_phone, '') as driver_phone,
+        COALESCE(dr.challan_number, '') as challan_number
+      FROM quotations q
+      LEFT JOIN (
+        SELECT quotation_id, SUM(amount) as verified_paid
+        FROM payments
+        WHERE status IN ('Cleared', 'Verified')
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (quotation_id) quotation_id, vehicle_no, driver_name, driver_phone, challan_number
+        FROM dispatch_records
+        ORDER BY quotation_id, id DESC
+      ) dr ON dr.quotation_id = q.id
+      WHERE LOWER(q.status) IN ('closed', 'approved')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+        AND EXISTS (
+          SELECT 1 FROM quotation_items qi 
+          WHERE qi.quotation_id = q.id 
+            AND qi.dispatch_status IN ('Ready Stock', 'Need to Arrange from Local', 'Factory Order', 'Dispatched')
+        )
+        ${userFilter}
+      ORDER BY COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date, q.updated_at) ASC`,
+      userParams
+    );
+
+    if (quotes.length === 0) {
+      res.json({ success: true, count: 0, dispatches: [] });
+      return;
+    }
+
+    const quoteIds = quotes.map((q: any) => q.id);
+    const itemsRes = await query(
+      `SELECT 
+        qi.id,
+        qi.quotation_id,
+        qi.area_id,
+        qa.area_name,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as ordered_quantity,
+        COALESCE(qi.dispatched_quantity, 0) as quantity_dispatched,
+        GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) as remaining_quantity,
+        qi.rate_per_box,
+        qi.rate_per_sqft,
+        qi.total_amount,
+        COALESCE(qi.dispatch_status, 'Yet to Update') as dispatch_status,
+        qi.expected_dispatch_date,
+        qi.procurement_status,
+        qi.procurement_notes,
+        qi.item_image
+      FROM quotation_items qi
+      LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
+      WHERE qi.quotation_id = ANY($1::int[])
+      ORDER BY qi.quotation_id, qa.display_order ASC NULLS LAST, qi.id ASC`,
+      [quoteIds]
+    );
+
+    // Group items by quote and calculate fulfillment %
+    const itemsByQuote = new Map<number, any[]>();
+    for (const it of itemsRes) {
+      const arr = itemsByQuote.get(it.quotation_id) || [];
+      arr.push(it);
+      itemsByQuote.set(it.quotation_id, arr);
+    }
+
+    const dispatches = quotes.map((q: any) => {
+      const items = itemsByQuote.get(q.id) || [];
+      const totalOrdered = items.reduce((acc: number, it: any) => acc + parseFloat(it.ordered_quantity || 0), 0);
+      const totalDispatched = items.reduce((acc: number, it: any) => acc + parseFloat(it.quantity_dispatched || 0), 0);
+      const progressPercent = totalOrdered > 0 ? Math.min(100, Math.round((totalDispatched / totalOrdered) * 100)) : 0;
+      const allDispatched = items.length > 0 && items.every((it: any) => it.dispatch_status === 'Dispatched');
+
+      return {
+        ...q,
+        items,
+        total_ordered_qty: totalOrdered,
+        total_dispatched_qty: totalDispatched,
+        progress_percent: progressPercent,
+        all_items_dispatched: allDispatched,
+      };
+    });
+
+    res.json({
+      success: true,
+      count: dispatches.length,
+      dispatches,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. RECORD PARTIAL OR COMPLETE LINE-ITEM DISPATCH
+dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => {
+  try {
+    const {
+      quotation_id,
+      quotation_item_id,
+      quantity_to_dispatch,
+      vehicle_no,
+      driver_name,
+      driver_phone,
+      delivery_address,
+      challan_number,
+      notes,
+    } = req.body;
+
+    const qId = parseInt(quotation_id, 10);
+    const qiId = parseInt(quotation_item_id, 10);
+    const qty = parseFloat(quantity_to_dispatch || 0);
+
+    if (!qId || !qiId || qty <= 0) {
+      res.status(400).json({ error: 'Valid quotation_id, quotation_item_id, and positive quantity_to_dispatch required' });
+      return;
+    }
+
+    const itemRows = await query(
+      `SELECT qi.*, q.quotation_number, q.customer_name, q.customer_phone, q.net_total
+       FROM quotation_items qi
+       JOIN quotations q ON q.id = qi.quotation_id
+       WHERE qi.id = $1 AND qi.quotation_id = $2`,
+      [qiId, qId]
+    );
+
+    if (itemRows.length === 0) {
+      res.status(404).json({ error: 'Line item or quotation not found' });
+      return;
+    }
+
+    const item = itemRows[0];
+    const ordered = parseFloat(item.quantity_boxes || item.quantity_sqft || 1);
+    const prevDispatched = parseFloat(item.dispatched_quantity || 0);
+    const newDispatched = Math.min(ordered, prevDispatched + qty);
+    const isNowFullyDispatched = newDispatched >= ordered - 0.001;
+
+    // Generate or use challan number
+    const generatedChallan = challan_number?.trim() || `DC-2026-${String(qId).padStart(4, '0')}`;
+
+    await withTransaction(async (client) => {
+      // 1. Update quotation_items
+      await client.query(
+        `UPDATE quotation_items
+         SET dispatched_quantity = $1,
+             dispatch_status = CASE WHEN $2 = true THEN 'Dispatched' ELSE dispatch_status END,
+             dispatched_at = CASE WHEN $2 = true THEN CURRENT_TIMESTAMP ELSE dispatched_at END,
+             remaining_quantity = GREATEST(0, $3 - $1)
+         WHERE id = $4`,
+        [newDispatched, isNowFullyDispatched, ordered, qiId]
+      );
+
+      // 2. Insert or update dispatch_records
+      let recordId: number;
+      const recCheck = await client.query(
+        `SELECT id FROM dispatch_records WHERE quotation_id = $1 AND status != 'COMPLETED' ORDER BY id DESC LIMIT 1`,
+        [qId]
+      );
+
+      if (recCheck.rows.length > 0) {
+        recordId = recCheck.rows[0].id;
+        await client.query(
+          `UPDATE dispatch_records
+           SET vehicle_no = COALESCE($1, vehicle_no),
+               driver_name = COALESCE($2, driver_name),
+               driver_phone = COALESCE($3, driver_phone),
+               delivery_address = COALESCE($4, delivery_address),
+               challan_number = COALESCE($5, challan_number),
+               notes = COALESCE($6, notes),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $7`,
+          [vehicle_no || null, driver_name || null, driver_phone || null, delivery_address || null, generatedChallan, notes || null, recordId]
+        );
+      } else {
+        const dNum = `DSP-2026-${Date.now().toString().slice(-6)}`;
+        const insRec = await client.query(
+          `INSERT INTO dispatch_records (
+            dispatch_number, quotation_id, status, vehicle_no, driver_name, driver_phone,
+            delivery_address, challan_number, notes, dispatched_by_id, dispatched_by_name
+          ) VALUES ($1, $2, 'PROCESSING', $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING id`,
+          [dNum, qId, vehicle_no || null, driver_name || null, driver_phone || null, delivery_address || null, generatedChallan, notes || null, req.user!.id, req.user!.full_name]
+        );
+        recordId = insRec.rows[0].id;
+      }
+
+      // 3. Record dispatch_items entry
+      await client.query(
+        `INSERT INTO dispatch_items (
+          dispatch_id, quotation_item_id, ordered_quantity, quantity_dispatched, unit, status, remarks
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [recordId, qiId, ordered, qty, item.product_type || 'boxes', isNowFullyDispatched ? 'DISPATCHED' : 'PARTIAL', notes || null]
+      );
+
+      // 4. Re-check entire quotation items fulfillment
+      const allItemsCheck = await client.query(
+        `SELECT 
+          COUNT(*) as total_items,
+          COUNT(CASE WHEN dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items
+         FROM quotation_items
+         WHERE quotation_id = $1`,
+        [qId]
+      );
+
+      const tot = parseInt(allItemsCheck.rows[0]?.total_items || '0', 10);
+      const disp = parseInt(allItemsCheck.rows[0]?.dispatched_items || '0', 10);
+      const isQuoteFullyDispatched = tot > 0 && tot === disp;
+
+      if (isQuoteFullyDispatched) {
+        await client.query(
+          `UPDATE quotations
+           SET dispatch_status = 'Dispatched',
+               dispatched_at = CURRENT_TIMESTAMP,
+               dispatched_by_id = $1,
+               dispatched_by_name = $2,
+               delivery_challan_number = $3,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $4`,
+          [req.user!.id, req.user!.full_name, generatedChallan, qId]
+        );
+
+        await client.query(
+          `UPDATE dispatch_records
+           SET status = 'COMPLETED',
+               completed_date = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [recordId]
+        );
+      }
+    });
+
+    // Broadcast WebSockets to sync all connected terminals
+    broadcast({
+      type: 'item_status:changed',
+      payload: {
+        quotation_id: qId,
+        quotation_item_id: qiId,
+        dispatched_quantity: newDispatched,
+        ordered_quantity: ordered,
+        is_dispatched: isNowFullyDispatched,
+        updated_by: req.user!.full_name,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    broadcast({
+      type: 'dispatch:updated',
+      payload: {
+        quotation_id: qId,
+        updated_by: req.user!.full_name,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: isNowFullyDispatched ? 'Item completely dispatched!' : `Recorded ${qty} units dispatched.`,
+      dispatched_quantity: newDispatched,
+      remaining_quantity: Math.max(0, ordered - newDispatched),
+      is_item_dispatched: isNowFullyDispatched,
+      challan_number: generatedChallan,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. DISPATCH COMPLETED (Archive of 100% fulfilled dispatches)
+dispatchRouter.get('/completed', async (req: Request, res: Response) => {
+  try {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSalesperson = userRole === 'salesperson';
+    const userFilter = isSalesperson ? 'AND q.sales_person_id = $1' : '';
+    const userParams = isSalesperson ? [req.user!.id] : [];
+
+    const rows = await query(
+      `SELECT 
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        q.sales_person_name,
+        q.net_total,
+        COALESCE(dr.dispatch_number, 'DSP-2026-' || LPAD(q.id::TEXT, 6, '0')) as dispatch_number,
+        COALESCE(dr.challan_number, q.delivery_challan_number, 'DC-2026-' || LPAD(q.id::TEXT, 4, '0')) as challan_number,
+        COALESCE(dr.vehicle_no, '-') as vehicle_no,
+        COALESCE(dr.driver_name, '-') as driver_name,
+        COALESCE(dr.driver_phone, '-') as driver_phone,
+        COALESCE(dr.completed_date, q.dispatched_at, q.updated_at) as completed_date,
+        COALESCE(dr.dispatched_by_name, q.dispatched_by_name, 'Warehouse Dispatcher') as dispatched_by_name,
+        dr.notes,
+        COALESCE(qi_agg.total_boxes, 0) as total_boxes,
+        COALESCE(qi_agg.total_items, 0) as total_items
+      FROM quotations q
+      LEFT JOIN (
+        SELECT DISTINCT ON (quotation_id) *
+        FROM dispatch_records
+        ORDER BY quotation_id, id DESC
+      ) dr ON dr.quotation_id = q.id
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          COUNT(*) as total_items,
+          SUM(COALESCE(dispatched_quantity, quantity_boxes, 0)) as total_boxes
+        FROM quotation_items
+        GROUP BY quotation_id
+      ) qi_agg ON qi_agg.quotation_id = q.id
+      WHERE (q.dispatch_status = 'Dispatched' OR dr.status = 'COMPLETED')
+        ${userFilter}
+      ORDER BY COALESCE(dr.completed_date, q.dispatched_at, q.updated_at) DESC`,
+      userParams
+    );
+
+    res.json({
+      success: true,
+      count: rows.length,
+      completed_dispatches: rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. DISPATCH SCHEDULE (Chronological list and calendar dates)
+dispatchRouter.get('/schedule', async (req: Request, res: Response) => {
+  try {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSalesperson = userRole === 'salesperson';
+    const userFilter = isSalesperson ? 'AND q.sales_person_id = $1' : '';
+    const userParams = isSalesperson ? [req.user!.id] : [];
+
+    const rows = await query(
+      `SELECT 
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        q.sales_person_name,
+        q.net_total,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+        COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date, CURRENT_DATE) as scheduled_date,
+        q.expected_dispatch_date,
+        q.scheduled_dispatch_date,
+        q.dispatch_notes,
+        COALESCE(dr.vehicle_no, '') as vehicle_no,
+        COALESCE(dr.driver_name, '') as driver_name,
+        COALESCE(dr.driver_phone, '') as driver_phone,
+        COALESCE(qi_agg.total_boxes, 0) as total_boxes,
+        COALESCE(qi_agg.total_items, 0) as total_items,
+        CASE 
+          WHEN COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date) < CURRENT_DATE 
+               AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched' THEN 'OVERDUE'
+          WHEN COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date) = CURRENT_DATE THEN 'TODAY'
+          ELSE 'UPCOMING'
+        END as timeline_category
+      FROM quotations q
+      LEFT JOIN (
+        SELECT DISTINCT ON (quotation_id) *
+        FROM dispatch_records
+        ORDER BY quotation_id, id DESC
+      ) dr ON dr.quotation_id = q.id
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          COUNT(*) as total_items,
+          SUM(COALESCE(quantity_boxes, quantity_sqft, 1)) as total_boxes
+        FROM quotation_items
+        GROUP BY quotation_id
+      ) qi_agg ON qi_agg.quotation_id = q.id
+      WHERE LOWER(q.status) IN ('closed', 'approved')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+        ${userFilter}
+      ORDER BY COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date, CURRENT_DATE) ASC`,
+      userParams
+    );
+
+    res.json({
+      success: true,
+      count: rows.length,
+      schedule: rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update / Reschedule dispatch date
+dispatchRouter.put('/schedule/:id', async (req: Request, res: Response) => {
+  try {
+    const qId = parseInt(req.params.id as string, 10);
+    const { scheduled_date, dispatch_notes } = req.body;
+
+    if (!qId || !scheduled_date) {
+      res.status(400).json({ error: 'Quotation id and scheduled_date required' });
+      return;
+    }
+
+    await query(
+      `UPDATE quotations
+       SET scheduled_dispatch_date = $1,
+           expected_dispatch_date = $1,
+           dispatch_notes = COALESCE($2, dispatch_notes),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [scheduled_date, dispatch_notes || null, qId]
+    );
+
+    await query(
+      `UPDATE dispatch_records
+       SET scheduled_date = $1,
+           notes = COALESCE($2, notes),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE quotation_id = $3`,
+      [scheduled_date, dispatch_notes || null, qId]
+    );
+
+    broadcast({
+      type: 'dispatch:updated',
+      payload: { quotation_id: qId, scheduled_date, updated_by: req.user!.full_name },
+    });
+
+    res.json({ success: true, message: 'Dispatch schedule updated successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. LOCAL PURCHASE TRACKER (Active local sourcing workbench)
+dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
+  try {
+    const rows = await query(
+      `SELECT 
+        qi.id as quotation_item_id,
+        qi.quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as required_quantity,
+        COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) as quoted_rate,
+        qi.total_amount,
+        COALESCE(lp.vendor_name, qi.brand, 'Local Distributor') as vendor_name,
+        lp.vendor_contact,
+        lp.actual_purchase_rate,
+        COALESCE(lp.purchase_status, 
+          CASE 
+            WHEN qi.procurement_status = 'Reached to Godown' THEN 'ARRIVED_AT_GODOWN'
+            WHEN qi.procurement_status = 'Dispatched' OR qi.procurement_status = 'On the Way' THEN 'AWAITING_DELIVERY'
+            ELSE 'PO_RAISED'
+          END
+        ) as purchase_status,
+        lp.invoice_number,
+        COALESCE(lp.expected_date, qi.expected_dispatch_date) as expected_date,
+        lp.notes as purchase_notes,
+        qi.procurement_notes,
+        qi.item_image
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
+      WHERE qi.dispatch_status = 'Need to Arrange from Local'
+        AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
+        AND LOWER(q.status) IN ('closed', 'approved')
+      ORDER BY COALESCE(lp.expected_date, qi.expected_dispatch_date, qi.id) ASC`
+    );
+
+    res.json({ success: true, count: rows.length, items: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update local purchase item status or details
+dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id as string, 10);
+    const { vendor_name, vendor_contact, actual_purchase_rate, invoice_number, expected_date, purchase_status, notes } = req.body;
+
+    const itemRows = await query('SELECT * FROM quotation_items WHERE id = $1', [itemId]);
+    if (itemRows.length === 0) {
+      res.status(404).json({ error: 'Line item not found' });
+      return;
+    }
+    const item = itemRows[0];
+
+    const markArrived = purchase_status === 'ARRIVED_AT_GODOWN';
+
+    await withTransaction(async (client) => {
+      // Upsert local_purchases
+      await client.query(
+        `INSERT INTO local_purchases (
+          quotation_item_id, quotation_id, vendor_name, vendor_contact, required_quantity,
+          quoted_rate, actual_purchase_rate, purchase_status, invoice_number, expected_date,
+          completed_date, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE
+        SET vendor_name = COALESCE($3, local_purchases.vendor_name),
+            vendor_contact = COALESCE($4, local_purchases.vendor_contact),
+            actual_purchase_rate = COALESCE($7, local_purchases.actual_purchase_rate),
+            purchase_status = COALESCE($8, local_purchases.purchase_status),
+            invoice_number = COALESCE($9, local_purchases.invoice_number),
+            expected_date = COALESCE($10, local_purchases.expected_date),
+            completed_date = CASE WHEN $8 = 'ARRIVED_AT_GODOWN' THEN CURRENT_TIMESTAMP ELSE local_purchases.completed_date END,
+            notes = COALESCE($12, local_purchases.notes),
+            updated_at = CURRENT_TIMESTAMP`,
+        [
+          itemId,
+          item.quotation_id,
+          vendor_name || 'Local Distributor',
+          vendor_contact || null,
+          item.quantity_boxes || item.quantity_sqft || 1,
+          item.rate_per_box || item.rate_per_sqft || 0,
+          actual_purchase_rate || null,
+          purchase_status || 'PO_RAISED',
+          invoice_number || null,
+          expected_date || null,
+          markArrived ? new Date() : null,
+          notes || null,
+        ]
+      );
+
+      if (markArrived) {
+        await client.query(
+          `UPDATE quotation_items
+           SET dispatch_status = 'Ready Stock',
+               procurement_status = 'Reached to Godown',
+               procurement_updated_at = CURRENT_TIMESTAMP,
+               procurement_updated_by_name = $1
+           WHERE id = $2`,
+          [req.user!.full_name, itemId]
+        );
+      } else {
+        await client.query(
+          `UPDATE quotation_items
+           SET procurement_status = CASE 
+                 WHEN $1 = 'AWAITING_DELIVERY' THEN 'On the Way'
+                 ELSE 'Availability Confirmed'
+               END,
+               expected_dispatch_date = COALESCE($2, expected_dispatch_date),
+               procurement_updated_at = CURRENT_TIMESTAMP,
+               procurement_updated_by_name = $3
+           WHERE id = $4`,
+          [purchase_status, expected_date || null, req.user!.full_name, itemId]
+        );
+      }
+    });
+
+    broadcast({
+      type: 'item_status:changed',
+      payload: { quotation_id: item.quotation_id, quotation_item_id: itemId, status: markArrived ? 'Ready Stock' : purchase_status },
+    });
+
+    res.json({ success: true, message: markArrived ? 'Item received at Godown and marked Ready Stock!' : 'Local purchase tracker updated!' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. FACTORY ORDER TRACKING (Direct factory manufacturing & container tracking)
+dispatchRouter.get('/factory-tracker', async (req: Request, res: Response) => {
+  try {
+    const rows = await query(
+      `SELECT 
+        qi.id as quotation_item_id,
+        qi.quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as required_quantity,
+        COALESCE(fo.factory_name, qi.brand, 'Factory Plant') as factory_name,
+        fo.brand_name,
+        fo.batch_shade_code,
+        fo.lr_number,
+        fo.transporter_name,
+        fo.truck_number,
+        fo.order_date,
+        COALESCE(fo.eta_date, qi.expected_dispatch_date) as eta_date,
+        fo.total_pallets,
+        fo.freight_cost,
+        COALESCE(fo.status, 
+          CASE 
+            WHEN qi.procurement_status = 'Reached to Godown' THEN 'UNLOADED'
+            WHEN qi.procurement_status = 'Dispatched' OR qi.procurement_status = 'On the Way' THEN 'IN_TRANSIT'
+            ELSE 'ORDER_PLACED'
+          END
+        ) as status,
+        fo.notes as factory_notes,
+        qi.procurement_notes,
+        qi.item_image
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
+      WHERE qi.dispatch_status = 'Factory Order'
+        AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
+        AND LOWER(q.status) IN ('closed', 'approved')
+      ORDER BY COALESCE(fo.eta_date, qi.expected_dispatch_date, qi.id) ASC`
+    );
+
+    res.json({ success: true, count: rows.length, orders: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update factory order item tracking
+dispatchRouter.patch('/factory-tracker/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id as string, 10);
+    const { factory_name, batch_shade_code, lr_number, transporter_name, truck_number, eta_date, status, freight_cost, total_pallets, notes } = req.body;
+
+    const itemRows = await query('SELECT * FROM quotation_items WHERE id = $1', [itemId]);
+    if (itemRows.length === 0) {
+      res.status(404).json({ error: 'Line item not found' });
+      return;
+    }
+    const item = itemRows[0];
+    const markUnloaded = status === 'UNLOADED';
+
+    await withTransaction(async (client) => {
+      // Upsert factory_orders
+      await client.query(
+        `INSERT INTO factory_orders (
+          quotation_item_id, quotation_id, factory_name, brand_name, batch_shade_code,
+          lr_number, transporter_name, truck_number, eta_date, unloaded_date, status,
+          freight_cost, total_pallets, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (id) DO UPDATE
+        SET factory_name = COALESCE($3, factory_orders.factory_name),
+            batch_shade_code = COALESCE($5, factory_orders.batch_shade_code),
+            lr_number = COALESCE($6, factory_orders.lr_number),
+            transporter_name = COALESCE($7, factory_orders.transporter_name),
+            truck_number = COALESCE($8, factory_orders.truck_number),
+            eta_date = COALESCE($9, factory_orders.eta_date),
+            unloaded_date = CASE WHEN $11 = 'UNLOADED' THEN CURRENT_TIMESTAMP ELSE factory_orders.unloaded_date END,
+            status = COALESCE($11, factory_orders.status),
+            freight_cost = COALESCE($12, factory_orders.freight_cost),
+            total_pallets = COALESCE($13, factory_orders.total_pallets),
+            notes = COALESCE($14, factory_orders.notes),
+            updated_at = CURRENT_TIMESTAMP`,
+        [
+          itemId,
+          item.quotation_id,
+          factory_name || 'Factory Plant',
+          item.brand || 'Factory',
+          batch_shade_code || null,
+          lr_number || null,
+          transporter_name || null,
+          truck_number || null,
+          eta_date || null,
+          markUnloaded ? new Date() : null,
+          status || 'ORDER_PLACED',
+          freight_cost || 0,
+          total_pallets || 0,
+          notes || null,
+        ]
+      );
+
+      if (markUnloaded) {
+        await client.query(
+          `UPDATE quotation_items
+           SET dispatch_status = 'Ready Stock',
+               procurement_status = 'Reached to Godown',
+               procurement_updated_at = CURRENT_TIMESTAMP,
+               procurement_updated_by_name = $1
+           WHERE id = $2`,
+          [req.user!.full_name, itemId]
+        );
+      } else {
+        await client.query(
+          `UPDATE quotation_items
+           SET procurement_status = CASE 
+                 WHEN $1 = 'IN_TRANSIT' THEN 'On the Way'
+                 ELSE 'Availability Confirmed'
+               END,
+               expected_dispatch_date = COALESCE($2, expected_dispatch_date),
+               procurement_updated_at = CURRENT_TIMESTAMP,
+               procurement_updated_by_name = $3
+           WHERE id = $4`,
+          [status, eta_date || null, req.user!.full_name, itemId]
+        );
+      }
+    });
+
+    broadcast({
+      type: 'item_status:changed',
+      payload: { quotation_id: item.quotation_id, quotation_item_id: itemId, status: markUnloaded ? 'Ready Stock' : status },
+    });
+
+    res.json({ success: true, message: markUnloaded ? 'Factory shipment unloaded and marked Ready Stock!' : 'Factory order tracking updated!' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. CLIENT PAYMENT TRACKING & DISPATCH SAFETY GATE
+dispatchRouter.get('/payment-tracking', async (req: Request, res: Response) => {
+  try {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSalesperson = userRole === 'salesperson';
+    const userFilter = isSalesperson ? 'AND q.sales_person_id = $1' : '';
+    const userParams = isSalesperson ? [req.user!.id] : [];
+
+    const rows = await query(
+      `SELECT 
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.site_location,
+        q.sales_person_name,
+        q.net_total,
+        COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
+        COALESCE(p_pay.verified_paid, 0) as verified_paid,
+        COALESCE(p_pay.unverified_paid, 0) as unverified_paid,
+        COALESCE(p_pay.total_recorded, 0) as total_recorded,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due,
+        CASE 
+          WHEN COALESCE(p_pay.verified_paid, 0) >= q.net_total - 0.5 THEN 'CLEARED'
+          WHEN COALESCE(p_pay.verified_paid, 0) > 0 THEN 'PARTIAL'
+          ELSE 'PENDING'
+        END as payment_clearance_status,
+        CASE 
+          WHEN COALESCE(p_pay.verified_paid, 0) < q.net_total - 0.5 THEN true
+          ELSE false
+        END as has_shortfall,
+        GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as shortfall_amount,
+        COALESCE(p_pay.payment_modes, 'None') as payment_modes,
+        COALESCE(p_pay.receipt_count, 0) as receipt_count
+      FROM quotations q
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          SUM(CASE WHEN status IN ('Cleared', 'Verified') THEN amount ELSE 0 END) as verified_paid,
+          SUM(CASE WHEN status = 'Recorded' THEN amount ELSE 0 END) as unverified_paid,
+          SUM(amount) as total_recorded,
+          STRING_AGG(DISTINCT payment_mode, ', ') as payment_modes,
+          COUNT(*) as receipt_count
+        FROM payments
+        GROUP BY quotation_id
+      ) p_pay ON p_pay.quotation_id = q.id
+      WHERE LOWER(q.status) IN ('closed', 'approved')
+        ${userFilter}
+      ORDER BY q.id DESC`,
+      userParams
+    );
+
+    res.json({ success: true, count: rows.length, ledgers: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. LOCAL PURCHASE HISTORY (Historical audit of completed local procurement)
+dispatchRouter.get('/local-history', async (req: Request, res: Response) => {
+  try {
+    const rows = await query(
+      `SELECT 
+        qi.id as quotation_item_id,
+        qi.quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        qi.description,
+        qi.brand,
+        qi.size,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as quantity,
+        COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) as quoted_rate,
+        COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0) as actual_purchase_rate,
+        (COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) - COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0)) as variance_per_unit,
+        ROUND((COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) - COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0)) * COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1), 2) as total_margin_variance,
+        COALESCE(lp.vendor_name, qi.brand, 'Local Distributor') as vendor_name,
+        lp.invoice_number,
+        COALESCE(lp.completed_date, qi.procurement_updated_at, qi.updated_at) as delivery_date,
+        COALESCE(lp.purchase_status, 'ARRIVED_AT_GODOWN') as purchase_status,
+        lp.notes
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
+      WHERE (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status = 'Dispatched' OR lp.purchase_status = 'ARRIVED_AT_GODOWN')
+        AND (lp.id IS NOT NULL OR qi.dispatch_status IN ('Need to Arrange from Local', 'Dispatched'))
+      ORDER BY COALESCE(lp.completed_date, qi.procurement_updated_at) DESC LIMIT 200`
+    );
+
+    res.json({ success: true, count: rows.length, history: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. FACTORY ORDER HISTORY (Historical audit of completed factory shipments)
+dispatchRouter.get('/factory-history', async (req: Request, res: Response) => {
+  try {
+    const rows = await query(
+      `SELECT 
+        qi.id as quotation_item_id,
+        qi.quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        qi.description,
+        qi.brand,
+        qi.size,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as quantity,
+        COALESCE(fo.factory_name, qi.brand, 'Factory Plant') as factory_name,
+        fo.brand_name,
+        fo.batch_shade_code,
+        fo.lr_number,
+        fo.transporter_name,
+        fo.truck_number,
+        fo.order_date,
+        fo.eta_date,
+        COALESCE(fo.unloaded_date, qi.procurement_updated_at, qi.updated_at) as unloaded_date,
+        fo.total_pallets,
+        fo.freight_cost,
+        fo.notes
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
+      WHERE (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status = 'Dispatched' OR fo.status = 'UNLOADED')
+        AND (fo.id IS NOT NULL OR qi.dispatch_status IN ('Factory Order', 'Dispatched'))
+      ORDER BY COALESCE(fo.unloaded_date, qi.procurement_updated_at) DESC LIMIT 200`
+    );
+
+    res.json({ success: true, count: rows.length, history: rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 11. REPORTS (Aggregated analytics across date ranges)
+dispatchRouter.get('/reports', async (req: Request, res: Response) => {
+  try {
+    const { range = 'this_month', from_date, to_date } = req.query;
+
+    let dateCondition = "q.updated_at >= CURRENT_DATE - INTERVAL '30 days'";
+    if (range === 'today') {
+      dateCondition = 'q.updated_at::date = CURRENT_DATE';
+    } else if (range === 'this_week') {
+      dateCondition = "q.updated_at >= DATE_TRUNC('week', CURRENT_DATE)";
+    } else if (range === 'this_month') {
+      dateCondition = "q.updated_at >= DATE_TRUNC('month', CURRENT_DATE)";
+    } else if (range === 'custom' && from_date && to_date) {
+      dateCondition = `q.updated_at::date BETWEEN '${from_date}' AND '${to_date}'`;
+    }
+
+    // 1. Dispatch summary
+    const dispSummary = await query(
+      `SELECT 
+        COUNT(CASE WHEN q.dispatch_status = 'Dispatched' THEN 1 END) as completed_orders,
+        COUNT(CASE WHEN q.dispatch_status != 'Dispatched' THEN 1 END) as pending_orders,
+        SUM(CASE WHEN q.dispatch_status = 'Dispatched' THEN q.net_total ELSE 0 END) as delivered_value,
+        SUM(CASE WHEN q.dispatch_status != 'Dispatched' THEN q.net_total ELSE 0 END) as pending_backlog_value,
+        COALESCE(SUM(qi.dispatched_quantity), 0) as total_boxes_delivered
+      FROM quotations q
+      LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+      WHERE LOWER(q.status) IN ('closed', 'approved') AND ${dateCondition}`
+    );
+
+    // 2. Local purchase summary
+    const localSummary = await query(
+      `SELECT 
+        COUNT(*) as total_local_items,
+        SUM(COALESCE(qi.total_amount, 0)) as total_local_quoted_spend,
+        SUM(COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0) * COALESCE(qi.quantity_boxes, 1)) as total_actual_spend,
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as items_arrived
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
+      WHERE qi.dispatch_status = 'Need to Arrange from Local' AND ${dateCondition}`
+    );
+
+    // 3. Factory orders summary
+    const factorySummary = await query(
+      `SELECT 
+        COUNT(*) as total_factory_items,
+        SUM(COALESCE(qi.quantity_boxes, qi.quantity_sqft, 0)) as total_factory_volume,
+        SUM(COALESCE(fo.freight_cost, 0)) as total_freight_cost,
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as factory_unloaded
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
+      WHERE qi.dispatch_status = 'Factory Order' AND ${dateCondition}`
+    );
+
+    res.json({
+      success: true,
+      range,
+      dispatch: dispSummary[0] || {},
+      local: localSummary[0] || {},
+      factory: factorySummary[0] || {},
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 12. OFFICIAL DELIVERY CHALLAN PDF GENERATOR
+dispatchRouter.get('/challan/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const qId = parseInt(req.params.id as string, 10);
+    const quoteRows = await query(
+      `SELECT q.*, 
+              COALESCE(q.delivery_address, q.site_location, 'Customer Destination Site') as delivery_site,
+              dr.dispatch_number,
+              COALESCE(dr.challan_number, q.delivery_challan_number, 'DC-2026-' || LPAD(q.id::TEXT, 4, '0')) as challan_number,
+              dr.vehicle_no,
+              dr.driver_name,
+              dr.driver_phone,
+              COALESCE(dr.completed_date, q.dispatched_at, CURRENT_TIMESTAMP) as dispatch_time,
+              COALESCE(dr.dispatched_by_name, q.dispatched_by_name, 'Warehouse Dispatcher') as dispatched_by_name
+       FROM quotations q
+       LEFT JOIN (
+         SELECT DISTINCT ON (quotation_id) *
+         FROM dispatch_records
+         ORDER BY quotation_id, id DESC
+       ) dr ON dr.quotation_id = q.id
+       WHERE q.id = $1`,
+      [qId]
+    );
+
+    if (quoteRows.length === 0) {
+      res.status(404).send('Quotation not found');
+      return;
+    }
+    const q = quoteRows[0];
+
+    const itemRows = await query(
+      `SELECT qi.*, qa.area_name
+       FROM quotation_items qi
+       LEFT JOIN quotation_areas qa ON qa.id = qi.area_id
+       WHERE qi.quotation_id = $1
+       ORDER BY qa.display_order ASC NULLS LAST, qi.id ASC`,
+      [qId]
+    );
+
+    const compRows = await query('SELECT * FROM company_settings LIMIT 1');
+    const comp = compRows[0] || { company_name: 'AMA CERAMICS PVT LTD', address_line1: 'Whitefield, Bengaluru', phone: '+91 96637 73871', gstin: '29ABCDE1234F1Z5' };
+
+    const doc = new PDFDocument({ margin: 36, size: 'A4' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Challan_${q.challan_number}.pdf"`);
+    doc.pipe(res);
+
+    // Header bar
+    doc.rect(36, 36, 523, 60).fill('#1E293B');
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF').text(comp.company_name.toUpperCase(), 50, 48);
+    doc.fontSize(8.5).font('Helvetica').fillColor('#94A3B8').text(comp.tagline || 'Commercial Quotation & Dispatch Management', 50, 68);
+    doc.fontSize(8.5).fillColor('#E2E8F0').text(`GSTIN: ${comp.gstin || '-'} | Phone: ${comp.phone || '-'}`, 50, 80);
+
+    // Title banner
+    doc.rect(36, 104, 523, 24).fill('#E2E8F0');
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#0F172A').text('OFFICIAL DELIVERY CHALLAN / GOODS DISPATCH NOTE', 50, 110, { align: 'center', width: 495 });
+
+    // Meta box
+    doc.rect(36, 136, 523, 75).stroke('#CBD5E1');
+    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#334155');
+    doc.text(`Challan No: ${q.challan_number}`, 46, 144);
+    doc.text(`Quotation Ref: ${q.quotation_number}`, 46, 158);
+    doc.text(`Dispatch Date: ${new Date(q.dispatch_time).toLocaleDateString('en-IN')}`, 46, 172);
+    doc.text(`Vehicle No: ${q.vehicle_no || 'Standard Commercial'}`, 46, 186);
+
+    doc.text(`Customer: ${q.customer_name}`, 310, 144);
+    doc.text(`Contact: ${q.customer_phone || '-'}`, 310, 158);
+    doc.text(`Driver / Phone: ${q.driver_name || '-'} (${q.driver_phone || '-'})`, 310, 172);
+    doc.text(`Delivery Site: ${(q.delivery_site || '').substring(0, 35)}`, 310, 186);
+
+    // Table Header
+    let y = 222;
+    doc.rect(36, y, 523, 20).fill('#3B82F6');
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
+    doc.text('Sl.', 44, y + 6, { width: 25, align: 'center' });
+    doc.text('Item Description', 74, y + 6, { width: 200 });
+    doc.text('Brand / Size', 278, y + 6, { width: 95 });
+    doc.text('Ordered Qty', 377, y + 6, { width: 60, align: 'right' });
+    doc.text('Dispatched Qty', 441, y + 6, { width: 60, align: 'right' });
+    doc.text('Status', 505, y + 6, { width: 50, align: 'center' });
+
+    y += 20;
+    let totalDeliveredBoxes = 0;
+
+    itemRows.forEach((it: any, idx: number) => {
+      const rowH = 18;
+      doc.rect(36, y, 523, rowH).stroke('#E2E8F0');
+      doc.fontSize(7.5).font('Helvetica').fillColor('#1E293B');
+
+      const ord = parseFloat(it.quantity_boxes || it.quantity_sqft || 1);
+      const disp = parseFloat(it.dispatched_quantity || ord);
+      totalDeliveredBoxes += disp;
+
+      doc.text(String(idx + 1), 44, y + 5, { width: 25, align: 'center' });
+      doc.text(it.description || '-', 74, y + 5, { width: 200, ellipsis: true });
+      doc.text(`${it.brand || '-'} / ${it.size || '-'}`, 278, y + 5, { width: 95, ellipsis: true });
+      doc.text(`${ord.toFixed(0)} ${it.product_type || 'boxes'}`, 377, y + 5, { width: 60, align: 'right' });
+      doc.text(`${disp.toFixed(0)} ${it.product_type || 'boxes'}`, 441, y + 5, { width: 60, align: 'right' });
+      doc.text(it.dispatch_status || 'Ready', 505, y + 5, { width: 50, align: 'center' });
+
+      y += rowH;
+    });
+
+    // Summary row
+    doc.rect(36, y, 523, 20).fill('#F1F5F9');
+    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0F172A');
+    doc.text('TOTAL DISPATCHED UNITS:', 250, y + 6);
+    doc.text(`${totalDeliveredBoxes.toFixed(0)} Boxes / Units`, 441, y + 6, { width: 60, align: 'right' });
+    y += 40;
+
+    // Terms & Signatures
+    doc.fontSize(7.5).font('Helvetica').fillColor('#64748B');
+    doc.text('Declaration: Received the above-listed materials in good order and condition with verified quantities.', 36, y);
+    y += 45;
+
+    // Signature boxes
+    doc.rect(50, y, 180, 50).stroke('#CBD5E1');
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#475569').text('DISPATCHED BY (GODOWN SUPERVISOR)', 60, y + 8);
+    doc.font('Helvetica').text(`Name: ${q.dispatched_by_name}`, 60, y + 26);
+    doc.text('Signature & Stamp: _______________', 60, y + 38);
+
+    doc.rect(330, y, 180, 50).stroke('#CBD5E1');
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#475569').text('RECEIVED BY (CUSTOMER / SITE AGENT)', 340, y + 8);
+    doc.font('Helvetica').text(`Customer: ${q.customer_name}`, 340, y + 26);
+    doc.text('Signature & Date: _________________', 340, y + 38);
+
+    doc.end();
+  } catch (error: any) {
+    res.status(500).send('Error generating Delivery Challan: ' + error.message);
+  }
+});

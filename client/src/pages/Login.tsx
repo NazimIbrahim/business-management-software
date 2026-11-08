@@ -396,7 +396,7 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
         <span className="stream-footer-copy">
           © {new Date().getFullYear()} {company?.company_name || 'AMA CERAMICS PVT LTD'}. All rights reserved.
         </span>
-        <span className="stream-footer-version">v2.4.48</span>
+        <span className="stream-footer-version">v2.4.49</span>
       </footer>
     </div>
   );

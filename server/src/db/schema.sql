@@ -311,3 +311,94 @@ CREATE TABLE IF NOT EXISTS product_encrypted_codes (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_product_encrypted_codes_norm ON product_encrypted_codes (normalized_name);
 CREATE INDEX IF NOT EXISTS idx_product_encrypted_codes_code ON product_encrypted_codes (encrypted_code);
 
+-- -------------------------------------------------------------
+-- DISPATCH SUBSYSTEM TABLES
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS dispatch_records (
+    id SERIAL PRIMARY KEY,
+    dispatch_number VARCHAR(60) UNIQUE NOT NULL,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    status VARCHAR(40) NOT NULL DEFAULT 'PROCESSING',
+    scheduled_date DATE,
+    completed_date TIMESTAMPTZ,
+    vehicle_no VARCHAR(50),
+    driver_name VARCHAR(120),
+    driver_phone VARCHAR(30),
+    delivery_address TEXT,
+    challan_number VARCHAR(80),
+    notes TEXT,
+    dispatched_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    dispatched_by_name VARCHAR(120),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dispatch_records_qid ON dispatch_records (quotation_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_records_status ON dispatch_records (status);
+CREATE INDEX IF NOT EXISTS idx_dispatch_records_sched ON dispatch_records (scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_dispatch_records_challan ON dispatch_records (challan_number);
+
+CREATE TABLE IF NOT EXISTS dispatch_items (
+    id SERIAL PRIMARY KEY,
+    dispatch_id INTEGER NOT NULL REFERENCES dispatch_records(id) ON DELETE CASCADE,
+    quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+    ordered_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    quantity_dispatched NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    unit VARCHAR(30) DEFAULT 'boxes',
+    status VARCHAR(40) NOT NULL DEFAULT 'PENDING',
+    remarks TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dispatch_items_did ON dispatch_items (dispatch_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_items_qiid ON dispatch_items (quotation_item_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_items_status ON dispatch_items (status);
+
+CREATE TABLE IF NOT EXISTS local_purchases (
+    id SERIAL PRIMARY KEY,
+    quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    vendor_name VARCHAR(180) NOT NULL DEFAULT 'Local Distributor',
+    vendor_contact VARCHAR(50),
+    required_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    quoted_rate NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    actual_purchase_rate NUMERIC(12, 2) DEFAULT 0,
+    purchase_status VARCHAR(40) NOT NULL DEFAULT 'PO_RAISED',
+    invoice_number VARCHAR(100),
+    expected_date DATE,
+    completed_date TIMESTAMPTZ,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_local_purchases_qid ON local_purchases (quotation_id);
+CREATE INDEX IF NOT EXISTS idx_local_purchases_qiid ON local_purchases (quotation_item_id);
+CREATE INDEX IF NOT EXISTS idx_local_purchases_status ON local_purchases (purchase_status, expected_date);
+CREATE INDEX IF NOT EXISTS idx_local_purchases_vendor ON local_purchases (vendor_name);
+
+CREATE TABLE IF NOT EXISTS factory_orders (
+    id SERIAL PRIMARY KEY,
+    quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    factory_name VARCHAR(180) NOT NULL DEFAULT 'Factory / Morbi Plant',
+    brand_name VARCHAR(120),
+    batch_shade_code VARCHAR(100),
+    lr_number VARCHAR(100),
+    transporter_name VARCHAR(150),
+    truck_number VARCHAR(50),
+    order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    eta_date DATE,
+    unloaded_date TIMESTAMPTZ,
+    status VARCHAR(40) NOT NULL DEFAULT 'ORDER_PLACED',
+    freight_cost NUMERIC(12, 2) DEFAULT 0,
+    total_pallets NUMERIC(10, 2) DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_factory_orders_qid ON factory_orders (quotation_id);
+CREATE INDEX IF NOT EXISTS idx_factory_orders_qiid ON factory_orders (quotation_item_id);
+CREATE INDEX IF NOT EXISTS idx_factory_orders_status ON factory_orders (status, eta_date);
+CREATE INDEX IF NOT EXISTS idx_factory_orders_factory ON factory_orders (factory_name);
+CREATE INDEX IF NOT EXISTS idx_factory_orders_lr ON factory_orders (lr_number);
+
+

@@ -186,9 +186,16 @@ const AppContent: React.FC = () => {
     // Restrict dispatch team exclusively to dispatch views
     const isDispatch = user?.role === 'dispatch' || user?.role === 'dispatch_team';
     if (isDispatch) {
-      if (activeTab === 'dispatch') return <DispatchManagement initialView="all" />;
-      if (activeTab === 'dispatch-factory') return <DispatchManagement initialView="factory-orders" />;
-      return <DispatchManagement initialView="local-purchase" />;
+      if (activeTab === 'dispatch-processing') return <DispatchManagement initialView="processing" />;
+      if (activeTab === 'dispatch-completed') return <DispatchManagement initialView="completed" />;
+      if (activeTab === 'dispatch-schedule') return <DispatchManagement initialView="schedule" />;
+      if (activeTab === 'dispatch-local-tracker' || activeTab === 'dispatch-local') return <DispatchManagement initialView="local-tracker" />;
+      if (activeTab === 'dispatch-factory-tracker' || activeTab === 'dispatch-factory') return <DispatchManagement initialView="factory-tracker" />;
+      if (activeTab === 'dispatch-payment-tracking') return <DispatchManagement initialView="payment-tracking" />;
+      if (activeTab === 'dispatch-local-history') return <DispatchManagement initialView="local-history" />;
+      if (activeTab === 'dispatch-factory-history') return <DispatchManagement initialView="factory-history" />;
+      if (activeTab === 'dispatch-reports') return <DispatchManagement initialView="reports" />;
+      return <DispatchManagement initialView="all-closed" />;
     }
 
     // If a quotation is being edited or created
@@ -261,11 +268,28 @@ const AppContent: React.FC = () => {
           />
         );
       case 'dispatch':
-        return <DispatchManagement initialView="all" />;
+      case 'dispatch-all-closed':
+        return <DispatchManagement initialView="all-closed" />;
+      case 'dispatch-processing':
+        return <DispatchManagement initialView="processing" />;
+      case 'dispatch-completed':
+        return <DispatchManagement initialView="completed" />;
+      case 'dispatch-schedule':
+        return <DispatchManagement initialView="schedule" />;
+      case 'dispatch-local-tracker':
       case 'dispatch-local':
-        return <DispatchManagement initialView="local-purchase" />;
+        return <DispatchManagement initialView="local-tracker" />;
+      case 'dispatch-factory-tracker':
       case 'dispatch-factory':
-        return <DispatchManagement initialView="factory-orders" />;
+        return <DispatchManagement initialView="factory-tracker" />;
+      case 'dispatch-payment-tracking':
+        return <DispatchManagement initialView="payment-tracking" />;
+      case 'dispatch-local-history':
+        return <DispatchManagement initialView="local-history" />;
+      case 'dispatch-factory-history':
+        return <DispatchManagement initialView="factory-history" />;
+      case 'dispatch-reports':
+        return <DispatchManagement initialView="reports" />;
       case 'salespersons':
         return (
           <SalespersonDashboard
