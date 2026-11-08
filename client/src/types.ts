@@ -174,6 +174,8 @@ export interface Quotation {
   project_name?: string;
   quotation_type?: QuotationType;
   sales_category?: SalesCategory;
+  created_by_id?: number;
+  created_by_name?: string;
   status: 'draft' | 'in_review' | 'approved' | 'rejected' | 'closed';
   manager_approval_note?: string;
   approved_by_id?: number;

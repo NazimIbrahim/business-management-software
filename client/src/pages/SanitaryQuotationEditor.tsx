@@ -32,6 +32,7 @@ import {
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { SanitaryCatalogPickerModal } from '../components/SanitaryCatalogPickerModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
+import { SalespersonSelect } from '../components/SalespersonSelect';
 import { SanitaryCatalogItem } from '../types';
 import { numberToWordsIndian } from '../utils/numberToWords';
 
@@ -90,6 +91,11 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
 
   // Tax State
   const [taxType, setTaxType] = useState<'cgst_sgst' | 'igst' | 'exempt'>('cgst_sgst');
+
+  // Assigned Salesperson State (for Accounts / Billing Desk workflow)
+  const [assignedSalesPersonId, setAssignedSalesPersonId] = useState<number | null>(null);
+  const [assignedSalesPersonName, setAssignedSalesPersonName] = useState<string>('');
+  const [salesPersonError, setSalesPersonError] = useState<string | null>(null);
 
   // Split Sales State
   const [enableSplitSale, setEnableSplitSale] = useState(false);
@@ -227,6 +233,8 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
       setSpecialNotes(q.special_notes || '');
       setTaxType(q.tax_type || 'cgst_sgst');
       setPrimarySalesPersonName(q.sales_person_name);
+      setAssignedSalesPersonId(q.sales_person_id || null);
+      setAssignedSalesPersonName(q.sales_person_name || '');
 
       if (q.assisted_sales_person_id) {
         setEnableSplitSale(true);
@@ -917,6 +925,13 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
       return null;
     }
 
+    const isAccountsOrAdmin = ['admin', 'accounts', 'manager'].includes((user?.role || '').toLowerCase());
+    if (isAccountsOrAdmin && (!assignedSalesPersonId || assignedSalesPersonId <= 0)) {
+      setError('Please select an assigned sales executive for this quotation.');
+      setSalesPersonError('Please select an assigned sales executive');
+      return null;
+    }
+
     if (enableSplitSale && !assistedSalesPersonId) {
       setError('Please select an assisted salesperson or disable split sale.');
       return null;
@@ -936,6 +951,8 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
         delivery_address: deliveryAddress.trim(),
         site_location: siteLocation.trim(),
         project_name: projectName.trim(),
+        sales_person_id: assignedSalesPersonId,
+        sales_person_name: assignedSalesPersonName,
         status: finalStatus,
         tax_type: taxType,
         special_notes: specialNotes.trim(),
@@ -1199,6 +1216,30 @@ export const SanitaryQuotationEditor: React.FC<Props> = ({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Salesperson Assignment & Billing Desk Header Bar */}
+        <div className="mb-4 p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-2xl border border-slate-200/90 shadow-2xs grid grid-cols-1 md:grid-cols-2 gap-3.5 items-end">
+          <SalespersonSelect
+            value={assignedSalesPersonId}
+            onChange={(sp) => {
+              setAssignedSalesPersonId(sp.id);
+              setAssignedSalesPersonName(sp.full_name);
+              setPrimarySalesPersonName(sp.full_name);
+              setSalesPersonError(null);
+            }}
+            error={salesPersonError}
+          />
+          <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-700">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Prepared & Billed By</span>
+              <span className="font-bold text-slate-900">{user?.full_name}</span>
+              <span className="text-[10px] text-slate-400 font-mono ml-1.5">(@{user?.username})</span>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              Role: {user?.role}
+            </span>
           </div>
         </div>
 

@@ -67,89 +67,93 @@ export const CompletedDispatchView: React.FC<Props> = ({
   const totalBoxes = filtered.reduce((acc, c) => acc + parseFloat(String(c.total_boxes || 0)), 0);
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Metrics Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-2.5 shrink-0">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Dispatches Completed</div>
-            <div className="text-2xl font-black text-emerald-700 mt-1">{filtered.length}</div>
-            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">100% Fulfilled & Delivered</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Dispatches Completed</div>
+            <div className="text-xl sm:text-2xl font-black text-emerald-700 mt-0.5">{filtered.length}</div>
+            <div className="text-[10px] text-emerald-600 font-semibold">100% Fulfilled & Delivered</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 size={22} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+            <CheckCircle2 size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Material Volume</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{Math.round(totalBoxes)}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Delivered Boxes / Units</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Material Volume</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{Math.round(totalBoxes)}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Delivered Boxes / Units</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700">
-            <Package size={22} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+            <Package size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Value Delivered</div>
-            <div className="text-xl font-black text-slate-900 mt-1">₹ {formatCurrency(totalDeliveredValue)}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Successfully Fulfilled Orders</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Value Delivered</div>
+            <div className="text-lg sm:text-xl font-black text-slate-900 mt-0.5">₹ {formatCurrency(totalDeliveredValue)}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Successfully Fulfilled Orders</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-            <Truck size={22} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <Truck size={18} />
           </div>
         </div>
       </div>
 
       {/* Search Toolbar */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[260px]">
+      <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="relative flex-1 min-w-[240px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search completed dispatches by challan #, quote ref, customer, driver, vehicle..."
-            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900"
+            className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900"
           />
         </div>
 
         <button
           onClick={onRefresh}
-          className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors shrink-0"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span>Refresh Completed</span>
         </button>
       </div>
 
-      {/* Archive Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* Archive Table Container with Isolated Scroll */}
+      <div className="flex-1 min-h-0 w-full bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-            Loading completed dispatches archive...
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+              <span>Loading completed dispatches archive...</span>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <CheckCircle2 size={32} className="mx-auto mb-2 text-slate-300" />
-            No completed dispatches match the search criteria.
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-slate-300" />
+              <span>No completed dispatches match the search criteria.</span>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex-1 min-h-0 w-full overflow-x-auto overflow-y-auto scrollbar-thin">
             <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-3 px-3">Challan & Quote</th>
-                  <th className="py-3 px-3">Customer & Destination</th>
-                  <th className="py-3 px-3">Vehicle & Driver</th>
-                  <th className="py-3 px-3 text-right">Delivered Units</th>
-                  <th className="py-3 px-3 text-right">Order Value</th>
-                  <th className="py-3 px-3">Completed Date</th>
-                  <th className="py-3 px-3 text-right">Delivery Challan</th>
+              <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-xs">
+                <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-2.5 px-3">Challan & Quote</th>
+                  <th className="py-2.5 px-3">Customer & Destination</th>
+                  <th className="py-2.5 px-3">Vehicle & Driver</th>
+                  <th className="py-2.5 px-3 text-right">Delivered Units</th>
+                  <th className="py-2.5 px-3 text-right">Order Value</th>
+                  <th className="py-2.5 px-3">Completed Date</th>
+                  <th className="py-2.5 px-3 text-right">Delivery Challan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

@@ -162,11 +162,11 @@ export const DispatchReportsView: React.FC<Props> = ({
   const f = reportData?.factory || {};
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Top Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
-          <span className="text-xs font-bold text-slate-500 uppercase mr-1">Timeframe:</span>
+      <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
+          <span className="text-[11px] font-bold text-slate-500 uppercase mr-1">Timeframe:</span>
           {(['today', 'this_week', 'this_month'] as const).map((r) => (
             <button
               key={r}
@@ -193,24 +193,24 @@ export const DispatchReportsView: React.FC<Props> = ({
         </div>
 
         {/* 1-Click Export Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           <button
             onClick={exportToCsv}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer shadow-2xs"
+            className="inline-flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer shadow-2xs"
           >
             <Download size={13} />
             <span>Export CSV</span>
           </button>
           <button
             onClick={exportToExcel}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
+            className="inline-flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
           >
             <Download size={13} />
             <span>Export Excel</span>
           </button>
           <button
             onClick={handlePrintPdf}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold cursor-pointer shadow-xs"
+            className="inline-flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold cursor-pointer shadow-xs"
           >
             <Printer size={13} />
             <span>Print PDF</span>
@@ -220,7 +220,7 @@ export const DispatchReportsView: React.FC<Props> = ({
 
       {/* Custom Date Selector */}
       {range === 'custom' && (
-        <form onSubmit={handleCustomSubmit} className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex items-center space-x-3 text-xs">
+        <form onSubmit={handleCustomSubmit} className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center space-x-3 text-xs shrink-0">
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-700">From:</span>
             <input
@@ -251,12 +251,14 @@ export const DispatchReportsView: React.FC<Props> = ({
       )}
 
       {loading ? (
-        <div className="p-12 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-          Aggregating dispatch and procurement reports...
+        <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
+          <div>
+            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+            <span>Aggregating dispatch and procurement reports...</span>
+          </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto scrollbar-thin space-y-3 sm:space-y-4 pr-1">
           {/* Section 1: Dispatch Delivery Performance */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
             <div className="flex items-center space-x-2 mb-4">

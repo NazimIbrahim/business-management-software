@@ -97,10 +97,10 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   });
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Top Controls */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-2 flex-1 min-w-[260px]">
+      <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+        <div className="flex items-center space-x-2 flex-1 min-w-[240px]">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -108,14 +108,14 @@ export const ProcessingDispatchView: React.FC<Props> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search active dispatches by quote #, customer, vehicle, site..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900"
+              className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900"
             />
           </div>
         </div>
 
         <button
           onClick={onRefresh}
-          className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors shrink-0"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span>Refresh Active</span>
@@ -123,17 +123,21 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-          Loading active processing dispatches...
+        <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
+          <div>
+            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+            <span>Loading active processing dispatches...</span>
+          </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="p-12 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
-          No dispatches currently in processing. All items are either dispatched or yet to be sourced.
+        <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
+          <div>
+            <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+            <span>No dispatches currently in processing. All items are either dispatched or yet to be sourced.</span>
+          </div>
         </div>
       ) : (
-        <div className="space-y-3.5">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto scrollbar-thin space-y-2.5 sm:space-y-3 pr-1">
           {filtered.map((d) => {
             const isExpanded = expandedQuotes[d.id] ?? true; // default expanded
             const pct = d.progress_percent || 0;

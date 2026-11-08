@@ -915,22 +915,22 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-5 animate-fade-in max-w-[1600px] mx-auto min-h-screen">
+    <div className="h-full max-h-full w-full flex flex-col overflow-hidden bg-slate-50/60 dark:bg-slate-950 p-2 sm:p-3 lg:p-4 gap-2 sm:gap-2.5">
       {/* Top Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2">
         <div>
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
-              <Truck size={22} />
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-teal-500 text-white flex items-center justify-center shadow-xs">
+              <Truck size={17} />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center space-x-1.5 leading-none">
                 <span>Dispatch Management</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-widest border border-indigo-200">
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-widest border border-indigo-200">
                   Subsystem
                 </span>
               </h1>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5 leading-tight">
                 Centralized Godown Fulfillment, Local & Factory Procurement, Schedule & Audits
               </p>
             </div>
@@ -938,11 +938,11 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         </div>
 
         {/* Global Quick Action & Refresh */}
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2">
           {canSeeModifiedItemsAlert && (stats?.pending_item_changes_count || 0) > 0 && (
-            <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
-              <AlertTriangle size={14} className="text-rose-600 shrink-0" />
-              <span>{stats.pending_item_changes_count} Modified Order(s) Need Review</span>
+            <div className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center space-x-1 animate-pulse">
+              <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+              <span>{stats.pending_item_changes_count} Orders Need Review</span>
             </div>
           )}
 
@@ -950,11 +950,11 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
             type="button"
             onClick={handleRefreshActive}
             disabled={isCurrentViewLoading || loadingStats}
-            className="btn btn-secondary btn-sm text-xs flex items-center space-x-1.5 cursor-pointer text-slate-700 shadow-xs"
+            className="btn btn-secondary btn-sm h-8 px-2.5 text-xs flex items-center space-x-1.5 cursor-pointer text-slate-700 shadow-2xs"
             title="Refresh current module"
           >
             <RefreshCw
-              size={13}
+              size={12}
               className={isCurrentViewLoading || loadingStats ? 'animate-spin text-indigo-600' : 'text-slate-500'}
             />
             <span>Refresh</span>
@@ -963,7 +963,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       </div>
 
       {/* Top 10-Module Tab Navigation Bar */}
-      <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/90 shadow-inner overflow-x-auto scrollbar-thin">
+      <div className="flex-shrink-0 flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-xl border border-slate-200/90 shadow-inner overflow-x-auto scrollbar-thin">
         {moduleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentView === tab.id;
@@ -972,17 +972,17 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               key={tab.id}
               type="button"
               onClick={() => setCurrentView(tab.id)}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 isActive
-                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/25 ring-2 ring-slate-700/50'
+                  ? 'bg-slate-900 text-white shadow-xs ring-1 ring-slate-700/50'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
               }`}
             >
-              <Icon size={14} className={isActive ? 'text-teal-300' : 'text-slate-400'} />
+              <Icon size={13} className={isActive ? 'text-teal-300' : 'text-slate-400'} />
               <span>{tab.label}</span>
               {tab.badge !== undefined && tab.badge !== null && tab.badge !== 0 && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-extrabold ${
                     isActive ? 'bg-white/20 text-white' : tab.badgeColor || 'bg-slate-200 text-slate-700'
                   }`}
                 >
@@ -994,22 +994,22 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         })}
       </div>
 
-      {/* Active View Container */}
-      <div className="space-y-4">
+      {/* Fluid Dynamic Workspace Shell */}
+      <main className="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
         {renderActiveViewContent()}
-      </div>
+      </main>
 
       {/* MODAL 1: Partial Dispatch Recording Modal */}
       {partialModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
           onClick={() => setPartialModal(null)}
         >
           <div
-            className="card max-w-lg w-full p-6 bg-white border border-slate-200 shadow-2xl rounded-2xl space-y-4"
+            className="card max-w-lg w-full max-h-[85vh] bg-white border border-slate-200 shadow-2xl rounded-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+            <div className="flex-shrink-0 flex items-start justify-between border-b border-slate-200 p-4">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
                   <Truck size={18} className="text-teal-600" />
@@ -1022,121 +1022,124 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               <button
                 type="button"
                 onClick={() => setPartialModal(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Item Card Summary */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5">
-              <div className="font-bold text-slate-900 text-sm">{partialModal.item.description}</div>
-              <div className="text-slate-500 flex items-center space-x-2">
-                <span>Brand: {partialModal.item.brand || 'Standard'}</span>
-                <span>•</span>
-                <span>Size: {partialModal.item.size || 'N/A'}</span>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 scrollbar-thin">
+              {/* Item Card Summary */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5">
+                <div className="font-bold text-slate-900 text-sm">{partialModal.item.description}</div>
+                <div className="text-slate-500 flex items-center space-x-2">
+                  <span>Brand: {partialModal.item.brand || 'Standard'}</span>
+                  <span>•</span>
+                  <span>Size: {partialModal.item.size || 'N/A'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 text-center">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Ordered</span>
+                    <span className="text-xs font-extrabold text-slate-800 font-mono">
+                      {partialModal.item.ordered_quantity}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-teal-600 uppercase font-bold block">Delivered</span>
+                    <span className="text-xs font-extrabold text-teal-700 font-mono">
+                      {partialModal.item.quantity_dispatched || 0}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-amber-600 uppercase font-bold block">Remaining</span>
+                    <span className="text-xs font-extrabold text-amber-700 font-mono">
+                      {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 text-center">
-                <div className="bg-white p-2 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Ordered</span>
-                  <span className="text-xs font-extrabold text-slate-800 font-mono">
-                    {partialModal.item.ordered_quantity}
-                  </span>
+
+              {/* Form */}
+              <form id="partial-dispatch-form" onSubmit={handleRecordPartialSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Quantity to Dispatch Now <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      max={Number(partialModal.item.remaining_quantity || partialModal.item.ordered_quantity)}
+                      value={partialQty}
+                      onChange={(e) => setPartialQty(e.target.value)}
+                      required
+                      className="input input-sm text-sm font-mono font-bold w-full"
+                      placeholder="e.g. 50"
+                    />
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200 whitespace-nowrap">
+                      Units / Boxes
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Max dispatchable right now: {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
+                  </p>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-teal-600 uppercase font-bold block">Delivered</span>
-                  <span className="text-xs font-extrabold text-teal-700 font-mono">
-                    {partialModal.item.quantity_dispatched || 0}
-                  </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle / Truck No</label>
+                    <input
+                      type="text"
+                      value={partialVehicle}
+                      onChange={(e) => setPartialVehicle(e.target.value)}
+                      className="input input-sm text-xs font-mono uppercase"
+                      placeholder="KA-01-AB-1234"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Driver Name & Phone</label>
+                    <input
+                      type="text"
+                      value={partialDriverName}
+                      onChange={(e) => setPartialDriverName(e.target.value)}
+                      className="input input-sm text-xs"
+                      placeholder="Ramesh (+91 9876543210)"
+                    />
+                  </div>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-amber-600 uppercase font-bold block">Remaining</span>
-                  <span className="text-xs font-extrabold text-amber-700 font-mono">
-                    {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
-                  </span>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Delivery Notes / Remarks</label>
+                  <textarea
+                    rows={2}
+                    value={partialNotes}
+                    onChange={(e) => setPartialNotes(e.target.value)}
+                    className="input text-xs w-full"
+                    placeholder="Gate pass #, recipient notes, floor unloading..."
+                  />
                 </div>
-              </div>
+              </form>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleRecordPartialSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Quantity to Dispatch Now <span className="text-rose-500">*</span>
-                </label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="number"
-                    step="any"
-                    min="0.01"
-                    max={Number(partialModal.item.remaining_quantity || partialModal.item.ordered_quantity)}
-                    value={partialQty}
-                    onChange={(e) => setPartialQty(e.target.value)}
-                    required
-                    className="input input-sm text-sm font-mono font-bold w-full"
-                    placeholder="e.g. 50"
-                  />
-                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200 whitespace-nowrap">
-                    Units / Boxes
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Max dispatchable right now: {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle / Truck No</label>
-                  <input
-                    type="text"
-                    value={partialVehicle}
-                    onChange={(e) => setPartialVehicle(e.target.value)}
-                    className="input input-sm text-xs font-mono uppercase"
-                    placeholder="KA-01-AB-1234"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Driver Name & Phone</label>
-                  <input
-                    type="text"
-                    value={partialDriverName}
-                    onChange={(e) => setPartialDriverName(e.target.value)}
-                    className="input input-sm text-xs"
-                    placeholder="Ramesh (+91 9876543210)"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Delivery Notes / Remarks</label>
-                <textarea
-                  rows={2}
-                  value={partialNotes}
-                  onChange={(e) => setPartialNotes(e.target.value)}
-                  className="input text-xs w-full"
-                  placeholder="Gate pass #, recipient notes, floor unloading..."
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setPartialModal(null)}
-                  className="btn btn-secondary btn-sm text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={recordingPartial}
-                  className="btn btn-primary btn-sm text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white border-none shadow-xs flex items-center space-x-1.5"
-                >
-                  <Check size={14} className={recordingPartial ? 'animate-spin' : ''} />
-                  <span>{recordingPartial ? 'Recording...' : 'Confirm Dispatch & Create Challan'}</span>
-                </button>
-              </div>
-            </form>
+            <div className="flex-shrink-0 flex items-center justify-end space-x-2 p-3 bg-slate-50 border-t border-slate-200 sticky bottom-0">
+              <button
+                type="button"
+                onClick={() => setPartialModal(null)}
+                className="btn btn-secondary btn-sm text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="partial-dispatch-form"
+                disabled={recordingPartial}
+                className="btn btn-primary btn-sm text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white border-none shadow-xs flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Check size={14} className={recordingPartial ? 'animate-spin' : ''} />
+                <span>{recordingPartial ? 'Recording...' : 'Confirm Dispatch & Create Challan'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1148,7 +1151,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
           onClick={() => setSelectedQuotationId(null)}
         >
           <div
-            className="card max-w-4xl w-full h-full p-6 bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between overflow-y-auto"
+            className="card max-w-4xl w-full h-full bg-white border-l border-slate-200 shadow-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {detailLoading ? (
@@ -1158,32 +1161,33 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               </div>
             ) : (
               <>
-                <div className="space-y-4">
-                  {/* Drawer Header */}
-                  <div className="flex items-start justify-between border-b border-slate-200 pb-3">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h2 className="text-lg font-black text-slate-900 font-mono">
-                          {activeQuotation?.quotation_number}
-                        </h2>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
-                          Line Items Sourcing Desk
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Customer: <strong className="text-slate-800">{activeQuotation?.customer_name}</strong> • Phone:{' '}
-                        {activeQuotation?.customer_phone || 'N/A'} • Site: {activeQuotation?.site_location || 'N/A'}
-                      </p>
+                {/* Drawer Fixed Header */}
+                <div className="flex-shrink-0 p-4 border-b border-slate-200 flex items-start justify-between bg-white">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h2 className="text-lg font-black text-slate-900 font-mono">
+                        {activeQuotation?.quotation_number}
+                      </h2>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
+                        Line Items Sourcing Desk
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedQuotationId(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      <X size={20} />
-                    </button>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Customer: <strong className="text-slate-800">{activeQuotation?.customer_name}</strong> • Phone:{' '}
+                      {activeQuotation?.customer_phone || 'N/A'} • Site: {activeQuotation?.site_location || 'N/A'}
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQuotationId(null)}
+                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
 
+                {/* Sourcing Drawer Body - Isolated Inner Scroll */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin">
                   {/* Financial & Overall Status Card */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
                     <div>
@@ -1356,8 +1360,8 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                   </div>
                 </div>
 
-                {/* Drawer Footer Actions */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-4">
+                {/* Drawer Fixed Footer Actions */}
+                <div className="flex-shrink-0 flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 sticky bottom-0">
                   <div className="text-xs text-slate-500">
                     {isViewOnly && <span className="font-bold text-amber-700">View-Only Mode</span>}
                   </div>
@@ -1365,7 +1369,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                     <button
                       type="button"
                       onClick={() => setSelectedQuotationId(null)}
-                      className="btn btn-secondary btn-sm text-xs"
+                      className="btn btn-secondary btn-sm text-xs cursor-pointer"
                     >
                       Close
                     </button>
@@ -1374,7 +1378,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                         type="button"
                         onClick={handleSaveQuotationItemsDispatch}
                         disabled={savingDispatch}
-                        className="btn btn-primary btn-sm text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-xs flex items-center space-x-1.5"
+                        className="btn btn-primary btn-sm text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-xs flex items-center space-x-1.5 cursor-pointer"
                       >
                         <Save size={14} className={savingDispatch ? 'animate-spin' : ''} />
                         <span>{savingDispatch ? 'Saving Changes...' : 'Save Dispatch Sourcing'}</span>
@@ -1391,14 +1395,14 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       {/* MODAL 3: Payment Shortfall Warning Modal */}
       {shortfallConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
           onClick={() => setShortfallConfirm(null)}
         >
           <div
-            className="card max-w-xl w-full p-5 bg-white border border-amber-300 shadow-2xl rounded-2xl space-y-4"
+            className="card max-w-xl w-full max-h-[85vh] bg-white border border-amber-300 shadow-2xl rounded-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-amber-100 pb-3">
+            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-amber-100 p-4">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center text-xl shrink-0">
                   ⚠️
@@ -1418,62 +1422,64 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               <button
                 type="button"
                 onClick={() => setShortfallConfirm(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1.5 leading-relaxed">
-              <p className="font-bold text-amber-950 flex items-center gap-1.5">
-                <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                <span>Caution: Sufficient funds have not been verified for this item</span>
-              </p>
-              <p>
-                The customer has only paid a verified advance of{' '}
-                <strong className="text-emerald-800 font-bold">
-                  ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
-                </strong>{' '}
-                against this quotation. This item alone is valued at{' '}
-                <strong className="text-slate-900 font-bold">
-                  ₹ {formatCurrency(shortfallConfirm.itemVal)}
-                </strong>
-                , creating an uncovered shortfall of{' '}
-                <strong className="text-rose-700 font-extrabold">
-                  ₹ {formatCurrency(shortfallConfirm.shortfall)}
-                </strong>
-                .
-              </p>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+              <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1.5 leading-relaxed">
+                <p className="font-bold text-amber-950 flex items-center gap-1.5">
+                  <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                  <span>Caution: Sufficient funds have not been verified for this item</span>
+                </p>
+                <p>
+                  The customer has only paid a verified advance of{' '}
+                  <strong className="text-emerald-800 font-bold">
+                    ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
+                  </strong>{' '}
+                  against this quotation. This item alone is valued at{' '}
+                  <strong className="text-slate-900 font-bold">
+                    ₹ {formatCurrency(shortfallConfirm.itemVal)}
+                  </strong>
+                  , creating an uncovered shortfall of{' '}
+                  <strong className="text-rose-700 font-extrabold">
+                    ₹ {formatCurrency(shortfallConfirm.shortfall)}
+                  </strong>
+                  .
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                    Item Value
+                  </span>
+                  <span className="text-sm font-extrabold text-slate-900 block mt-1 tabular-nums">
+                    ₹ {formatCurrency(shortfallConfirm.itemVal)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
+                    Verified Paid
+                  </span>
+                  <span className="text-sm font-extrabold text-emerald-800 block mt-1 tabular-nums">
+                    ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
+                    Shortfall
+                  </span>
+                  <span className="text-sm font-extrabold text-rose-700 block mt-1 tabular-nums">
+                    -₹ {formatCurrency(shortfallConfirm.shortfall)}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5 text-center">
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                  Item Value
-                </span>
-                <span className="text-sm font-extrabold text-slate-900 block mt-1 tabular-nums">
-                  ₹ {formatCurrency(shortfallConfirm.itemVal)}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
-                  Verified Paid
-                </span>
-                <span className="text-sm font-extrabold text-emerald-800 block mt-1 tabular-nums">
-                  ₹ {formatCurrency(shortfallConfirm.verifiedPaid)}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
-                  Shortfall
-                </span>
-                <span className="text-sm font-extrabold text-rose-700 block mt-1 tabular-nums">
-                  -₹ {formatCurrency(shortfallConfirm.shortfall)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-slate-200">
+            <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-end gap-2.5 p-3 bg-slate-50 border-t border-slate-200 sticky bottom-0">
               <button
                 type="button"
                 onClick={() => setShortfallConfirm(null)}

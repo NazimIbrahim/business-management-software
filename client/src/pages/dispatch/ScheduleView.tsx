@@ -125,56 +125,56 @@ export const ScheduleView: React.FC<Props> = ({
   });
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5 shrink-0">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Scheduled</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{filtered.length}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Dispatches on timeline</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Scheduled</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{filtered.length}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Dispatches on timeline</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700">
-            <CalendarIcon size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+            <CalendarIcon size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-rose-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-rose-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Overdue Commitments</div>
-            <div className="text-2xl font-black text-rose-700 mt-1">{overdueCount}</div>
-            <div className="text-[10px] text-rose-500 font-medium mt-0.5">Past target dispatch date</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-rose-600 uppercase tracking-wider">Overdue Commitments</div>
+            <div className="text-xl sm:text-2xl font-black text-rose-700 mt-0.5">{overdueCount}</div>
+            <div className="text-[10px] text-rose-500 font-medium">Past target dispatch date</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
-            <AlertTriangle size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+            <AlertTriangle size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-amber-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-amber-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Today's Deliveries</div>
-            <div className="text-2xl font-black text-amber-800 mt-1">{todayCount}</div>
-            <div className="text-[10px] text-amber-600 font-medium mt-0.5">Scheduled for today</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-amber-700 uppercase tracking-wider">Today's Deliveries</div>
+            <div className="text-xl sm:text-2xl font-black text-amber-800 mt-0.5">{todayCount}</div>
+            <div className="text-[10px] text-amber-600 font-medium">Scheduled for today</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
-            <Clock size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+            <Clock size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-indigo-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-indigo-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Upcoming Dispatches</div>
-            <div className="text-2xl font-black text-indigo-700 mt-1">{upcomingCount}</div>
-            <div className="text-[10px] text-indigo-500 font-medium mt-0.5">Future planned dates</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Upcoming Dispatches</div>
+            <div className="text-xl sm:text-2xl font-black text-indigo-700 mt-0.5">{upcomingCount}</div>
+            <div className="text-[10px] text-indigo-500 font-medium">Future planned dates</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-            <Truck size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <Truck size={18} />
           </div>
         </div>
       </div>
 
       {/* Toolbar & View Mode Switcher */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center space-x-2">
           <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
             <button
@@ -221,30 +221,34 @@ export const ScheduleView: React.FC<Props> = ({
       {/* Content based on View Type */}
       {viewType === 'timeline' ? (
         /* Timeline List View */
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="flex-1 min-h-0 w-full bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
           {loading ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-              Loading dispatch schedule timeline...
+            <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+              <div>
+                <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                <span>Loading dispatch schedule timeline...</span>
+              </div>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              <CalendarIcon size={32} className="mx-auto mb-2 text-slate-300" />
-              No dispatches currently scheduled.
+            <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+              <div>
+                <CalendarIcon size={32} className="mx-auto mb-2 text-slate-300" />
+                <span>No dispatches currently scheduled.</span>
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="flex-1 min-h-0 w-full overflow-x-auto overflow-y-auto scrollbar-thin">
               <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    <th className="py-3 px-3">Timeline Tag</th>
-                    <th className="py-3 px-3">Scheduled Date</th>
-                    <th className="py-3 px-3">Quotation Ref</th>
-                    <th className="py-3 px-3">Customer & Site</th>
-                    <th className="py-3 px-3">Vehicle / Driver</th>
-                    <th className="py-3 px-3 text-right">Volume</th>
-                    <th className="py-3 px-3 text-right">Order Value</th>
-                    <th className="py-3 px-3 text-right">Reschedule</th>
+                <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-xs">
+                  <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    <th className="py-2.5 px-3">Timeline Tag</th>
+                    <th className="py-2.5 px-3">Scheduled Date</th>
+                    <th className="py-2.5 px-3">Quotation Ref</th>
+                    <th className="py-2.5 px-3">Customer & Site</th>
+                    <th className="py-2.5 px-3">Vehicle / Driver</th>
+                    <th className="py-2.5 px-3 text-right">Volume</th>
+                    <th className="py-2.5 px-3 text-right">Order Value</th>
+                    <th className="py-2.5 px-3 text-right">Reschedule</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -345,10 +349,10 @@ export const ScheduleView: React.FC<Props> = ({
         </div>
       ) : (
         /* Interactive Month Calendar View */
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4">
+        <div className="flex-1 min-h-0 w-full bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 overflow-y-auto scrollbar-thin flex flex-col">
           {/* Calendar Month Header */}
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
-            <h3 className="font-bold text-base text-slate-900">
+          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 shrink-0">
+            <h3 className="font-bold text-sm sm:text-base text-slate-900">
               {monthNames[month]} {year}
             </h3>
             <div className="flex items-center space-x-1">
@@ -368,7 +372,7 @@ export const ScheduleView: React.FC<Props> = ({
           </div>
 
           {/* Day Names Grid */}
-          <div className="grid grid-cols-7 gap-2 mb-2 text-center text-[11px] font-bold text-slate-500 uppercase">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase shrink-0">
             <div>Sun</div>
             <div>Mon</div>
             <div>Tue</div>
@@ -379,10 +383,10 @@ export const ScheduleView: React.FC<Props> = ({
           </div>
 
           {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 flex-1">
             {/* Empty cells before month start */}
             {Array.from({ length: firstDayIndex }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-h-[90px] bg-slate-50/50 rounded-xl border border-dashed border-slate-200/50" />
+              <div key={`empty-${i}`} className="min-h-[75px] bg-slate-50/50 rounded-xl border border-dashed border-slate-200/50" />
             ))}
 
             {/* Month Day Cells */}
@@ -398,7 +402,7 @@ export const ScheduleView: React.FC<Props> = ({
               return (
                 <div
                   key={`day-${day}`}
-                  className={`min-h-[90px] p-2 rounded-xl border flex flex-col justify-between transition-colors ${
+                  className={`min-h-[75px] p-1.5 sm:p-2 rounded-xl border flex flex-col justify-between transition-colors ${
                     isCurrentDay
                       ? 'bg-amber-50/30 border-amber-300 ring-1 ring-amber-300'
                       : dayItems.length > 0
@@ -408,7 +412,7 @@ export const ScheduleView: React.FC<Props> = ({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span
-                      className={`text-xs font-bold ${
+                      className={`text-[11px] font-bold ${
                         isCurrentDay
                           ? 'w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center'
                           : 'text-slate-800'
@@ -417,13 +421,13 @@ export const ScheduleView: React.FC<Props> = ({
                       {day}
                     </span>
                     {dayItems.length > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white">
                         {dayItems.length}
                       </span>
                     )}
                   </div>
 
-                  <div className="space-y-1 overflow-y-auto max-h-[65px]">
+                  <div className="space-y-1 overflow-y-auto max-h-[60px] scrollbar-thin">
                     {dayItems.map((item) => (
                       <div
                         key={item.quotation_id}
@@ -445,9 +449,9 @@ export const ScheduleView: React.FC<Props> = ({
 
       {/* Reschedule Modal */}
       {rescheduleModalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-slate-200 shadow-2xl animate-fadeIn">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+            <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-200 shrink-0">
               <h3 className="font-extrabold text-slate-900 text-sm">Reschedule Dispatch Commitment</h3>
               <button
                 onClick={() => setRescheduleModalItem(null)}
@@ -457,7 +461,7 @@ export const ScheduleView: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 text-xs scrollbar-thin">
               <div>
                 <span className="text-slate-500 font-medium">Quotation:</span>{' '}
                 <span className="font-bold font-mono text-slate-900">{rescheduleModalItem.quotation_number}</span> (
@@ -488,24 +492,24 @@ export const ScheduleView: React.FC<Props> = ({
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/30 text-slate-900"
                 />
               </div>
+            </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setRescheduleModalItem(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveReschedule}
-                  disabled={isSaving || !newDateVal}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer disabled:opacity-50"
-                >
-                  {isSaving ? 'Updating...' : 'Save Schedule'}
-                </button>
-              </div>
+            <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setRescheduleModalItem(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveReschedule}
+                disabled={isSaving || !newDateVal}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer disabled:opacity-50 text-xs shadow-sm"
+              >
+                {isSaving ? 'Updating...' : 'Save Schedule'}
+              </button>
             </div>
           </div>
         </div>

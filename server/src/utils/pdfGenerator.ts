@@ -12,6 +12,7 @@ export interface QuotationPdfData {
     project_name?: string;
     sales_person_name: string;
     assisted_sales_person_name?: string;
+    created_by_name?: string;
     status: string;
     gross_total: number;
     discount_percent?: number;
@@ -277,9 +278,13 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
     .fillColor(primaryColor)
     .text('Project & Sales Associate:', 320, customerBoxY + 6);
 
-  const salesAssociateLabel = quotation.assisted_sales_person_name
+  let salesAssociateLabel = quotation.assisted_sales_person_name
     ? `Sales: ${quotation.sales_person_name} (Assisted: ${quotation.assisted_sales_person_name})`
     : `Sales Associate: ${quotation.sales_person_name}`;
+
+  if (quotation.created_by_name && quotation.created_by_name !== quotation.sales_person_name) {
+    salesAssociateLabel += ` | Counter: ${quotation.created_by_name}`;
+  }
 
   const storeManagerTitle = company.store_manager_title || 'Store Manager';
   const storeManagerName = quotation.approved_by_name || company.store_manager_name || 'Pending Approval';

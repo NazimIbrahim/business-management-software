@@ -64,82 +64,86 @@ export const FactoryHistoryView: React.FC<Props> = ({
   const totalFreight = filtered.reduce((acc, h) => acc + (parseFloat(String(h.freight_cost || 0))), 0);
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-2.5 shrink-0">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Completed Factory Shipments</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{filtered.length}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Unloaded and placed in Godown</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Completed Factory Shipments</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{filtered.length}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Unloaded and placed in Godown</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700">
-            <Factory size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+            <Factory size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Received Boxes</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{Math.round(totalDeliveredBoxes)}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Boxes delivered from Morbi & factories</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Received Boxes</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{Math.round(totalDeliveredBoxes)}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Boxes delivered from Morbi & factories</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-            <Layers size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <Layers size={18} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Inbound Logistics Freight</div>
-            <div className="text-xl font-black text-slate-900 mt-1">₹ {formatCurrency(totalFreight)}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Transportation expenditures</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Inbound Logistics Freight</div>
+            <div className="text-lg sm:text-xl font-black text-slate-900 mt-0.5">₹ {formatCurrency(totalFreight)}</div>
+            <div className="text-[10px] text-slate-500 font-medium">Transportation expenditures</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700">
-            <Truck size={20} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+            <Truck size={18} />
           </div>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[260px]">
+      <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="relative flex-1 min-w-[240px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search factory shipment history by LR #, factory, brand, item, truck, quote..."
-            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden text-slate-900"
+            className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden text-slate-900"
           />
         </div>
 
         <button
           onClick={onRefresh}
-          className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors shrink-0"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span>Refresh History</span>
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* Table Container */}
+      <div className="flex-1 min-h-0 w-full bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-            Loading factory shipment history...
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+              <span>Loading factory shipment history...</span>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <CheckCircle2 size={32} className="mx-auto mb-2 text-slate-300" />
-            No factory shipment history records found.
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-slate-300" />
+              <span>No factory shipment history records found.</span>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex-1 min-h-0 w-full overflow-x-auto overflow-y-auto scrollbar-thin">
             <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+              <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-xs">
+                <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                   <th className="py-3 px-3">Item Specs & Shade</th>
                   <th className="py-3 px-3">Quotation & Customer</th>
                   <th className="py-3 px-3">Factory Source</th>

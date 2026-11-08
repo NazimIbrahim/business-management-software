@@ -137,10 +137,10 @@ export const FactoryTrackerView: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
       {/* Top Search Toolbar */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-2 flex-1 min-w-[260px]">
+      <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center space-x-2 flex-1 min-w-[240px]">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -148,14 +148,14 @@ export const FactoryTrackerView: React.FC<Props> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search factory consignments by LR / bilty #, factory, brand, item, quote..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden text-slate-900"
+              className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden text-slate-900"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e: any) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-hidden"
+            className="px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-hidden"
           >
             <option value="all">All Factory Logistics Stages</option>
             <option value="placed">Order Placed at Factory</option>
@@ -165,38 +165,42 @@ export const FactoryTrackerView: React.FC<Props> = ({
 
         <button
           onClick={onRefresh}
-          className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors shrink-0"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span>Refresh Factory Orders</span>
         </button>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* Orders Table Container */}
+      <div className="flex-1 min-h-0 w-full bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
         {loading ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
-            Loading active factory orders...
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-indigo-600" />
+              <span>Loading active factory orders...</span>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs">
-            <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
-            No active factory shipments in progress. All factory consignments have been unloaded.
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 text-center text-slate-400 text-xs">
+            <div>
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+              <span>No active factory shipments in progress. All factory consignments have been unloaded.</span>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex-1 min-h-0 w-full overflow-x-auto overflow-y-auto scrollbar-thin">
             <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-3 px-3">Item Specs & Brand</th>
-                  <th className="py-3 px-3">Quotation & Customer</th>
-                  <th className="py-3 px-3 text-right">Qty (Boxes)</th>
-                  <th className="py-3 px-3">Factory / Plant</th>
-                  <th className="py-3 px-3">LR / Bilty & Truck</th>
-                  <th className="py-3 px-3 text-center">Status</th>
-                  <th className="py-3 px-3">Expected ETA</th>
-                  <th className="py-3 px-3 text-right">Actions</th>
+              <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-xs">
+                <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-2.5 px-3">Item Specs & Brand</th>
+                  <th className="py-2.5 px-3">Quotation & Customer</th>
+                  <th className="py-2.5 px-3 text-right">Qty (Boxes)</th>
+                  <th className="py-2.5 px-3">Factory / Plant</th>
+                  <th className="py-2.5 px-3">LR / Bilty & Truck</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3">Expected ETA</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -296,9 +300,9 @@ export const FactoryTrackerView: React.FC<Props> = ({
 
       {/* Edit Factory Order Modal */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 shadow-2xl animate-fadeIn">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+            <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-200 shrink-0">
               <h3 className="font-extrabold text-slate-900 text-sm">Update Factory Consignment</h3>
               <button
                 onClick={() => setSelectedItem(null)}
@@ -308,7 +312,7 @@ export const FactoryTrackerView: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 text-xs scrollbar-thin">
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="font-bold text-slate-900">{selectedItem.description}</div>
                 <div className="text-slate-500 mt-0.5">
@@ -406,23 +410,24 @@ export const FactoryTrackerView: React.FC<Props> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setSelectedItem(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
-                >
-                  {isSaving ? 'Saving...' : 'Save Logistics Record'}
-                </button>
-              </div>
+            </div>
+
+            <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save Logistics Record'}
+              </button>
             </div>
           </div>
         </div>

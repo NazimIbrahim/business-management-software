@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS quotations (
     project_name VARCHAR(150),
     quotation_type VARCHAR(30) NOT NULL DEFAULT 'tiles',
     sales_category VARCHAR(50) DEFAULT 'RETAIL' CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY')),
+    created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_by_name VARCHAR(255),
     status VARCHAR(30) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'closed')),
     manager_approval_note TEXT,
     approved_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -169,6 +171,7 @@ CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations (status);
 CREATE INDEX IF NOT EXISTS idx_quotations_date ON quotations (quotation_date);
 CREATE INDEX IF NOT EXISTS idx_quotations_customer ON quotations (customer_id);
 CREATE INDEX IF NOT EXISTS idx_quotations_sales_person ON quotations (sales_person_id);
+CREATE INDEX IF NOT EXISTS idx_quotations_created_by ON quotations (created_by_id);
 CREATE INDEX IF NOT EXISTS idx_quotations_assisted_sales_person ON quotations (assisted_sales_person_id);
 CREATE INDEX IF NOT EXISTS idx_quotations_type ON quotations (quotation_type);
 

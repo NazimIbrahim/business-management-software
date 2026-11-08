@@ -595,6 +595,11 @@ export const QuotationList: React.FC<Props> = ({
                     </td>
                     <td className="py-3 px-3.5 align-middle">
                       <div className="font-medium text-[#1B263B] text-xs">{q.sales_person_name}</div>
+                      {q.created_by_name && q.created_by_name !== q.sales_person_name && (
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          Billed by: {q.created_by_name}
+                        </div>
+                      )}
                       {q.assisted_sales_person_name && (
                         <div className="text-[10px] text-indigo-800 font-semibold inline-flex items-center space-x-1 mt-0.5">
                           <span className="bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded font-sans">

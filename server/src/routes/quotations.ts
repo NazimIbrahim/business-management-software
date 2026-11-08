@@ -229,6 +229,8 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
         q.customer_phone,
         q.sales_person_id,
         q.sales_person_name,
+        q.created_by_id,
+        COALESCE(q.created_by_name, u_creator.full_name) as created_by_name,
         q.assisted_sales_person_id,
         q.assisted_sales_person_name,
         q.split_share_type,
@@ -253,6 +255,7 @@ quotationsRouter.get('/', async (req: Request, res: Response) => {
         (q.net_total - COALESCE(p.total_paid, 0)) as balance_due
       FROM quotations q
       LEFT JOIN users u_app ON u_app.id = q.approved_by_id
+      LEFT JOIN users u_creator ON u_creator.id = q.created_by_id
       LEFT JOIN (
         SELECT quotation_id, SUM(amount) as total_paid
         FROM payments
@@ -293,10 +296,12 @@ quotationsRouter.get('/:id', async (req: Request, res: Response) => {
     const qRows = await query(
       `SELECT q.*,
               u.full_name as approved_by_name,
+              COALESCE(q.created_by_name, u_creator.full_name) as created_by_name,
               COALESCE(p.total_paid, 0) as total_paid,
               (q.net_total - COALESCE(p.total_paid, 0)) as balance_due
        FROM quotations q
        LEFT JOIN users u ON u.id = q.approved_by_id
+       LEFT JOIN users u_creator ON u_creator.id = q.created_by_id
        LEFT JOIN (
          SELECT quotation_id, SUM(amount) as total_paid
          FROM payments WHERE status IN ('Cleared', 'Verified') GROUP BY quotation_id
@@ -575,19 +580,52 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Determine Sales Category (inherit from user profile or explicit payload)
+      // Determine Role-Aware Assigned Salesperson & Creator Attribution
+      const userRole = (req.user?.role || '').toLowerCase();
+      const isAccountsOrAdmin = ['admin', 'accounts', 'manager'].includes(userRole);
+
+      let finalSalesPersonId: number = req.user!.id;
+      let finalSalesPersonName: string = req.user!.full_name;
       let finalSalesCategory = 'RETAIL';
-      const validCategories = ['RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'];
-      if (req.body.sales_category && validCategories.includes(String(req.body.sales_category).toUpperCase())) {
-        finalSalesCategory = String(req.body.sales_category).toUpperCase();
-      } else if (req.user?.sales_category && validCategories.includes(String(req.user.sales_category).toUpperCase())) {
-        finalSalesCategory = String(req.user.sales_category).toUpperCase();
+
+      if (isAccountsOrAdmin) {
+        if (req.body.sales_person_id) {
+          const spId = parseInt(req.body.sales_person_id, 10);
+          if (isNaN(spId) || spId <= 0) {
+            throw new Error('Please select a valid assigned sales executive for this quotation');
+          }
+          const spRes = await client.query(
+            'SELECT id, full_name, role, sales_category, is_active FROM users WHERE id = $1',
+            [spId]
+          );
+          if (!spRes.rows.length || spRes.rows[0].is_active === false) {
+            throw new Error('Assigned sales executive not found or is currently inactive');
+          }
+          finalSalesPersonId = spRes.rows[0].id;
+          finalSalesPersonName = spRes.rows[0].full_name;
+          if (spRes.rows[0].sales_category) {
+            finalSalesCategory = spRes.rows[0].sales_category;
+          }
+        } else {
+          throw new Error('Assigned sales executive is required when creating quotations from the Accounts / Billing Desk');
+        }
       } else {
-        const uCatRes = await client.query('SELECT sales_category FROM users WHERE id = $1', [req.user!.id]);
-        if (uCatRes.rows[0]?.sales_category) {
-          finalSalesCategory = uCatRes.rows[0].sales_category;
+        // Standard sales representative creating their own quotation
+        finalSalesPersonId = req.user!.id;
+        finalSalesPersonName = req.user!.full_name;
+        if (req.user?.sales_category) {
+          finalSalesCategory = req.user.sales_category;
+        } else {
+          const uCatRes = await client.query('SELECT sales_category FROM users WHERE id = $1', [req.user!.id]);
+          if (uCatRes.rows[0]?.sales_category) {
+            finalSalesCategory = uCatRes.rows[0].sales_category;
+          }
         }
       }
+
+      // Explicit Creator Stamping
+      const finalCreatedById = req.user!.id;
+      const finalCreatedByName = req.user!.full_name;
 
       const qRes = await client.query(
         `INSERT INTO quotations (
@@ -599,7 +637,7 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           project_name, quotation_type, status, approved_by_id, approved_at, gross_total, discount_percent,
           discount_amount, taxable_amount, tax_type, cgst_rate, cgst_amount,
           sgst_rate, sgst_amount, igst_rate, igst_amount, round_off, net_total,
-          special_notes, version, sales_category
+          special_notes, version, sales_category, created_by_id, created_by_name
         ) VALUES (
           $1, $2, $3, $4,
           $5, $6, $7, $8, $9,
@@ -609,19 +647,19 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           $18, $19, $20, $21, $22, $23, $24,
           $25, $26, $27, $28, $29,
           $30, $31, $32, $33, $34, $35,
-          $36, 1, $37
+          $36, 1, $37, $38, $39
         ) RETURNING *`,
         [
           qNumber,
           quotation_date || new Date().toISOString().split('T')[0],
           customer_id || null,
-          req.user!.id,
+          finalSalesPersonId,
           customer_name.trim(),
           customer_phone.trim(),
           customer_gstin?.trim() || null,
           delivery_address?.trim() || '',
           site_location?.trim() || '',
-          req.user!.full_name,
+          finalSalesPersonName,
           finalAssistedId,
           finalAssistedName,
           finalSplitType,
@@ -649,6 +687,8 @@ quotationsRouter.post('/', async (req: Request, res: Response) => {
           totals.netTotal,
           special_notes || '',
           finalSalesCategory,
+          finalCreatedById,
+          finalCreatedByName,
         ]
       );
 
@@ -1026,6 +1066,26 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
       const todayDate = new Date().toISOString().split('T')[0];
       const targetQuotationDate = quotation_date ? String(quotation_date).split('T')[0] : todayDate;
 
+      // Role-Aware Salesperson Attribution on update
+      let updateSalesPersonId = current.rows[0].sales_person_id;
+      let updateSalesPersonName = current.rows[0].sales_person_name;
+      let updateSalesCategory = current.rows[0].sales_category || 'RETAIL';
+
+      const isAccountsOrAdmin = ['admin', 'accounts', 'manager'].includes((req.user?.role || '').toLowerCase());
+      if (isAccountsOrAdmin && req.body.sales_person_id) {
+        const spId = parseInt(req.body.sales_person_id, 10);
+        if (!isNaN(spId) && spId > 0) {
+          const spRes = await client.query('SELECT id, full_name, sales_category FROM users WHERE id = $1', [spId]);
+          if (spRes.rows.length) {
+            updateSalesPersonId = spRes.rows[0].id;
+            updateSalesPersonName = spRes.rows[0].full_name;
+            if (spRes.rows[0].sales_category) {
+              updateSalesCategory = spRes.rows[0].sales_category;
+            }
+          }
+        }
+      }
+
       // Update Quotation Header and bump version
       const qRes = await client.query(
         `UPDATE quotations
@@ -1078,6 +1138,9 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
              has_dispatch_item_changes = CASE WHEN $39::boolean THEN true ELSE has_dispatch_item_changes END,
              dispatch_change_summary = CASE WHEN $39::boolean THEN $40::text ELSE dispatch_change_summary END,
              dispatch_change_acknowledged_at = CASE WHEN $39::boolean THEN NULL ELSE dispatch_change_acknowledged_at END,
+             sales_person_id = $41,
+             sales_person_name = $42,
+             sales_category = $43,
              updated_at = NOW()
          WHERE id = $37 AND version = $38
          RETURNING *`,
@@ -1122,6 +1185,9 @@ quotationsRouter.put('/:id', async (req: Request, res: Response) => {
           current.rows[0].version,
           shouldNotifyDispatch,
           dispatchChangeSummary,
+          updateSalesPersonId,
+          updateSalesPersonName,
+          updateSalesCategory,
         ]
       );
 

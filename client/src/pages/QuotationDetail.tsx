@@ -403,6 +403,11 @@ export const QuotationDetail: React.FC<Props> = ({
                 </span>
               )}
               <span>• Sales Associate: <strong className="font-semibold text-slate-700">{quotation.sales_person_name}</strong></span>
+              {quotation.created_by_name && quotation.created_by_name !== quotation.sales_person_name && (
+                <span className="text-indigo-700 font-medium">
+                  • Prepared by: <strong className="font-semibold">{quotation.created_by_name}</strong>
+                </span>
+              )}
               {quotation.approved_by_name && (
                 <span className="font-medium text-emerald-700">
                   • Approved by: <strong className="font-bold">{quotation.approved_by_name}</strong>
@@ -633,6 +638,12 @@ export const QuotationDetail: React.FC<Props> = ({
               <span>Lead Closer:</span>
               <span className="font-semibold text-slate-900">{quotation.sales_person_name}</span>
             </div>
+            {quotation.created_by_name && quotation.created_by_name !== quotation.sales_person_name && (
+              <div className="flex items-center justify-between text-slate-600 text-[11px] pt-0.5">
+                <span>Billed / Prepared By:</span>
+                <span className="font-medium text-slate-800">{quotation.created_by_name}</span>
+              </div>
+            )}
 
             {quotation.assisted_sales_person_name && (
               <div className="p-2 bg-indigo-50/70 rounded border border-indigo-100 text-[11px] space-y-1.5 my-1">

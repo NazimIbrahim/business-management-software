@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
+import { SalespersonSelect } from '../components/SalespersonSelect';
 import { numberToWordsIndian } from '../utils/numberToWords';
 import { calculateQuotationDiscountAndTotals, isCeraBrand } from '../utils/discountCalculator';
 import { buildEncryptedProductMap, derive3LetterCode } from '../utils/encryptedCode';
@@ -80,6 +81,11 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
   const [version, setVersion] = useState<number>(1);
   const [quotationNumber, setQuotationNumber] = useState<string>('');
   const [status, setStatus] = useState<'draft' | 'in_review' | 'approved' | 'closed'>('draft');
+
+  // Assigned Salesperson State (for Accounts / Billing Desk workflow)
+  const [assignedSalesPersonId, setAssignedSalesPersonId] = useState<number | null>(null);
+  const [assignedSalesPersonName, setAssignedSalesPersonName] = useState<string>('');
+  const [salesPersonError, setSalesPersonError] = useState<string | null>(null);
 
   // Split Sales / Assisted Salesperson State
   const [enableSplitSale, setEnableSplitSale] = useState(false);
@@ -529,6 +535,8 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
         setQuotationNumber(q.quotation_number);
         setStatus((q.status as any) || 'draft');
         setPrimarySalesPersonName(q.sales_person_name || '');
+        setAssignedSalesPersonId(q.sales_person_id || null);
+        setAssignedSalesPersonName(q.sales_person_name || '');
 
         if (q.assisted_sales_person_id) {
           setEnableSplitSale(true);
@@ -1329,6 +1337,13 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
       return null;
     }
 
+    const isAccountsOrAdmin = ['admin', 'accounts', 'manager'].includes((user?.role || '').toLowerCase());
+    if (isAccountsOrAdmin && (!assignedSalesPersonId || assignedSalesPersonId <= 0)) {
+      setError('Please select an assigned sales executive for this quotation.');
+      setSalesPersonError('Please select an assigned sales executive');
+      return null;
+    }
+
     if (enableSplitSale) {
       if (!assistedSalesPersonId) {
         setError('Please select an assisted salesperson or disable the split sale option.');
@@ -1350,6 +1365,8 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
         delivery_address: deliveryAddress,
         site_location: siteLocation,
         project_name: projectName,
+        sales_person_id: assignedSalesPersonId,
+        sales_person_name: assignedSalesPersonName,
         quotation_type: 'tiles',
         quotation_date: quotationDate,
         status: status,
@@ -1671,6 +1688,30 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
             </button>
           </div>
         )}
+
+        {/* Salesperson Assignment & Billing Desk Header Bar */}
+        <div className="mb-4 p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-2xl border border-slate-200/90 shadow-2xs grid grid-cols-1 md:grid-cols-2 gap-3.5 items-end">
+          <SalespersonSelect
+            value={assignedSalesPersonId}
+            onChange={(sp) => {
+              setAssignedSalesPersonId(sp.id);
+              setAssignedSalesPersonName(sp.full_name);
+              setPrimarySalesPersonName(sp.full_name);
+              setSalesPersonError(null);
+            }}
+            error={salesPersonError}
+          />
+          <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-700">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Prepared & Billed By</span>
+              <span className="font-bold text-slate-900">{user?.full_name}</span>
+              <span className="text-[10px] text-slate-400 font-mono ml-1.5">(@{user?.username})</span>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              Role: {user?.role}
+            </span>
+          </div>
+        </div>
 
         {/* Customer Fields Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">

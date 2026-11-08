@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.50',
+    version: '2.4.51',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -228,6 +228,24 @@ async function runAutoMigrations() {
       ALTER TABLE quotations DROP CONSTRAINT IF EXISTS check_quotations_sales_category;
       ALTER TABLE quotations ADD CONSTRAINT check_quotations_sales_category CHECK (sales_category IN ('RETAIL', 'PROJECT', 'MANAGEMENT', 'COMPANY'));
       CREATE INDEX IF NOT EXISTS idx_quotations_sales_category ON quotations(sales_category);
+
+      -- Dedicated Salesperson Assignment & Creator Tracking
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE quotations ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255);
+      CREATE INDEX IF NOT EXISTS idx_quotations_sales_person_id ON quotations(sales_person_id);
+      CREATE INDEX IF NOT EXISTS idx_quotations_created_by_id ON quotations(created_by_id);
+
+      UPDATE quotations 
+      SET 
+        created_by_id = COALESCE(sales_person_id, 1),
+        created_by_name = COALESCE(sales_person_name, 'System Administrator')
+      WHERE created_by_id IS NULL;
+
+      UPDATE quotations 
+      SET 
+        sales_person_id = COALESCE(created_by_id, 1),
+        sales_person_name = COALESCE(created_by_name, 'System Administrator')
+      WHERE sales_person_id IS NULL;
 
       UPDATE quotations q
       SET sales_category = COALESCE(u.sales_category, 'RETAIL')
@@ -598,7 +616,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.50' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.51' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');
