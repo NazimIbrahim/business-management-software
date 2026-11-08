@@ -392,40 +392,85 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
       }
     }
   } else {
-    // Encrypted mode: Brand column omitted, Description gets 154 width
-    // Standard mode: Brand column included (10 columns mathematically aligned)
-    const colX = isEncrypted
-      ? [30, 52, 208, 260, 306, 350, 404, 456, 508]
-      : [30, 52, 168, 232, 280, 322, 364, 412, 462, 512];
-    const colW = isEncrypted
-      ? [20, 154, 50, 44, 42, 52, 50, 50, 56]
-      : [20, 114, 62, 46, 40, 40, 46, 48, 48, 52];
+    const hasAnyTileImage = areas.some((a) =>
+      a.items?.some((it: any) => it.item_image && it.item_image.startsWith('data:image'))
+    );
+
+    // Columns setup: dynamically includes Image column if any tile item has an image
+    let colX: number[];
+    let colW: number[];
+
+    if (hasAnyTileImage) {
+      if (isEncrypted) {
+        colX = [30, 48, 96, 236, 284, 326, 368, 416, 464, 512];
+        colW = [18, 46, 138, 46, 40, 40, 46, 46, 46, 53];
+      } else {
+        colX = [30, 48, 94, 192, 246, 290, 328, 366, 410, 458, 508];
+        colW = [18, 44, 96, 52, 42, 36, 36, 42, 46, 48, 57];
+      }
+    } else {
+      colX = isEncrypted
+        ? [30, 52, 208, 260, 306, 350, 404, 456, 508]
+        : [30, 52, 168, 232, 280, 322, 364, 412, 462, 512];
+      colW = isEncrypted
+        ? [20, 154, 50, 44, 42, 52, 50, 50, 56]
+        : [20, 114, 62, 46, 40, 40, 46, 48, 48, 52];
+    }
+
+    const itemRowH = hasAnyTileImage ? 28 : 16;
 
     function drawTableHeader(y: number) {
       doc.rect(30, y, 535, 20).fillAndStroke(primaryColor, primaryColor);
       doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#FFFFFF');
 
-      if (isEncrypted) {
-        doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
-        doc.text('Description', colX[1], y + 6, { width: colW[1] });
-        doc.text('Size', colX[2], y + 6, { width: colW[2], align: 'center' });
-        doc.text('Cov/Box', colX[3], y + 6, { width: colW[3], align: 'right' });
-        doc.text('Sqft', colX[4], y + 6, { width: colW[4], align: 'right' });
-        doc.text('Rate/Sqft', colX[5], y + 6, { width: colW[5], align: 'right' });
-        doc.text('Boxes/Qty', colX[6], y + 6, { width: colW[6], align: 'right' });
-        doc.text('Rate/Unit', colX[7], y + 6, { width: colW[7], align: 'right' });
-        doc.text('Total (Rs.)', colX[8], y + 6, { width: colW[8], align: 'right' });
+      if (hasAnyTileImage) {
+        if (isEncrypted) {
+          doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
+          doc.text('Image', colX[1], y + 6, { width: colW[1], align: 'center' });
+          doc.text('Description', colX[2], y + 6, { width: colW[2] });
+          doc.text('Size', colX[3], y + 6, { width: colW[3], align: 'center' });
+          doc.text('Cov/Box', colX[4], y + 6, { width: colW[4], align: 'right' });
+          doc.text('Sqft', colX[5], y + 6, { width: colW[5], align: 'right' });
+          doc.text('Rate/Sqft', colX[6], y + 6, { width: colW[6], align: 'right' });
+          doc.text('Boxes/Qty', colX[7], y + 6, { width: colW[7], align: 'right' });
+          doc.text('Rate/Unit', colX[8], y + 6, { width: colW[8], align: 'right' });
+          doc.text('Total (Rs.)', colX[9], y + 6, { width: colW[9], align: 'right' });
+        } else {
+          doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
+          doc.text('Image', colX[1], y + 6, { width: colW[1], align: 'center' });
+          doc.text('Description', colX[2], y + 6, { width: colW[2] });
+          doc.text('Brand', colX[3], y + 6, { width: colW[3] });
+          doc.text('Size', colX[4], y + 6, { width: colW[4], align: 'center' });
+          doc.text('Cov/Box', colX[5], y + 6, { width: colW[5], align: 'right' });
+          doc.text('Sqft', colX[6], y + 6, { width: colW[6], align: 'right' });
+          doc.text('Rate/Sqft', colX[7], y + 6, { width: colW[7], align: 'right' });
+          doc.text('Boxes/Qty', colX[8], y + 6, { width: colW[8], align: 'right' });
+          doc.text('Rate/Unit', colX[9], y + 6, { width: colW[9], align: 'right' });
+          doc.text('Total (Rs.)', colX[10], y + 6, { width: colW[10], align: 'right' });
+        }
       } else {
-        doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
-        doc.text('Description', colX[1], y + 6, { width: colW[1] });
-        doc.text('Brand', colX[2], y + 6, { width: colW[2] });
-        doc.text('Size', colX[3], y + 6, { width: colW[3], align: 'center' });
-        doc.text('Cov/Box', colX[4], y + 6, { width: colW[4], align: 'right' });
-        doc.text('Sqft', colX[5], y + 6, { width: colW[5], align: 'right' });
-        doc.text('Rate/Sqft', colX[6], y + 6, { width: colW[6], align: 'right' });
-        doc.text('Boxes/Qty', colX[7], y + 6, { width: colW[7], align: 'right' });
-        doc.text('Rate/Unit', colX[8], y + 6, { width: colW[8], align: 'right' });
-        doc.text('Total (Rs.)', colX[9], y + 6, { width: colW[9], align: 'right' });
+        if (isEncrypted) {
+          doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
+          doc.text('Description', colX[1], y + 6, { width: colW[1] });
+          doc.text('Size', colX[2], y + 6, { width: colW[2], align: 'center' });
+          doc.text('Cov/Box', colX[3], y + 6, { width: colW[3], align: 'right' });
+          doc.text('Sqft', colX[4], y + 6, { width: colW[4], align: 'right' });
+          doc.text('Rate/Sqft', colX[5], y + 6, { width: colW[5], align: 'right' });
+          doc.text('Boxes/Qty', colX[6], y + 6, { width: colW[6], align: 'right' });
+          doc.text('Rate/Unit', colX[7], y + 6, { width: colW[7], align: 'right' });
+          doc.text('Total (Rs.)', colX[8], y + 6, { width: colW[8], align: 'right' });
+        } else {
+          doc.text('Sl.', colX[0], y + 6, { width: colW[0], align: 'center' });
+          doc.text('Description', colX[1], y + 6, { width: colW[1] });
+          doc.text('Brand', colX[2], y + 6, { width: colW[2] });
+          doc.text('Size', colX[3], y + 6, { width: colW[3], align: 'center' });
+          doc.text('Cov/Box', colX[4], y + 6, { width: colW[4], align: 'right' });
+          doc.text('Sqft', colX[5], y + 6, { width: colW[5], align: 'right' });
+          doc.text('Rate/Sqft', colX[6], y + 6, { width: colW[6], align: 'right' });
+          doc.text('Boxes/Qty', colX[7], y + 6, { width: colW[7], align: 'right' });
+          doc.text('Rate/Unit', colX[8], y + 6, { width: colW[8], align: 'right' });
+          doc.text('Total (Rs.)', colX[9], y + 6, { width: colW[9], align: 'right' });
+        }
       }
     }
 
@@ -445,7 +490,7 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
       if (!area.items || area.items.length === 0) continue;
 
       // Check page break
-      if (currentY > 700) {
+      if (currentY > 690) {
         doc.addPage();
         currentY = 40;
         drawTableHeader(currentY);
@@ -459,7 +504,7 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
       currentY += 16;
 
       for (const item of area.items) {
-        if (currentY > 730) {
+        if (currentY > (hasAnyTileImage ? 700 : 730)) {
           doc.addPage();
           currentY = 40;
           drawTableHeader(currentY);
@@ -489,33 +534,75 @@ export function generateQuotationPdf(data: QuotationPdfData): PDFKit.PDFDocument
           ? (encryptedMap.get((item.description || '').trim()) || `${item.description}-AMA`)
           : item.description;
 
-        doc.rect(30, currentY, 535, 16).stroke(tableBorder);
+        doc.rect(30, currentY, 535, itemRowH).stroke(tableBorder);
         doc.fontSize(7.5).font('Helvetica').fillColor(textColor);
 
-        if (isEncrypted) {
-          doc.text(String(item.sl_no), colX[0], currentY + 4, { width: colW[0], align: 'center' });
-          doc.text(descText, colX[1], currentY + 4, { width: colW[1], height: 10, ellipsis: true });
-          doc.text(item.size, colX[2], currentY + 4, { width: colW[2], align: 'center' });
-          doc.text(covText, colX[3], currentY + 4, { width: colW[3], align: 'right' });
-          doc.text(sqftText, colX[4], currentY + 4, { width: colW[4], align: 'right' });
-          doc.text(rateSqftText, colX[5], currentY + 4, { width: colW[5], align: 'right' });
-          doc.text(qtyUnitText, colX[6], currentY + 4, { width: colW[6], align: 'right' });
-          doc.text(rateUnitText, colX[7], currentY + 4, { width: colW[7], align: 'right' });
-          doc.text(formatCurrency(item.total_amount), colX[8], currentY + 4, { width: colW[8], align: 'right' });
+        const textYOffset = hasAnyTileImage ? Math.floor((itemRowH - 10) / 2) : 4;
+
+        if (hasAnyTileImage) {
+          // Sl.
+          doc.text(String(item.sl_no), colX[0], currentY + textYOffset, { width: colW[0], align: 'center' });
+
+          // Image
+          if (item.item_image && item.item_image.startsWith('data:image')) {
+            try {
+              const base64Data = item.item_image.replace(/^data:image\/\w+;base64,/, '');
+              const imgBuffer = Buffer.from(base64Data, 'base64');
+              doc.image(imgBuffer, colX[1] + 2, currentY + 2, { fit: [colW[1] - 4, itemRowH - 4], align: 'center', valign: 'center' });
+            } catch (e) {
+              doc.fontSize(7).fillColor('#999999').text('-', colX[1], currentY + textYOffset, { width: colW[1], align: 'center' });
+            }
+          } else {
+            doc.fontSize(7).fillColor('#999999').text('-', colX[1], currentY + textYOffset, { width: colW[1], align: 'center' });
+          }
+          doc.fontSize(7.5).fillColor(textColor);
+
+          if (isEncrypted) {
+            doc.text(descText, colX[2], currentY + textYOffset, { width: colW[2], height: itemRowH - 4, ellipsis: true });
+            doc.text(item.size, colX[3], currentY + textYOffset, { width: colW[3], align: 'center' });
+            doc.text(covText, colX[4], currentY + textYOffset, { width: colW[4], align: 'right' });
+            doc.text(sqftText, colX[5], currentY + textYOffset, { width: colW[5], align: 'right' });
+            doc.text(rateSqftText, colX[6], currentY + textYOffset, { width: colW[6], align: 'right' });
+            doc.text(qtyUnitText, colX[7], currentY + textYOffset, { width: colW[7], align: 'right' });
+            doc.text(rateUnitText, colX[8], currentY + textYOffset, { width: colW[8], align: 'right' });
+            doc.text(formatCurrency(item.total_amount), colX[9], currentY + textYOffset, { width: colW[9], align: 'right' });
+          } else {
+            doc.text(descText, colX[2], currentY + textYOffset, { width: colW[2], height: itemRowH - 4, ellipsis: true });
+            doc.text(item.brand || '-', colX[3], currentY + textYOffset, { width: colW[3], height: itemRowH - 4, ellipsis: true });
+            doc.text(item.size, colX[4], currentY + textYOffset, { width: colW[4], align: 'center' });
+            doc.text(covText, colX[5], currentY + textYOffset, { width: colW[5], align: 'right' });
+            doc.text(sqftText, colX[6], currentY + textYOffset, { width: colW[6], align: 'right' });
+            doc.text(rateSqftText, colX[7], currentY + textYOffset, { width: colW[7], align: 'right' });
+            doc.text(qtyUnitText, colX[8], currentY + textYOffset, { width: colW[8], align: 'right' });
+            doc.text(rateUnitText, colX[9], currentY + textYOffset, { width: colW[9], align: 'right' });
+            doc.text(formatCurrency(item.total_amount), colX[10], currentY + textYOffset, { width: colW[10], align: 'right' });
+          }
         } else {
-          doc.text(String(item.sl_no), colX[0], currentY + 4, { width: colW[0], align: 'center' });
-          doc.text(descText, colX[1], currentY + 4, { width: colW[1], height: 10, ellipsis: true });
-          doc.text(item.brand || '-', colX[2], currentY + 4, { width: colW[2], height: 10, ellipsis: true });
-          doc.text(item.size, colX[3], currentY + 4, { width: colW[3], align: 'center' });
-          doc.text(covText, colX[4], currentY + 4, { width: colW[4], align: 'right' });
-          doc.text(sqftText, colX[5], currentY + 4, { width: colW[5], align: 'right' });
-          doc.text(rateSqftText, colX[6], currentY + 4, { width: colW[6], align: 'right' });
-          doc.text(qtyUnitText, colX[7], currentY + 4, { width: colW[7], align: 'right' });
-          doc.text(rateUnitText, colX[8], currentY + 4, { width: colW[8], align: 'right' });
-          doc.text(formatCurrency(item.total_amount), colX[9], currentY + 4, { width: colW[9], align: 'right' });
+          if (isEncrypted) {
+            doc.text(String(item.sl_no), colX[0], currentY + 4, { width: colW[0], align: 'center' });
+            doc.text(descText, colX[1], currentY + 4, { width: colW[1], height: 10, ellipsis: true });
+            doc.text(item.size, colX[2], currentY + 4, { width: colW[2], align: 'center' });
+            doc.text(covText, colX[3], currentY + 4, { width: colW[3], align: 'right' });
+            doc.text(sqftText, colX[4], currentY + 4, { width: colW[4], align: 'right' });
+            doc.text(rateSqftText, colX[5], currentY + 4, { width: colW[5], align: 'right' });
+            doc.text(qtyUnitText, colX[6], currentY + 4, { width: colW[6], align: 'right' });
+            doc.text(rateUnitText, colX[7], currentY + 4, { width: colW[7], align: 'right' });
+            doc.text(formatCurrency(item.total_amount), colX[8], currentY + 4, { width: colW[8], align: 'right' });
+          } else {
+            doc.text(String(item.sl_no), colX[0], currentY + 4, { width: colW[0], align: 'center' });
+            doc.text(descText, colX[1], currentY + 4, { width: colW[1], height: 10, ellipsis: true });
+            doc.text(item.brand || '-', colX[2], currentY + 4, { width: colW[2], height: 10, ellipsis: true });
+            doc.text(item.size, colX[3], currentY + 4, { width: colW[3], align: 'center' });
+            doc.text(covText, colX[4], currentY + 4, { width: colW[4], align: 'right' });
+            doc.text(sqftText, colX[5], currentY + 4, { width: colW[5], align: 'right' });
+            doc.text(rateSqftText, colX[6], currentY + 4, { width: colW[6], align: 'right' });
+            doc.text(qtyUnitText, colX[7], currentY + 4, { width: colW[7], align: 'right' });
+            doc.text(rateUnitText, colX[8], currentY + 4, { width: colW[8], align: 'right' });
+            doc.text(formatCurrency(item.total_amount), colX[9], currentY + 4, { width: colW[9], align: 'right' });
+          }
         }
 
-        currentY += 16;
+        currentY += itemRowH;
       }
     }
   }

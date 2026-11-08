@@ -26,6 +26,9 @@ import {
   Percent,
   ShieldAlert,
   History,
+  Upload,
+  ClipboardPaste,
+  Eye,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
 import { QuotationHistoryModal } from '../components/QuotationHistoryModal';
@@ -92,6 +95,117 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   // Customer Autocomplete & Live Lookup State
+  // Tile Product Image Paste & Upload State
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  const updateItemImage = (areaIdx: number, itemIdx: number, imageBase64: string) => {
+    setAreas((prev) => {
+      const next = [...prev];
+      const area = { ...next[areaIdx] };
+      const items = [...area.items];
+      items[itemIdx] = {
+        ...items[itemIdx],
+        item_image: imageBase64,
+      };
+      area.items = items;
+      next[areaIdx] = area;
+      return next;
+    });
+  };
+
+  const processImageUpload = (file: File, areaIdx: number, itemIdx: number) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 360;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const base64 = canvas.toDataURL('image/jpeg', 0.72);
+          updateItemImage(areaIdx, itemIdx, base64);
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePasteFromClipboard = async (areaIdx: number, itemIdx: number) => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        alert('Clipboard API is not accessible directly in this browser context. You can focus on this item and press Ctrl+V to paste your image.');
+        return;
+      }
+      const clipItems = await navigator.clipboard.read();
+      for (const item of clipItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const file = new File([blob], 'clipboard_tile_image.png', { type });
+            processImageUpload(file, areaIdx, itemIdx);
+            return;
+          }
+        }
+      }
+      alert('No image found in clipboard. Please copy a tile image first, then click Paste (or press Ctrl+V on the item row).');
+    } catch (err: any) {
+      console.warn('Clipboard read error:', err);
+      alert('Unable to read clipboard directly. Please focus on this item row and press Ctrl+V to paste your image.');
+    }
+  };
+
+  const handleRowPaste = (e: React.ClipboardEvent<HTMLTableRowElement | HTMLDivElement>, areaIdx: number, itemIdx: number) => {
+    const clipItems = e.clipboardData?.items;
+    if (!clipItems) return;
+    for (let i = 0; i < clipItems.length; i++) {
+      const it = clipItems[i];
+      if (it.type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const file = it.getAsFile();
+        if (file) {
+          processImageUpload(file, areaIdx, itemIdx);
+        }
+        return;
+      }
+    }
+  };
+
+  const handleAreaToolbarPaste = async (areaIdx: number) => {
+    const area = areas[areaIdx];
+    if (!area || !area.items.length) return;
+    const targetIdx = area.items.findIndex((it) => !it.item_image) !== -1
+      ? area.items.findIndex((it) => !it.item_image)
+      : area.items.length - 1;
+    if (targetIdx >= 0) {
+      await handlePasteFromClipboard(areaIdx, targetIdx);
+    }
+  };
+
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -564,6 +678,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
       discount_percent: 0,
       discount_amount: 0,
       total_amount: initialTotal,
+      item_image: '',
     });
     setAreas(newAreas);
 
@@ -1268,6 +1383,8 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
             discount_percent: parseFloat(String(it.discount_percent || 0)) || 0,
             discount_amount: parseFloat(String(it.discount_amount || 0)) || 0,
             total_amount: parseFloat(String(it.total_amount)) || 0,
+            item_image: it.item_image || null,
+            item_code: it.item_code || null,
           })),
         })),
       };
@@ -2110,6 +2227,15 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
               <div className="flex items-center space-x-1.5 sm:space-x-2">
                 <button
                   type="button"
+                  onClick={() => handleAreaToolbarPaste(areaIdx)}
+                  className="btn btn-secondary btn-xs text-indigo-700 hover:text-indigo-900 bg-indigo-50/70 border-indigo-200"
+                  title="Paste tile image from clipboard into active/unfilled item in this area"
+                >
+                  <ClipboardPaste size={12} className="text-indigo-600" />
+                  <span>Paste Image</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleAddItem(areaIdx)}
                   className="btn btn-secondary btn-xs"
                 >
@@ -2148,8 +2274,11 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                     key={itemIdx}
                     className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5 transition-all"
                   >
-                    {/* Card Header: Item # and Delete */}
-                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                    {/* Card Header: Item #, Tile Image, and Delete */}
+                    <div
+                      onPaste={(e) => handleRowPaste(e, areaIdx, itemIdx)}
+                      className="flex items-center justify-between pb-1.5 border-b border-slate-100"
+                    >
                       <div className="flex items-center space-x-2">
                         <span className="w-6 h-6 rounded-md bg-[#1B263B] text-white font-mono font-bold text-xs flex items-center justify-center shadow-2xs">
                           {item.sl_no}
@@ -2158,14 +2287,71 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                           Line Item #{item.sl_no}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(areaIdx, itemIdx)}
-                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                        title="Delete this line item"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+
+                      <div className="flex items-center space-x-2">
+                        {/* Mobile Tile Image Picker / Thumbnail */}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          ref={(el) => (fileInputRefs.current[`${areaIdx}-${itemIdx}`] = el)}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              processImageUpload(e.target.files[0], areaIdx, itemIdx);
+                            }
+                          }}
+                          className="hidden"
+                        />
+
+                        {item.item_image ? (
+                          <div className="relative inline-block">
+                            <img
+                              src={item.item_image}
+                              alt={item.description}
+                              onClick={() => setEnlargedImage(item.item_image || null)}
+                              className="w-8 h-8 object-cover rounded-md border border-slate-200 cursor-pointer"
+                              title="Click to view full image"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateItemImage(areaIdx, itemIdx, '')}
+                              className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 hover:bg-rose-600 shadow-2xs"
+                              title="Remove Image"
+                            >
+                              <X size={8} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRefs.current[`${areaIdx}-${itemIdx}`]?.click()}
+                              className="px-2 py-0.5 rounded border border-dashed border-slate-300 text-slate-600 bg-slate-50 text-[10px] font-semibold flex items-center space-x-1 hover:bg-slate-100 cursor-pointer"
+                              title="Upload tile photo"
+                            >
+                              <Upload size={10} className="text-[#415A77]" />
+                              <span>Upload</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePasteFromClipboard(areaIdx, itemIdx)}
+                              className="px-2 py-0.5 rounded border border-dashed border-indigo-300 text-indigo-700 bg-indigo-50 text-[10px] font-semibold flex items-center space-x-1 hover:bg-indigo-100 cursor-pointer"
+                              title="Paste tile image from clipboard"
+                            >
+                              <ClipboardPaste size={10} className="text-indigo-600" />
+                              <span>Paste</span>
+                            </button>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(areaIdx, itemIdx)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                          title="Delete this line item"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Description Field */}
@@ -2486,6 +2672,7 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-700 font-semibold text-[11px] uppercase tracking-wider">
                     <th className="py-2.5 px-1.5 text-center w-8">Sl</th>
+                    <th className="py-2.5 px-2 text-center w-28 min-w-[95px]">Photo / Image</th>
                     <th className="py-2.5 px-2 text-left min-w-[200px]">Tile / Surface Description</th>
                     <th className="py-2.5 px-2 text-left w-36 min-w-[130px]">Brand</th>
                     <th className="py-2.5 px-2 text-left w-36 min-w-[130px]">Size</th>
@@ -2504,9 +2691,77 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
                     const pType = (item.product_type || 'box').toLowerCase();
 
                     return (
-                      <tr key={itemIdx} className="hover:bg-slate-50/60 transition-colors">
+                      <tr
+                        key={itemIdx}
+                        onPaste={(e) => handleRowPaste(e, areaIdx, itemIdx)}
+                        className="hover:bg-slate-50/60 transition-colors"
+                      >
                         <td className="align-top pt-3 px-1.5 text-center font-mono text-slate-400 font-semibold text-xs">
                           {item.sl_no}
+                        </td>
+
+                        {/* Photo / Image Cell */}
+                        <td className="align-top py-1.5 px-2 text-center w-28 min-w-[95px]">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            ref={(el) => (fileInputRefs.current[`${areaIdx}-${itemIdx}`] = el)}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                processImageUpload(e.target.files[0], areaIdx, itemIdx);
+                              }
+                            }}
+                            className="hidden"
+                          />
+
+                          {item.item_image ? (
+                            <div className="relative inline-block group">
+                              <img
+                                src={item.item_image}
+                                alt={item.description}
+                                onClick={() => setEnlargedImage(item.item_image || null)}
+                                className="w-12 h-12 object-cover rounded-lg border border-slate-200 shadow-2xs cursor-pointer hover:opacity-90 transition-opacity"
+                                title="Click to view full image"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateItemImage(areaIdx, itemIdx, '')}
+                                className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-0.5 hover:bg-rose-600 transition-colors shadow-2xs cursor-pointer"
+                                title="Remove Tile Image"
+                              >
+                                <X size={10} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePasteFromClipboard(areaIdx, itemIdx)}
+                                className="absolute -bottom-1 -right-1 bg-indigo-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 hover:bg-indigo-700 transition-all shadow-xs cursor-pointer"
+                                title="Replace with image from clipboard"
+                              >
+                                <ClipboardPaste size={10} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => fileInputRefs.current[`${areaIdx}-${itemIdx}`]?.click()}
+                                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg border border-dashed border-slate-300 hover:border-slate-400 text-slate-600 hover:text-slate-800 bg-slate-50 text-[10px] font-semibold cursor-pointer w-full justify-center transition-colors"
+                                title="Upload product image file"
+                              >
+                                <Upload size={11} className="text-[#415A77]" />
+                                <span>Upload</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePasteFromClipboard(areaIdx, itemIdx)}
+                                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg border border-dashed border-indigo-300 hover:border-indigo-400 text-indigo-700 hover:text-indigo-900 bg-indigo-50 text-[10px] font-semibold cursor-pointer w-full justify-center transition-colors"
+                                title="Paste image from clipboard (or press Ctrl+V on this row)"
+                              >
+                                <ClipboardPaste size={11} className="text-indigo-600" />
+                                <span>Paste</span>
+                              </button>
+                            </div>
+                          )}
                         </td>
 
                         <td className="align-top py-1.5 px-2">
@@ -3088,6 +3343,33 @@ export const QuotationEditor: React.FC<Props> = ({ quotationId, onBack, onSaved 
           ))}
         </div>
       )}
+      {/* Full-size Tile Image Preview Modal */}
+      {enlargedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <div
+            className="relative max-w-2xl max-h-[85vh] bg-white rounded-2xl p-2 shadow-2xl overflow-hidden border border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setEnlargedImage(null)}
+              className="absolute top-3 right-3 bg-slate-900/70 hover:bg-slate-900 text-white p-1.5 rounded-full transition-colors z-10 cursor-pointer shadow-md"
+              title="Close Preview"
+            >
+              <X size={16} />
+            </button>
+            <img
+              src={enlargedImage}
+              alt="Tile Full View"
+              className="max-h-[80vh] w-auto max-w-full rounded-xl object-contain mx-auto"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Quotation Edit & Version History Modal */}
       {historyModalOpen && quotationId && (
         <QuotationHistoryModal
