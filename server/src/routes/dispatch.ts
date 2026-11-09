@@ -275,6 +275,11 @@ export async function ensureDispatchSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_dispatch_items_invoice_id ON dispatch_items(dispatch_invoice_id);
       CREATE INDEX IF NOT EXISTS idx_quotations_dispatch_status ON quotations(dispatch_status);
       CREATE INDEX IF NOT EXISTS idx_quotation_items_pending ON quotation_items(quotation_id, pending_quantity);
+
+      UPDATE quotation_items
+      SET pending_quantity = GREATEST(0, COALESCE(quantity_boxes, quantity_sqft, 1) - COALESCE(dispatched_quantity, 0))
+      WHERE pending_quantity IS NULL 
+         OR (pending_quantity = 0 AND COALESCE(dispatched_quantity, 0) < COALESCE(quantity_boxes, quantity_sqft, 1));
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -840,6 +845,7 @@ dispatchRouter.put(
                    dispatch_notes = $3,
                    dispatched_at = CASE WHEN $4::boolean THEN COALESCE(dispatched_at, CURRENT_TIMESTAMP) ELSE NULL END,
                    dispatched_quantity = $5,
+                   pending_quantity = GREATEST(0, COALESCE(quantity_boxes, quantity_sqft, 1) - $5),
                    procurement_status = $6,
                    procurement_notes = $7,
                    procurement_updated_at = CASE WHEN $6::varchar IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END,
@@ -1471,7 +1477,7 @@ dispatchRouter.get('/all-closed', async (req: Request, res: Response) => {
         GROUP BY quotation_id
       ) p_pay ON p_pay.quotation_id = q.id
       WHERE LOWER(q.status) IN ('closed', 'won')
-        AND COALESCE(q.dispatch_status, 'Yet to Update') NOT IN ('Dispatched', 'COMPLETED')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') = 'Yet to Update'
         ${userFilter}
       ORDER BY COALESCE(q.closed_at, q.updated_at, q.created_at) ASC`,
       userParams
@@ -1528,11 +1534,11 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         ORDER BY quotation_id, id DESC
       ) dr ON dr.quotation_id = q.id
       WHERE LOWER(q.status) IN ('closed', 'approved', 'won')
-        AND COALESCE(q.dispatch_status, 'Yet to Update') NOT IN ('Dispatched', 'COMPLETED')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') NOT IN ('Yet to Update', 'Dispatched', 'COMPLETED')
         AND EXISTS (
           SELECT 1 FROM quotation_items qi 
           WHERE qi.quotation_id = q.id 
-            AND COALESCE(qi.pending_quantity, qi.quantity_boxes, qi.quantity_sqft, 1) > 0
+            AND GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) > 0
         )
         ${userFilter}
       ORDER BY COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date, q.updated_at) ASC`,
@@ -1558,7 +1564,7 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as ordered_quantity,
         COALESCE(qi.dispatched_quantity, 0) as quantity_dispatched,
         GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) as remaining_quantity,
-        COALESCE(qi.pending_quantity, GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0))) as pending_quantity,
+        GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) as pending_quantity,
         COALESCE(qi.fulfillment_status, 
           CASE 
             WHEN COALESCE(qi.dispatched_quantity, 0) >= COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) AND COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) > 0 THEN 'DISPATCHED'

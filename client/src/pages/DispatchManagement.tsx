@@ -698,10 +698,11 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         }),
       });
 
-      showToast('Dispatch statuses and dates saved successfully!');
+      showToast('Dispatch sourcing saved! Moved to Processing Dispatch.');
       setSelectedQuotationId(null);
-      loadAllClosed();
+      setCurrentView('processing');
       loadProcessing();
+      loadAllClosed();
       loadStats();
     } catch (err: any) {
       alert(err.message || 'Failed to save dispatch changes');
