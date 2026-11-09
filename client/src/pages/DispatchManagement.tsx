@@ -266,7 +266,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
     try {
       setCompletedLoading(true);
       const res = await fetchApi<any>('/api/dispatch/completed');
-      setCompletedList(res?.completed || []);
+      setCompletedList(res?.completed || res?.completed_dispatches || []);
     } catch (err: any) {
       console.warn('Failed to load completed dispatches:', err);
     } finally {
@@ -422,6 +422,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       if (
         [
           'dispatch:updated',
+          'dispatch:partial_applied',
           'item_status:changed',
           'payment:recorded',
           'DISPATCH_ITEM_CHANGED',

@@ -541,12 +541,13 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   const handleCommitReconciliation = async (quoteId: number, invoiceId: number, items: any[]) => {
     setIsCommittingReconcile(true);
     try {
-      await fetchApi<any>(`/api/dispatch/${quoteId}/reconcile-dispatch`, {
+      const res = await fetchApi<any>(`/api/dispatch/${quoteId}/apply-invoice-dispatch`, {
         method: 'POST',
         body: JSON.stringify({
           invoice_id: invoiceId,
           items: items.map((it) => ({
             quotation_item_id: it.quotation_item_id,
+            invoice_qty: it.invoice_qty,
             dispatch_qty: it.invoice_qty,
             is_overage: it.is_overage,
           })),
@@ -558,6 +559,12 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       setReconcileDrawer(null);
       setSupervisorOverageReason('');
       onRefresh();
+
+      if (res?.is_completed) {
+        alert('🎉 All items 100% fulfilled! Quotation moved to "Dispatch Completed".');
+      } else {
+        alert(res?.message || 'Invoice slice dispatched! Remaining pending items kept in Processing Dispatch.');
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to apply dispatch reconciliation');
     } finally {

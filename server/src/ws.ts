@@ -23,6 +23,7 @@ export interface WsEvent {
     | 'LOCAL_PURCHASE_AVAILABILITY_VERIFIED'
     | 'dispatch:invoice_verified'
     | 'dispatch:item_reconciled'
+    | 'dispatch:partial_applied'
     | 'dispatch:invoice_removed'
     | 'dispatch:updated'
     | 'item_status:changed'

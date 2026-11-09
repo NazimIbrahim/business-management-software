@@ -252,7 +252,29 @@ export async function ensureDispatchSchema(): Promise<void> {
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS pending_quantity NUMERIC(12, 2) DEFAULT 0;
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50) DEFAULT 'PENDING';
       ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_id INTEGER REFERENCES dispatch_invoices(id) ON DELETE SET NULL;
-      ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_number VARCHAR(100);
+            ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS last_invoice_number VARCHAR(100);
+
+      -- Multi-Date Slice & Invoice-Driven Dispatch Schema Enhancements
+      ALTER TABLE dispatch_items ALTER COLUMN dispatch_id DROP NOT NULL;
+      ALTER TABLE dispatch_items ADD COLUMN IF NOT EXISTS quotation_id INTEGER REFERENCES quotations(id) ON DELETE CASCADE;
+      ALTER TABLE dispatch_items ADD COLUMN IF NOT EXISTS dispatch_invoice_id INTEGER REFERENCES dispatch_invoices(id) ON DELETE SET NULL;
+      ALTER TABLE dispatch_items ADD COLUMN IF NOT EXISTS dispatched_quantity NUMERIC(12, 2);
+      ALTER TABLE dispatch_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE dispatch_items ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(150);
+
+      UPDATE dispatch_items di
+      SET quotation_id = dr.quotation_id
+      FROM dispatch_records dr
+      WHERE di.dispatch_id = dr.id AND di.quotation_id IS NULL;
+
+      UPDATE dispatch_items
+      SET dispatched_quantity = quantity_dispatched
+      WHERE dispatched_quantity IS NULL AND quantity_dispatched IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_dispatch_items_quotation_id ON dispatch_items(quotation_id);
+      CREATE INDEX IF NOT EXISTS idx_dispatch_items_invoice_id ON dispatch_items(dispatch_invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_quotations_dispatch_status ON quotations(dispatch_status);
+      CREATE INDEX IF NOT EXISTS idx_quotation_items_pending ON quotation_items(quotation_id, pending_quantity);
     `);
     schemaEnsured = true;
   } catch (err: any) {
@@ -1448,8 +1470,8 @@ dispatchRouter.get('/all-closed', async (req: Request, res: Response) => {
         FROM payments
         GROUP BY quotation_id
       ) p_pay ON p_pay.quotation_id = q.id
-      WHERE LOWER(q.status) IN ('closed', 'approved')
-        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+      WHERE LOWER(q.status) IN ('closed', 'won')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') NOT IN ('Dispatched', 'COMPLETED')
         ${userFilter}
       ORDER BY COALESCE(q.closed_at, q.updated_at, q.created_at) ASC`,
       userParams
@@ -1505,12 +1527,12 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         FROM dispatch_records
         ORDER BY quotation_id, id DESC
       ) dr ON dr.quotation_id = q.id
-      WHERE LOWER(q.status) IN ('closed', 'approved')
-        AND COALESCE(q.dispatch_status, 'Yet to Update') != 'Dispatched'
+      WHERE LOWER(q.status) IN ('closed', 'approved', 'won')
+        AND COALESCE(q.dispatch_status, 'Yet to Update') NOT IN ('Dispatched', 'COMPLETED')
         AND EXISTS (
           SELECT 1 FROM quotation_items qi 
           WHERE qi.quotation_id = q.id 
-            AND qi.dispatch_status IN ('Ready Stock', 'Need to Arrange from Local', 'Factory Order', 'Dispatched')
+            AND COALESCE(qi.pending_quantity, qi.quantity_boxes, qi.quantity_sqft, 1) > 0
         )
         ${userFilter}
       ORDER BY COALESCE(q.scheduled_dispatch_date, q.expected_dispatch_date, q.updated_at) ASC`,
@@ -2364,15 +2386,15 @@ dispatchRouter.delete('/invoices/:invoiceId', async (req: Request, res: Response
   }
 });
 
-// 4. Reconcile & Commit Dispatch Quantities
-dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res: Response) => {
+// 4. Reconcile & Commit Dispatch Quantities (Atomic Multi-Invoice Slice Handler)
+const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
   try {
     const quotationId = parseInt(req.params.quotationId as string, 10);
     const { items = [], invoice_id, supervisor_override = false, supervisor_notes } = req.body;
 
     // Rule 1: Must have at least 1 verified invoice
     const invRows = await query(
-      `SELECT * FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true`,
+      `SELECT * FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true ORDER BY id DESC`,
       [quotationId]
     );
     if (invRows.length === 0) {
@@ -2413,6 +2435,10 @@ dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res
       }
     }
 
+    let totalRemainingPending = 0;
+    let pendingItemsCount = 0;
+    let sliceItemsDispatchedCount = 0;
+
     await withTransaction(async (client) => {
       for (const reqItem of items) {
         const dbItem = itemsMap.get(reqItem.quotation_item_id);
@@ -2420,49 +2446,100 @@ dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res
 
         const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 0);
         const already = parseFloat(dbItem.dispatched_quantity || 0);
-        const addQty = parseFloat(reqItem.dispatch_qty ?? reqItem.invoice_qty ?? 0);
-        const newDispatched = already + addQty;
-        const pending = Math.max(0, quoted - newDispatched);
-        const status = newDispatched >= quoted ? 'DISPATCHED' : (newDispatched > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING');
-        const itemDispatchStatus = newDispatched >= quoted ? 'Dispatched' : 'Ready Stock';
+        const sliceQty = parseFloat(reqItem.dispatch_qty ?? reqItem.invoice_qty ?? 0);
 
-        await client.query(
-          `UPDATE quotation_items
-           SET dispatched_quantity = $1,
-               pending_quantity = $2,
-               fulfillment_status = $3,
-               dispatch_status = $4,
-               last_invoice_id = $5,
-               last_invoice_number = $6,
-               dispatched_at = CURRENT_TIMESTAMP
-           WHERE id = $7`,
-          [
-            newDispatched,
-            pending,
-            status,
-            itemDispatchStatus,
-            targetInvoice.id,
-            targetInvoice.invoice_number,
-            dbItem.id,
-          ]
-        );
+        if (sliceQty > 0) {
+          sliceItemsDispatchedCount++;
+          const newDispatched = already + sliceQty;
+          const pending = Math.max(0, quoted - newDispatched);
+          const status = pending <= 0 ? 'DISPATCHED' : 'PARTIALLY_DISPATCHED';
+          const itemDispatchStatus = pending <= 0 ? 'Dispatched' : 'Partially Dispatched';
+
+          // Insert discrete slice record into dispatch_items
+          await client.query(
+            `INSERT INTO dispatch_items (
+               quotation_id,
+               quotation_item_id,
+               dispatch_invoice_id,
+               ordered_quantity,
+               quantity_dispatched,
+               dispatched_quantity,
+               unit,
+               status,
+               remarks,
+               created_by_name,
+               dispatched_at,
+               created_at,
+               updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [
+              quotationId,
+              dbItem.id,
+              targetInvoice.id,
+              quoted,
+              sliceQty,
+              sliceQty,
+              dbItem.product_type || 'box',
+              status,
+              reqItem.remarks || `Invoiced under #${targetInvoice.invoice_number}`,
+              supervisor_notes || req.user?.full_name || 'Warehouse Dispatcher',
+            ]
+          );
+
+          // Update quotation_items cumulative fulfillment state
+          await client.query(
+            `UPDATE quotation_items
+             SET dispatched_quantity = $1,
+                 pending_quantity = $2,
+                 fulfillment_status = $3,
+                 dispatch_status = $4,
+                 last_invoice_id = $5,
+                 last_invoice_number = $6,
+                 dispatched_at = CURRENT_TIMESTAMP
+             WHERE id = $7`,
+            [
+              newDispatched,
+              pending,
+              status,
+              itemDispatchStatus,
+              targetInvoice.id,
+              targetInvoice.invoice_number,
+              dbItem.id,
+            ]
+          );
+        }
       }
 
-      // Check if all quotation items are now fully dispatched
-      const remainingRes = await client.query(
-        `SELECT COUNT(*) as count 
-         FROM quotation_items 
-         WHERE quotation_id = $1 
-           AND (fulfillment_status != 'DISPATCHED' OR dispatch_status != 'Dispatched')`,
+      // Check remaining pending across ALL items in this quotation
+      const checkPendingRes = await client.query(
+        `SELECT 
+           COALESCE(SUM(COALESCE(pending_quantity, quantity_boxes, 1)), 0) as total_pending,
+           COUNT(CASE WHEN COALESCE(pending_quantity, quantity_boxes, 1) > 0 THEN 1 END) as pending_count
+         FROM quotation_items
+         WHERE quotation_id = $1`,
         [quotationId]
       );
 
-      const allDispatched = parseInt(remainingRes.rows[0].count, 10) === 0;
-      if (allDispatched) {
+      totalRemainingPending = parseFloat(checkPendingRes.rows[0]?.total_pending || '0');
+      pendingItemsCount = parseInt(checkPendingRes.rows[0]?.pending_count || '0', 10);
+
+      const isFullyCompleted = totalRemainingPending <= 0 && pendingItemsCount === 0;
+
+      if (isFullyCompleted) {
         await client.query(
           `UPDATE quotations
-           SET dispatch_status = 'Dispatched',
+           SET dispatch_status = 'COMPLETED',
                closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
+               dispatched_at = CURRENT_TIMESTAMP,
+               dispatched_by_id = $2,
+               dispatched_by_name = $3
+           WHERE id = $1`,
+          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff']
+        );
+      } else {
+        await client.query(
+          `UPDATE quotations
+           SET dispatch_status = 'PARTIALLY_DISPATCHED',
                dispatched_at = CURRENT_TIMESTAMP,
                dispatched_by_id = $2,
                dispatched_by_name = $3
@@ -2472,24 +2549,49 @@ dispatchRouter.post('/:quotationId/reconcile-dispatch', async (req: Request, res
       }
     });
 
+    const isFullyCompleted = totalRemainingPending <= 0 && pendingItemsCount === 0;
+
     broadcast({
-      type: 'dispatch:item_reconciled',
-      payload: { quotation_id: quotationId, invoice_id: targetInvoice.id, items },
+      type: 'dispatch:partial_applied',
+      payload: {
+        quotation_id: quotationId,
+        invoice_id: targetInvoice.id,
+        invoice_number: targetInvoice.invoice_number,
+        is_completed: isFullyCompleted,
+        remaining_pending: totalRemainingPending,
+        pending_items_count: pendingItemsCount,
+        dispatched_items_count: sliceItemsDispatchedCount,
+      },
     });
 
     broadcast({
-      type: 'dispatch:updated',
-      payload: { quotation_id: quotationId, updated_by: req.user?.full_name },
+      type: 'DISPATCH_UPDATED',
+      payload: {
+        quotation_id: quotationId,
+        status: isFullyCompleted ? 'COMPLETED' : 'PARTIALLY_DISPATCHED',
+      },
     });
 
     res.json({
       success: true,
-      message: 'Dispatch quantities reconciled and saved successfully.',
+      message: isFullyCompleted
+        ? 'All items 100% fulfilled! Quotation moved to Dispatch Completed.'
+        : `Invoice slice recorded! ${pendingItemsCount} item(s) remain pending in Processing Dispatch.`,
+      is_completed: isFullyCompleted,
+      quotation_id: quotationId,
+      dispatch_status: isFullyCompleted ? 'COMPLETED' : 'PARTIALLY_DISPATCHED',
+      remaining_pending: totalRemainingPending,
+      pending_items_count: pendingItemsCount,
+      target_invoice_number: targetInvoice.invoice_number,
     });
   } catch (error: any) {
+    console.error('[apply-invoice-dispatch] Error:', error);
     res.status(500).json({ error: error.message });
   }
-});
+};
+
+dispatchRouter.post('/:quotationId/apply-invoice-dispatch', handleApplyInvoiceDispatch);
+dispatchRouter.post('/:quotationId/reconcile-dispatch', handleApplyInvoiceDispatch);
 
 // 4. DISPATCH COMPLETED (Archive of 100% fulfilled dispatches)
 dispatchRouter.get('/completed', async (req: Request, res: Response) => {
@@ -2502,6 +2604,7 @@ dispatchRouter.get('/completed', async (req: Request, res: Response) => {
     const rows = await query(
       `SELECT 
         q.id as quotation_id,
+        q.id,
         q.quotation_number,
         q.customer_name,
         q.customer_phone,
@@ -2518,7 +2621,10 @@ dispatchRouter.get('/completed', async (req: Request, res: Response) => {
         COALESCE(dr.dispatched_by_name, q.dispatched_by_name, 'Warehouse Dispatcher') as dispatched_by_name,
         dr.notes,
         COALESCE(qi_agg.total_boxes, 0) as total_boxes,
-        COALESCE(qi_agg.total_items, 0) as total_items
+        COALESCE(qi_agg.total_items, 0) as total_items,
+        COALESCE(inv_agg.invoices, '[]'::json) as invoices,
+        COALESCE(inv_agg.total_invoices, 0) as total_invoices,
+        COALESCE(hist_agg.dispatch_history, '[]'::json) as dispatch_history
       FROM quotations q
       LEFT JOIN (
         SELECT DISTINCT ON (quotation_id) *
@@ -2533,7 +2639,51 @@ dispatchRouter.get('/completed', async (req: Request, res: Response) => {
         FROM quotation_items
         GROUP BY quotation_id
       ) qi_agg ON qi_agg.quotation_id = q.id
-      WHERE (q.dispatch_status = 'Dispatched' OR dr.status = 'COMPLETED')
+      LEFT JOIN (
+        SELECT 
+          quotation_id,
+          json_agg(
+            json_build_object(
+              'id', id,
+              'invoice_number', invoice_number,
+              'invoice_date', invoice_date,
+              'file_name', file_name,
+              'file_url', file_url,
+              'file_size', file_size,
+              'created_at', created_at
+            ) ORDER BY id DESC
+          ) as invoices,
+          COUNT(*) as total_invoices
+        FROM dispatch_invoices
+        GROUP BY quotation_id
+      ) inv_agg ON inv_agg.quotation_id = q.id
+      LEFT JOIN (
+        SELECT 
+          di.quotation_id,
+          json_agg(
+            json_build_object(
+              'id', di.id,
+              'quotation_item_id', di.quotation_item_id,
+              'item_description', COALESCE(qi.description, 'Item'),
+              'brand', COALESCE(qi.brand, ''),
+              'size', COALESCE(qi.size, ''),
+              'ordered_quantity', di.ordered_quantity,
+              'dispatched_quantity', di.dispatched_quantity,
+              'unit', di.unit,
+              'status', di.status,
+              'invoice_id', di.dispatch_invoice_id,
+              'invoice_number', dinv.invoice_number,
+              'invoice_file_url', dinv.file_url,
+              'dispatched_at', di.dispatched_at,
+              'created_by_name', di.created_by_name
+            ) ORDER BY di.dispatched_at DESC, di.id ASC
+          ) as dispatch_history
+        FROM dispatch_items di
+        LEFT JOIN quotation_items qi ON qi.id = di.quotation_item_id
+        LEFT JOIN dispatch_invoices dinv ON dinv.id = di.dispatch_invoice_id
+        GROUP BY di.quotation_id
+      ) hist_agg ON hist_agg.quotation_id = q.id
+      WHERE (LOWER(q.dispatch_status) IN ('completed', 'dispatched') OR dr.status = 'COMPLETED')
         ${userFilter}
       ORDER BY COALESCE(dr.completed_date, q.dispatched_at, q.updated_at) DESC`,
       userParams
@@ -2542,6 +2692,7 @@ dispatchRouter.get('/completed', async (req: Request, res: Response) => {
     res.json({
       success: true,
       count: rows.length,
+      completed: rows,
       completed_dispatches: rows,
     });
   } catch (error: any) {
