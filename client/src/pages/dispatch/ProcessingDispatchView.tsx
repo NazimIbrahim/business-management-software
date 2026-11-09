@@ -288,6 +288,12 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       extractedItems,
       invoice,
     });
+
+    if (extractedItems.length === 0 && invoice?.id) {
+      setTimeout(() => {
+        handleRescanInvoice(quote.id);
+      }, 50);
+    }
   };
 
   // Reactive Quantity Editor for Tax Invoice Reconciliation
@@ -497,6 +503,37 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Failed to delete invoice');
+    }
+  };
+
+  // Re-scan & Re-reconcile Tax Invoice PDF
+  const [isRescanning, setIsRescanning] = useState(false);
+  const handleRescanInvoice = async (quotationId: number) => {
+    setIsRescanning(true);
+    try {
+      const res = await fetchApi<any>(`/api/dispatch/${quotationId}/re-reconcile-invoice`, {
+        method: 'POST',
+      });
+      if (res?.success) {
+        const quote =
+          dispatches.find((q) => q.id === quotationId) ||
+          (reconcileDrawer?.quote.id === quotationId ? reconcileDrawer.quote : null);
+        if (quote) {
+          openReconciliationDrawer(
+            quote,
+            res.reconciliation,
+            res.invoice,
+            res.extractedItems || res.extracted_items
+          );
+        }
+        onRefresh();
+      } else {
+        alert(res?.error || 'Failed to re-scan Tax Invoice PDF');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error re-scanning tax invoice');
+    } finally {
+      setIsRescanning(false);
     }
   };
 
@@ -1196,15 +1233,26 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                     </div>
                   </div>
                 </div>
-                {reconcileDrawer.invoice.file_url && (
+                <div className="flex items-center space-x-2 shrink-0">
+                  {reconcileDrawer.invoice.file_url && (
+                    <button
+                      onClick={() => setPreviewPdfUrl(reconcileDrawer.invoice.file_url)}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
+                    >
+                      <Eye size={12} />
+                      <span>View PDF</span>
+                    </button>
+                  )}
                   <button
-                    onClick={() => setPreviewPdfUrl(reconcileDrawer.invoice.file_url)}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
+                    onClick={() => handleRescanInvoice(reconcileDrawer.quote.id)}
+                    disabled={isRescanning}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer shadow-2xs transition-all disabled:opacity-60"
+                    title="Re-extract line items and re-reconcile with Tax Invoice"
                   >
-                    <Eye size={12} />
-                    <span>View PDF</span>
+                    <RefreshCw size={12} className={isRescanning ? 'animate-spin' : ''} />
+                    <span>{isRescanning ? 'Scanning...' : 'Re-scan Invoice'}</span>
                   </button>
-                )}
+                </div>
               </div>
 
               {/* Matched Line Items Table */}

@@ -9,7 +9,7 @@ import { authenticateToken, requireRole } from '../middleware/auth';
 import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 import { parseTaxInvoiceWithCoordinates } from '../utils/pdfTableParser';
-import { matchInvoiceItemToQuotationItems, normalizeCeramicName } from '../utils/fuzzyItemMatcher';
+import { matchInvoiceItemToQuotationItems, normalizeCeramicName, isItemMatch, ItemMatchEvaluation } from '../utils/fuzzyItemMatcher';
 
 export const dispatchRouter = Router();
 
@@ -1583,6 +1583,46 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       [quoteIds]
     );
 
+    // Auto-heal legacy or empty extractedItems on active invoices
+    for (const inv of invoicesRes) {
+      const rec = inv.reconciliation_summary || {};
+      const count = (rec.extracted_items || rec.extractedItems || []).length;
+      if (count === 0 && inv.file_url) {
+        try {
+          let pdfBuffer: Buffer | null = null;
+          const localPath = path.resolve(process.cwd(), (inv.file_url || '').replace(/^\//, ''));
+          const serverPath = path.resolve(process.cwd(), 'uploads/invoices', path.basename(inv.file_url || ''));
+
+          if (fs.existsSync(localPath)) {
+            pdfBuffer = fs.readFileSync(localPath);
+          } else if (fs.existsSync(serverPath)) {
+            pdfBuffer = fs.readFileSync(serverPath);
+          } else if (inv.file_url && (inv.file_url.startsWith('http://') || inv.file_url.startsWith('https://'))) {
+            const resp = await fetch(inv.file_url);
+            if (resp.ok) {
+              const ab = await resp.arrayBuffer();
+              pdfBuffer = Buffer.from(ab);
+            }
+          }
+
+          if (pdfBuffer) {
+            const healed = await executeInvoiceReconciliation({
+              quotationId: inv.quotation_id,
+              pdfBuffer,
+              fileName: inv.file_name,
+              fileUrl: inv.file_url,
+              fileSize: inv.file_size || pdfBuffer.length,
+              existingInvoiceId: inv.id,
+            });
+            inv.reconciliation_summary = healed.reconciliationSummary;
+            inv.invoice_number = healed.invoiceNumber;
+          }
+        } catch (e: any) {
+          console.warn(`Could not auto-heal invoice ${inv.id}:`, e.message);
+        }
+      }
+    }
+
     const invoicesByQuote = new Map<number, any[]>();
     for (const inv of invoicesRes) {
       const arr = invoicesByQuote.get(inv.quotation_id) || [];
@@ -1849,221 +1889,240 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
 // TAX INVOICE PDF VERIFICATION & AUTO-RECONCILIATION ENGINE
 // =========================================================================
 
-// 1. Upload & Automated OCR/Text Extraction & Reconciliation
-dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoice_pdf'), async (req: Request, res: Response) => {
-  try {
-    const quotationId = parseInt(req.params.quotationId as string, 10);
-    if (isNaN(quotationId)) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      res.status(400).json({ error: 'Invalid quotation ID' });
-      return;
+async function executeInvoiceReconciliation({
+  quotationId,
+  pdfBuffer,
+  fileName,
+  fileUrl,
+  fileSize,
+  userId,
+  userName,
+  existingInvoiceId,
+}: {
+  quotationId: number;
+  pdfBuffer: Buffer;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  userId?: number;
+  userName?: string;
+  existingInvoiceId?: number;
+}) {
+  const quoteRows = await query(
+    `SELECT q.*, c.mobile_number as cust_mobile, c.gstin as cust_gstin
+     FROM quotations q
+     LEFT JOIN customers c ON c.id = q.customer_id
+     WHERE q.id = $1`,
+    [quotationId]
+  );
+
+  if (quoteRows.length === 0) {
+    throw new Error('Quotation not found');
+  }
+  const quotation = quoteRows[0];
+
+  const parsedInvoice = await parseTaxInvoiceWithCoordinates(pdfBuffer);
+  if (!parsedInvoice.raw_text || parsedInvoice.raw_text.trim().length === 0) {
+    throw new Error('PDF contains no readable text or is a scanned image without OCR text. Please upload a digital Tax Invoice PDF.');
+  }
+
+  const detectedPhones = parsedInvoice.customer_phones || [];
+  const detectedGstins = parsedInvoice.customer_gstins || [];
+  const invoiceNumber = parsedInvoice.invoice_number;
+  const invoiceDate = parsedInvoice.invoice_date;
+
+  const targetPhoneCandidates = [quotation.customer_phone, quotation.cust_mobile]
+    .filter(Boolean)
+    .map((p: string) => p.replace(/\D/g, '').slice(-10));
+
+  const targetGstinCandidates = [quotation.customer_gstin, quotation.cust_gstin]
+    .filter(Boolean)
+    .map((g: string) => g.trim().toUpperCase());
+
+  const phoneMatched = targetPhoneCandidates.some((tp) => tp && detectedPhones.includes(tp));
+  const gstinMatched = targetGstinCandidates.some((tg) => tg && detectedGstins.includes(tg));
+  const customerMatched = phoneMatched || gstinMatched;
+
+  if (!customerMatched) {
+    const err: any = new Error('⚠️ Data Mismatch: Customer phone/GSTIN does not match this quotation. Please verify and retry.');
+    err.reason = 'CUSTOMER_MISMATCH';
+    err.detected_phones = detectedPhones;
+    err.detected_gstins = detectedGstins;
+    err.expected_phone = quotation.customer_phone || quotation.cust_mobile || 'Not specified';
+    err.expected_gstin = quotation.customer_gstin || quotation.cust_gstin || 'Not specified';
+    throw err;
+  }
+
+  const extractedItems = (parsedInvoice.items || []).map((it: any, idx: number) => ({
+    id: `inv_${idx}`,
+    index: idx,
+    description: it.raw_description,
+    raw_description: it.raw_description,
+    clean_description: it.clean_description,
+    quantity: it.quantity,
+    unit: it.unit || 'BOX',
+    hsn: it.hsn || '',
+    rate: it.rate || 0,
+    amount: it.amount || 0,
+  }));
+
+  console.log('Extracted Invoice Lines:', extractedItems.map((e: any) => ({
+    id: e.id,
+    description: e.description,
+    quantity: e.quantity,
+    unit: e.unit,
+  })));
+
+  const itemRows = await query(
+    `SELECT * FROM quotation_items WHERE quotation_id = $1 ORDER BY id ASC`,
+    [quotationId]
+  );
+
+  const matchedItems: any[] = [];
+  const unmatchedItems: any[] = [];
+  const matchedQuoteItemIds = new Set<number>();
+  const usedInvoiceIndices = new Set<number>();
+
+  for (const qItem of itemRows) {
+    const quoteDesc = qItem.description || qItem.name || '';
+    let bestMatchIdx = -1;
+    let highestScore = 0;
+    let bestConfidence: any = 'NONE';
+
+    for (let invIdx = 0; invIdx < (parsedInvoice.items || []).length; invIdx++) {
+      if (usedInvoiceIndices.has(invIdx)) continue;
+      const invItem = parsedInvoice.items[invIdx];
+      const invDesc = invItem.raw_description || invItem.clean_description || '';
+
+      const eval1 = isItemMatch(quoteDesc, invDesc);
+      const eval2 = qItem.brand ? isItemMatch(`${qItem.brand} ${quoteDesc}`, invDesc) : null;
+      const eval3 = qItem.size ? isItemMatch(`${quoteDesc} ${qItem.size}`, invDesc) : null;
+
+      const candidates = [eval1, eval2, eval3].filter(Boolean) as ItemMatchEvaluation[];
+      const topCandidate = candidates.sort((a, b) => b.score - a.score)[0];
+
+      if (topCandidate && topCandidate.isMatch && topCandidate.score > highestScore) {
+        highestScore = topCandidate.score;
+        bestMatchIdx = invIdx;
+        bestConfidence = topCandidate.confidence;
+      }
     }
 
-    if (!req.file) {
-      res.status(400).json({ error: 'Please upload a Tax Invoice PDF file' });
-      return;
-    }
+    if (bestMatchIdx !== -1 && highestScore >= 0.7) {
+      const invIdx = bestMatchIdx;
+      usedInvoiceIndices.add(invIdx);
+      matchedQuoteItemIds.add(qItem.id);
 
-    // Fetch target quotation & customer details
-    const quoteRows = await query(
-      `SELECT q.*, c.mobile_number as cust_mobile, c.gstin as cust_gstin
-       FROM quotations q
-       LEFT JOIN customers c ON c.id = q.customer_id
-       WHERE q.id = $1`,
-      [quotationId]
-    );
+      const invItem = parsedInvoice.items[invIdx];
+      const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || qItem.ordered_quantity || 0);
+      const alreadyDispatched = parseFloat(qItem.dispatched_quantity || qItem.quantity_dispatched || 0);
+      const invQty = parseFloat(String(invItem.quantity || 0));
 
-    if (quoteRows.length === 0) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      res.status(404).json({ error: 'Quotation not found' });
-      return;
-    }
-    const quotation = quoteRows[0];
+      const newDispatched = Math.round((alreadyDispatched + invQty) * 100) / 100;
+      const pending = Math.max(0, Math.round((quotedQty - newDispatched) * 100) / 100);
+      const isOverage = newDispatched > quotedQty;
+      const excess = isOverage ? Math.round((newDispatched - quotedQty) * 100) / 100 : 0;
+      const status =
+        newDispatched >= quotedQty
+          ? 'DISPATCHED'
+          : newDispatched > 0
+          ? 'PARTIALLY_DISPATCHED'
+          : 'PENDING';
 
-    // Extract and parse Tax Invoice using Coordinate & Column-Bounded Parser
-    const pdfBuffer = fs.readFileSync(req.file.path);
-    let parsedInvoice: any;
-    try {
-      parsedInvoice = await parseTaxInvoiceWithCoordinates(pdfBuffer);
-    } catch (parseErr: any) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      res.status(400).json({ error: 'Failed to extract text from PDF: ' + parseErr.message });
-      return;
-    }
-
-    if (!parsedInvoice.raw_text || parsedInvoice.raw_text.trim().length === 0) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      res.status(400).json({
-        error: 'PDF contains no readable text or is a scanned image without OCR text. Please upload a digital Tax Invoice PDF.',
+      matchedItems.push({
+        quotation_item_id: qItem.id,
+        invoice_item_id: `inv_${invIdx}`,
+        description: qItem.description,
+        brand: qItem.brand,
+        size: qItem.size,
+        invoice_description: invItem.raw_description,
+        quoted_qty: quotedQty,
+        already_dispatched_qty: alreadyDispatched,
+        invoice_qty: invQty,
+        unit: invItem.unit || 'BOX',
+        new_dispatched_qty: newDispatched,
+        pending_qty: pending,
+        fulfillment_status: status,
+        is_overage: isOverage,
+        excess_qty: excess,
+        match_score: highestScore,
+        confidence: bestConfidence,
       });
-      return;
     }
+  }
 
-    const detectedPhones = parsedInvoice.customer_phones;
-    const detectedGstins = parsedInvoice.customer_gstins;
-    const invoiceNumber = parsedInvoice.invoice_number;
-    const invoiceDate = parsedInvoice.invoice_date;
+  for (const qItem of itemRows) {
+    if (!matchedQuoteItemIds.has(qItem.id)) {
+      const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 0);
+      const alreadyDispatched = parseFloat(qItem.dispatched_quantity || 0);
+      const remainingQty = Math.max(0, quotedQty - alreadyDispatched);
 
-    // Validate Customer Identity Match
-    const targetPhoneCandidates = [quotation.customer_phone, quotation.cust_mobile]
-      .filter(Boolean)
-      .map((p: string) => p.replace(/\D/g, '').slice(-10));
-
-    const targetGstinCandidates = [quotation.customer_gstin, quotation.cust_gstin]
-      .filter(Boolean)
-      .map((g: string) => g.trim().toUpperCase());
-
-    const phoneMatched = targetPhoneCandidates.some((tp) => tp && detectedPhones.includes(tp));
-    const gstinMatched = targetGstinCandidates.some((tg) => tg && detectedGstins.includes(tg));
-    const customerMatched = phoneMatched || gstinMatched;
-
-    // Strict Metadata Reconciliation: Reject if neither phone nor GSTIN matches
-    if (!customerMatched) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      res.status(400).json({
-        matched: false,
-        reason: 'CUSTOMER_MISMATCH',
-        message: '⚠️ Data Mismatch: Customer phone/GSTIN does not match this quotation. Please verify and retry.',
-        detected_phones: detectedPhones,
-        detected_gstins: detectedGstins,
-        expected_phone: quotation.customer_phone || quotation.cust_mobile || 'Not specified',
-        expected_gstin: quotation.customer_gstin || quotation.cust_gstin || 'Not specified',
+      unmatchedItems.push({
+        quotation_item_id: qItem.id,
+        description: qItem.description,
+        brand: qItem.brand,
+        size: qItem.size,
+        quoted_qty: quotedQty,
+        already_dispatched_qty: alreadyDispatched,
+        remaining_qty: remainingQty,
       });
-      return;
     }
+  }
 
-    // Format and log extracted invoice lines
-    const extractedItems = (parsedInvoice.items || []).map((it: any, idx: number) => ({
+  const unmappedInvoiceLines = (parsedInvoice.items || [])
+    .map((inv: any, idx: number) => ({
       id: `inv_${idx}`,
       index: idx,
-      description: it.raw_description,
-      raw_description: it.raw_description,
-      clean_description: it.clean_description,
-      quantity: it.quantity,
-      unit: it.unit || 'BOX',
-      hsn: it.hsn || '',
-      rate: it.rate || 0,
-      amount: it.amount || 0,
-    }));
+      raw_description: inv.raw_description,
+      clean_description: inv.clean_description,
+      quantity: inv.quantity,
+      unit: inv.unit,
+      raw_line: inv.raw_line,
+    }))
+    .filter((inv: any) => !usedInvoiceIndices.has(inv.index));
 
-    console.log('Extracted Invoice Lines:', extractedItems.map((e: any) => ({
-      id: e.id,
-      description: e.description,
-      quantity: e.quantity,
-      unit: e.unit,
-    })));
+  const reconciliationSummary = {
+    invoice_number: invoiceNumber,
+    invoice_date: invoiceDate,
+    customer_matched: true,
+    matched_phones: detectedPhones,
+    matched_gstins: detectedGstins,
+    extracted_items: extractedItems,
+    extractedItems: extractedItems,
+    matched_items: matchedItems,
+    unmatched_items: unmatchedItems,
+    unmapped_invoice_lines: unmappedInvoiceLines,
+    has_overages: matchedItems.some((i) => i.is_overage),
+    total_matched_count: matchedItems.length,
+    total_items_count: itemRows.length,
+    parser_type: parsedInvoice.parser_type,
+    extraction_confidence: parsedInvoice.confidence,
+  };
 
-    // Line Items Reconciliation Analysis with Robust Ceramic Fuzzy Normalization
-    const itemRows = await query(
-      `SELECT * FROM quotation_items WHERE quotation_id = $1 ORDER BY id ASC`,
-      [quotationId]
+  let savedInvoice: any;
+  if (existingInvoiceId) {
+    const updateRes = await query(
+      `UPDATE dispatch_invoices
+       SET invoice_number = $1,
+           invoice_date = $2,
+           customer_phone_detected = $3,
+           customer_gstin_detected = $4,
+           reconciliation_summary = $5,
+           is_verified = true,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING *`,
+      [
+        invoiceNumber,
+        invoiceDate || null,
+        detectedPhones.join(', ') || null,
+        detectedGstins.join(', ') || null,
+        JSON.stringify(reconciliationSummary),
+        existingInvoiceId,
+      ]
     );
-
-    const matchedItems: any[] = [];
-    const unmatchedItems: any[] = [];
-    const matchedQuoteItemIds = new Set<number>();
-    const usedInvoiceIndices = new Set<number>();
-
-    // 1. Match extracted invoice items to quotation lines using Token-Set Sorensen-Dice Matcher
-    if (parsedInvoice.items && parsedInvoice.items.length > 0) {
-      for (let invIdx = 0; invIdx < parsedInvoice.items.length; invIdx++) {
-        const invItem = parsedInvoice.items[invIdx];
-        const matchResult = matchInvoiceItemToQuotationItems(invItem.raw_description, itemRows);
-
-        if (matchResult.bestMatch && !matchedQuoteItemIds.has(matchResult.bestMatch.id)) {
-          const qItem = matchResult.bestMatch;
-          matchedQuoteItemIds.add(qItem.id);
-          usedInvoiceIndices.add(invIdx);
-
-          const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 0);
-          const alreadyDispatched = parseFloat(qItem.dispatched_quantity || 0);
-          const invQty = parseFloat(invItem.quantity) || 0;
-          const newDispatched = alreadyDispatched + invQty;
-          const pending = Math.max(0, quotedQty - newDispatched);
-          const isOverage = newDispatched > quotedQty;
-          const excess = isOverage ? Math.round((newDispatched - quotedQty) * 100) / 100 : 0;
-          const status =
-            newDispatched >= quotedQty
-              ? 'DISPATCHED'
-              : newDispatched > 0
-              ? 'PARTIALLY_DISPATCHED'
-              : 'PENDING';
-
-          matchedItems.push({
-            quotation_item_id: qItem.id,
-            invoice_item_id: `inv_${invIdx}`,
-            description: qItem.description,
-            brand: qItem.brand,
-            size: qItem.size,
-            invoice_description: invItem.raw_description,
-            quoted_qty: quotedQty,
-            already_dispatched_qty: alreadyDispatched,
-            invoice_qty: invQty,
-            unit: invItem.unit || 'BOX',
-            new_dispatched_qty: newDispatched,
-            pending_qty: pending,
-            fulfillment_status: status,
-            is_overage: isOverage,
-            excess_qty: excess,
-            match_score: matchResult.score,
-            confidence: matchResult.confidence,
-          });
-        }
-      }
-    }
-
-    // 2. Fallback check for any quotation item not matched above
-    for (const qItem of itemRows) {
-      if (!matchedQuoteItemIds.has(qItem.id)) {
-        const quotedQty = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 0);
-        const alreadyDispatched = parseFloat(qItem.dispatched_quantity || 0);
-        const remainingQty = Math.max(0, quotedQty - alreadyDispatched);
-
-        unmatchedItems.push({
-          quotation_item_id: qItem.id,
-          description: qItem.description,
-          brand: qItem.brand,
-          size: qItem.size,
-          quoted_qty: quotedQty,
-          already_dispatched_qty: alreadyDispatched,
-          remaining_qty: remainingQty,
-        });
-      }
-    }
-
-    // 3. Unmapped invoice lines (lines in the invoice that weren't automatically bound to a quote item)
-    const unmappedInvoiceLines = (parsedInvoice.items || [])
-      .map((inv: any, idx: number) => ({
-        id: `inv_${idx}`,
-        index: idx,
-        raw_description: inv.raw_description,
-        clean_description: inv.clean_description,
-        quantity: inv.quantity,
-        unit: inv.unit,
-        raw_line: inv.raw_line,
-      }))
-      .filter((inv: any) => !usedInvoiceIndices.has(inv.index));
-
-    // Save Invoice Record
-    const relativeFileUrl = `/uploads/invoices/${path.basename(req.file.path)}`;
-    const reconciliationSummary = {
-      invoice_number: invoiceNumber,
-      invoice_date: invoiceDate,
-      customer_matched: true,
-      matched_phones: detectedPhones,
-      matched_gstins: detectedGstins,
-      extracted_items: extractedItems,
-      extractedItems: extractedItems,
-      matched_items: matchedItems,
-      unmatched_items: unmatchedItems,
-      unmapped_invoice_lines: unmappedInvoiceLines,
-      has_overages: matchedItems.some((i) => i.is_overage),
-      total_matched_count: matchedItems.length,
-      total_items_count: itemRows.length,
-      parser_type: parsedInvoice.parser_type,
-      extraction_confidence: parsedInvoice.confidence,
-    };
-
+    savedInvoice = updateRes[0];
+  } else {
     const insertRes = await query(
       `INSERT INTO dispatch_invoices (
         quotation_id,
@@ -2085,46 +2144,177 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
         quotationId,
         invoiceNumber,
         invoiceDate || null,
-        req.file.originalname,
-        relativeFileUrl,
-        req.file.size,
+        fileName,
+        fileUrl,
+        fileSize,
         detectedPhones.join(', ') || null,
         detectedGstins.join(', ') || null,
         JSON.stringify({ text_sample: parsedInvoice.raw_text.slice(0, 1500) }),
         JSON.stringify(reconciliationSummary),
-        req.user?.id || null,
-        req.user?.full_name || 'Staff',
+        userId || null,
+        userName || 'Staff',
       ]
     );
+    savedInvoice = insertRes[0];
+  }
 
-    const savedInvoice = insertRes[0];
+  return {
+    savedInvoice,
+    reconciliationSummary,
+    extractedItems,
+    matchedItems,
+    invoiceNumber,
+  };
+}
+
+// 1. Upload & Automated OCR/Text Extraction & Reconciliation
+dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoice_pdf'), async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    if (isNaN(quotationId)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: 'Invalid quotation ID' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'Please upload a Tax Invoice PDF file' });
+      return;
+    }
+
+    // Reconcile and save Tax Invoice
+    const pdfBuffer = fs.readFileSync(req.file.path);
+    const relativeFileUrl = `/uploads/invoices/${path.basename(req.file.path)}`;
+
+    const result = await executeInvoiceReconciliation({
+      quotationId,
+      pdfBuffer,
+      fileName: req.file.originalname,
+      fileUrl: relativeFileUrl,
+      fileSize: req.file.size,
+      userId: req.user?.id,
+      userName: req.user?.full_name,
+    });
 
     broadcast({
       type: 'dispatch:invoice_verified',
       payload: {
         quotation_id: quotationId,
-        invoice: savedInvoice,
-        reconciliation: reconciliationSummary,
-        extractedItems,
+        invoice: result.savedInvoice,
+        reconciliation: result.reconciliationSummary,
+        extractedItems: result.extractedItems,
       },
     });
 
     res.json({
       success: true,
       matched: true,
-      invoiceNumber: invoiceNumber,
+      invoiceNumber: result.invoiceNumber,
       customerMatched: true,
-      message: `Tax Invoice #${invoiceNumber} Verified!`,
-      extractedItems,
-      extracted_items: extractedItems,
-      reconciledItems: matchedItems,
-      reconciliation: reconciliationSummary,
-      invoice: savedInvoice,
+      message: `Tax Invoice #${result.invoiceNumber} Verified!`,
+      extractedItems: result.extractedItems,
+      extracted_items: result.extractedItems,
+      reconciledItems: result.matchedItems,
+      reconciliation: result.reconciliationSummary,
+      invoice: result.savedInvoice,
     });
+    return;
   } catch (error: any) {
     if (req.file && fs.existsSync(req.file.path)) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
     }
+    if (error.reason === 'CUSTOMER_MISMATCH') {
+      res.status(400).json({
+        matched: false,
+        reason: 'CUSTOMER_MISMATCH',
+        message: error.message,
+        detected_phones: error.detected_phones,
+        detected_gstins: error.detected_gstins,
+        expected_phone: error.expected_phone,
+        expected_gstin: error.expected_gstin,
+      });
+      return;
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 1b. Re-scan & Re-reconcile Existing Invoice PDF
+dispatchRouter.post('/:quotationId/re-reconcile-invoice', async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    if (isNaN(quotationId)) {
+      res.status(400).json({ error: 'Invalid quotation ID' });
+      return;
+    }
+
+    const invoices = await query(
+      `SELECT * FROM dispatch_invoices WHERE quotation_id = $1 ORDER BY id DESC LIMIT 1`,
+      [quotationId]
+    );
+
+    if (!invoices.length) {
+      res.status(404).json({ error: 'No invoice found for this quotation to re-reconcile' });
+      return;
+    }
+
+    const inv = invoices[0];
+    let pdfBuffer: Buffer | null = null;
+
+    const localPath = path.resolve(process.cwd(), (inv.file_url || '').replace(/^\//, ''));
+    const serverPath = path.resolve(process.cwd(), 'uploads/invoices', path.basename(inv.file_url || ''));
+
+    if (fs.existsSync(localPath)) {
+      pdfBuffer = fs.readFileSync(localPath);
+    } else if (fs.existsSync(serverPath)) {
+      pdfBuffer = fs.readFileSync(serverPath);
+    } else if (inv.file_url && (inv.file_url.startsWith('http://') || inv.file_url.startsWith('https://'))) {
+      const resp = await fetch(inv.file_url);
+      if (resp.ok) {
+        const ab = await resp.arrayBuffer();
+        pdfBuffer = Buffer.from(ab);
+      }
+    }
+
+    if (!pdfBuffer) {
+      res.status(404).json({ error: 'Invoice PDF file not found on server storage. Please re-upload the file.' });
+      return;
+    }
+
+    const result = await executeInvoiceReconciliation({
+      quotationId,
+      pdfBuffer,
+      fileName: inv.file_name,
+      fileUrl: inv.file_url,
+      fileSize: inv.file_size || pdfBuffer.length,
+      userId: req.user?.id,
+      userName: req.user?.full_name,
+      existingInvoiceId: inv.id,
+    });
+
+    broadcast({
+      type: 'dispatch:invoice_verified',
+      payload: {
+        quotation_id: quotationId,
+        invoice: result.savedInvoice,
+        reconciliation: result.reconciliationSummary,
+        extractedItems: result.extractedItems,
+      },
+    });
+
+    res.json({
+      success: true,
+      matched: true,
+      invoiceNumber: result.invoiceNumber,
+      customerMatched: true,
+      message: `Tax Invoice #${result.invoiceNumber} Re-scanned and Reconciled!`,
+      extractedItems: result.extractedItems,
+      extracted_items: result.extractedItems,
+      reconciledItems: result.matchedItems,
+      reconciliation: result.reconciliationSummary,
+      invoice: result.savedInvoice,
+    });
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

@@ -84,12 +84,12 @@ export async function extractCoordinateTextItems(pdfBuffer: Buffer): Promise<{ i
         height: it.height || 0,
       });
 
-      textChunks.push(it.str);
+      if (it.str) textChunks.push(it.str + ' ');
     }
     textChunks.push('\n');
   }
 
-  return { items: allItems, fullText: textChunks.join(' ') };
+  return { items: allItems, fullText: textChunks.join('') };
 }
 
 /**
@@ -97,22 +97,6 @@ export async function extractCoordinateTextItems(pdfBuffer: Buffer): Promise<{ i
  */
 export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise<ParsedTaxInvoice> {
   const { items: allItems, fullText } = await extractCoordinateTextItems(pdfBuffer);
-
-  // 1. Extract Statutory Metadata (Phone, GSTIN, Invoice #, Date)
-  const phoneMatches = Array.from(fullText.matchAll(/(?:\+91[\-\s]?)?([6-9]\d{9})\b/g)).map((m) => m[1]);
-  const detectedPhones = Array.from(new Set(phoneMatches));
-
-  const gstinMatches = fullText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/gi) || [];
-  const detectedGstins = Array.from(new Set(gstinMatches.map((g) => g.toUpperCase())));
-
-  const invMatch =
-    fullText.match(/(?:Invoice\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
-    fullText.match(/(?:Bill\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
-    fullText.match(/(?:Tax\s*Invoice[\s\S]*?(?:No|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i);
-  const invoiceNumber = invMatch && invMatch[1] ? invMatch[1].trim() : `INV-${Date.now().toString().slice(-6)}`;
-
-  const dateMatch = fullText.match(/(?:Invoice\s*Date|Dated|Date)[\s.:#]*([0-9]{1,2}[\/\-\.][0-9A-Za-z]{1,4}[\/\-\.][0-9]{2,4})/i);
-  const invoiceDate = dateMatch && dateMatch[1] ? dateMatch[1].trim() : null;
 
   // 2. Cluster text items into visual rows by Y coordinate (±4 pt tolerance)
   // PDF coordinate system has Y increasing from bottom to top
@@ -140,8 +124,75 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
     r.rowText = r.items.map((i) => i.str).join(' ');
   }
 
+  const rowJoinedText = rows.map((r) => r.rowText).join('\n');
+  const fullTextToUse = rowJoinedText || fullText;
+
+  // 1. Extract Statutory Metadata (Phone, GSTIN, Invoice #, Date)
+  const phoneMatches = Array.from(fullTextToUse.matchAll(/(?:\+91[\-\s]?)?([6-9]\d{9})\b/g)).map((m) => m[1]);
+  const detectedPhones = Array.from(new Set(phoneMatches));
+
+  const gstinMatches = fullTextToUse.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/gi) || [];
+  const detectedGstins = Array.from(new Set(gstinMatches.map((g) => g.toUpperCase())));
+
+  // Coordinate-based invoice number detection (look near "Invoice No")
+  let invoiceNumber: string | null = null;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const invNoItem = r.items.find((it) => /invoice\s*(?:no|number|#)/i.test(it.str));
+    if (invNoItem) {
+      const sameRowNext = r.items.find((it) => it.x > invNoItem.x && !/dated|delivery/i.test(it.str));
+      if (sameRowNext && /^[A-Za-z0-9\/\-_]+$/.test(sameRowNext.str)) {
+        invoiceNumber = sameRowNext.str;
+        break;
+      }
+      for (let j = i + 1; j < Math.min(i + 4, rows.length); j++) {
+        const nextRowItem = rows[j].items.find(
+          (it) => Math.abs(it.x - invNoItem.x) <= 25 && /^[A-Za-z0-9\/\-_]+$/.test(it.str) && !/dated|delivery|buyer/i.test(it.str)
+        );
+        if (nextRowItem) {
+          invoiceNumber = nextRowItem.str;
+          break;
+        }
+      }
+      if (invoiceNumber) break;
+    }
+  }
+
+  if (!invoiceNumber) {
+    const invMatch =
+      fullTextToUse.match(/(?:Invoice\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
+      fullTextToUse.match(/(?:Bill\s*(?:No|Number|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i) ||
+      fullTextToUse.match(/(?:Tax\s*Invoice[\s\S]*?(?:No|#)[\s.:#]*([A-Za-z0-9\/\-_]+))/i);
+    invoiceNumber = invMatch && invMatch[1] && !/dated|delivery/i.test(invMatch[1]) ? invMatch[1].trim() : `INV-${Date.now().toString().slice(-6)}`;
+  }
+
+  // Coordinate-based invoice date detection (look near "Dated")
+  let invoiceDate: string | null = null;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const dateItem = r.items.find((it) => /^dated$/i.test(it.str));
+    if (dateItem) {
+      for (let j = i + 1; j < Math.min(i + 4, rows.length); j++) {
+        const nextRowItem = rows[j].items.find(
+          (it) => Math.abs(it.x - dateItem.x) <= 25 && /[0-9]{1,2}[\/\-\.][0-9A-Za-z]{1,4}[\/\-\.][0-9]{2,4}/.test(it.str)
+        );
+        if (nextRowItem) {
+          invoiceDate = nextRowItem.str;
+          break;
+        }
+      }
+      if (invoiceDate) break;
+    }
+  }
+
+  if (!invoiceDate) {
+    const dateMatch = fullTextToUse.match(/(?:Invoice\s*Date|Dated|Date)[\s.:#]*([0-9]{1,2}[\/\-\.][0-9A-Za-z]{1,4}[\/\-\.][0-9]{2,4})/i);
+    invoiceDate = dateMatch && dateMatch[1] ? dateMatch[1].trim() : null;
+  }
+
   // 3. Dynamic Column Header Detection
   let headerRowIndex = -1;
+  let slColX = -1;
   let descColX = -1;
   let hsnColX = -1;
   let qtyColX = -1;
@@ -162,6 +213,7 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
 
       for (const item of r.items) {
         const s = item.str.toLowerCase();
+        if (/^sl\b/i.test(s) && slColX === -1) slColX = item.x;
         if (/desc|particular|item/i.test(s) && descColX === -1) descColX = item.x;
         if (/hsn|sac/i.test(s) && hsnColX === -1) hsnColX = item.x;
         if (/qty|quantity|billed/i.test(s) && qtyColX === -1) qtyColX = item.x;
@@ -178,14 +230,14 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
   // If header row found, establish column bounding intervals
   if (headerRowIndex !== -1 && qtyColX !== -1) {
     // Quantity horizontal interval:
-    // From left boundary of qty col to start of next column (rate or per or amount)
     const nextColX = [rateColX, perColX, amountColX].filter((x) => x > qtyColX).sort((a, b) => a - b)[0] || (qtyColX + 70);
-    const prevColX = [descColX, hsnColX].filter((x) => x > 0 && x < qtyColX).sort((a, b) => b - a)[0] || (qtyColX - 80);
+    const prevColX = [hsnColX].filter((x) => x > 0 && x < qtyColX).sort((a, b) => b - a)[0] || (qtyColX - 60);
 
     const qtyStartX = Math.max(0, qtyColX - Math.min(25, (qtyColX - prevColX) / 2));
     const qtyEndX = nextColX - 5;
 
-    const descStartX = descColX > 0 ? descColX - 10 : 0;
+    // Description column interval: starts after Sl column (or 25pt) and ends before HSN or Qty
+    const descStartX = slColX > 0 ? slColX + 5 : 25;
     const descEndX = (hsnColX > 0 ? hsnColX : qtyStartX) - 5;
 
     // Scan data rows below header
@@ -194,9 +246,8 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
       const textLower = r.rowText.toLowerCase();
 
       // Check for table termination keywords
-      if (/sub\s*total|grand\s*total|total|taxable\s*amount|e\.?\s*&\s*o\.?e|bank\s*details|rupees/i.test(textLower)) {
-        // If row has word "total" followed by amount without line item, stop table parsing
-        if (/total/i.test(textLower) && r.items.length < 5) {
+      if (/sub\s*total|grand\s*total|total|taxable\s*amount|e\.?\s*&\s*o\.?e|bank\s*details|rupees|output\s*cgst|output\s*sgst/i.test(textLower)) {
+        if (/total|output|cgst|sgst/i.test(textLower) && r.items.length < 8) {
           break;
         }
       }
@@ -206,7 +257,8 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
       // Collect Quantity items
       const qtyItems = r.items.filter((it) => it.x >= qtyStartX && it.x <= qtyEndX);
 
-      const rowDescText = descItems.map((it) => it.str).join(' ').trim();
+      // Strip leading serial number e.g. "1 " if captured
+      let rowDescText = descItems.map((it) => it.str).join(' ').trim().replace(/^\d+[\s.)-]+/, '').trim();
       const rowQtyText = qtyItems.map((it) => it.str).join(' ').trim();
 
       // Check if this row or sub-line has parenthesis NOS like "(28 NOS)"
@@ -239,6 +291,15 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
         }
       }
 
+      // Check if quantity exists anywhere on the row if column interval missed it
+      if (detectedQty === null) {
+        const boxMatchInRow = r.rowText.match(/(?:^|\s)([0-9]+(?:\.[0-9]+)?)\s*BOX(?:ES)?\b/i);
+        if (boxMatchInRow) {
+          detectedQty = parseFloat(boxMatchInRow[1]);
+          detectedUnit = 'BOX';
+        }
+      }
+
       if (rowDescText && detectedQty !== null && detectedQty > 0) {
         parsedItems.push({
           raw_description: rowDescText,
@@ -248,9 +309,10 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
           raw_line: r.rowText,
         });
       } else if (rowDescText && parsedItems.length > 0 && detectedQty === null) {
-        // Multi-line description continuation
+        // Multi-line description continuation (ignore piece counts or secondary units like "2 PC" or "(28 NOS)")
         const prevItem = parsedItems[parsedItems.length - 1];
-        if (!/terms|declaration|bank|account|gst/i.test(rowDescText)) {
+        const isPieceCountOrUnit = /^(?:\(?\s*\d*(?:\.\d+)?\s*(?:pc|pcs|nos|box|boxes)?\s*\)?|pc|pcs|nos|box|boxes)$/i.test(rowDescText.trim());
+        if (!isPieceCountOrUnit && !/terms|declaration|bank|account|gst|output|cgst|sgst/i.test(rowDescText)) {
           prevItem.raw_description += ` ${rowDescText}`;
           prevItem.clean_description = normalizeCeramicName(prevItem.raw_description);
         }
@@ -260,7 +322,7 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
 
   // 4. Fallback line-by-line regex if coordinate column detection found 0 items
   if (parsedItems.length === 0) {
-    const rawLines = fullText.split(/\r?\n|\s{3,}/).map((l) => l.trim()).filter((l) => l.length > 5);
+    const rawLines = fullTextToUse.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 5);
 
     for (const line of rawLines) {
       if (/total|invoice|buyer|gstin|transport|vehicle|terms/i.test(line)) continue;
@@ -299,7 +361,7 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
     customer_phones: detectedPhones,
     customer_gstins: detectedGstins,
     items: parsedItems,
-    raw_text: fullText,
+    raw_text: fullTextToUse,
     parser_type: parserType,
     confidence,
   };
