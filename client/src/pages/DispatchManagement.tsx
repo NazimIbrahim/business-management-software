@@ -207,6 +207,10 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   const [shortfallConfirm, setShortfallConfirm] = useState<{
     item: any;
     itemVal: number;
+    baseAmount?: number;
+    taxInclusiveAmount?: number;
+    isTaxExclusive?: boolean;
+    taxRatePct?: number;
     verifiedPaid: number;
     shortfall: number;
     quoteNetTotal: number;
@@ -1239,6 +1243,15 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                       <span className="text-xs font-extrabold text-slate-900 font-mono block mt-0.5">
                         ₹ {formatCurrency(activeQuotation?.net_total)}
                       </span>
+                      {((activeQuotation as any)?.tax_type === 'exclusive' || (activeQuotation as any)?.is_tax_exclusive || (parseFloat(String(activeQuotation?.gross_total || 0)) > 0 && Math.abs(parseFloat(String(activeQuotation?.net_total || 0)) - parseFloat(String(activeQuotation?.gross_total || 0))) > 1.0)) ? (
+                        <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 font-mono inline-block mt-0.5">
+                          Excl. Tax (Gross: ₹{formatCurrency(activeQuotation?.gross_total)})
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-medium text-emerald-700 inline-block mt-0.5">
+                          Incl. Tax
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-[10px] text-emerald-600 uppercase font-bold block">Verified Paid</span>
@@ -1315,15 +1328,37 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                           const totalQty = item.quantity_boxes > 0 ? item.quantity_boxes : item.quantity_sqft > 0 ? item.quantity_sqft : 1;
                           const unitLabel = item.quantity_boxes > 0 ? 'Box' : item.quantity_sqft > 0 ? 'Sq.Ft' : 'Pcs';
 
+                          const grossTotal = parseFloat(String(activeQuotation?.gross_total || (activeQuotation as any)?.taxable_amount || 0));
+                          const netTotal = parseFloat(String(activeQuotation?.net_total || 0));
+                          const taxMultiplier = (grossTotal > 0 && netTotal > 0) ? (netTotal / grossTotal) : 1.0;
+                          const isTaxExclusive = (activeQuotation as any)?.tax_type === 'exclusive' || (activeQuotation as any)?.is_tax_exclusive || (grossTotal > 0 && Math.abs(netTotal - grossTotal) > 1.0);
+                          const taxRatePct = Math.round((taxMultiplier - 1.0) * 100);
+
+                          const baseAmount = parseFloat(String(item.total_amount || 0));
+                          const taxInclusiveAmount = (item as any).tax_inclusive_amount !== undefined
+                            ? parseFloat(String((item as any).tax_inclusive_amount))
+                            : Math.round(baseAmount * taxMultiplier * 100) / 100;
+
                           return (
                             <tr key={itemId} className="hover:bg-slate-50">
                               <td className="py-2.5 px-3 font-mono font-bold text-slate-400">{idx + 1}</td>
                               <td className="py-2.5 px-3">
                                 <div className="font-bold text-slate-900">{item.description}</div>
-                                <div className="text-[11px] text-slate-500">
+                                <div className="text-[11px] text-slate-500 flex items-center flex-wrap gap-x-1.5 mt-0.5">
                                   {item.brand && <span>{item.brand} • </span>}
                                   {item.size && <span>{item.size} • </span>}
-                                  <span>₹ {formatCurrency(item.total_amount)}</span>
+                                  <span className="font-extrabold text-slate-900 font-mono">
+                                    ₹ {formatCurrency(taxInclusiveAmount)}
+                                  </span>
+                                  {isTaxExclusive ? (
+                                    <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-mono font-bold">
+                                      Excl. Tax (Base ₹{formatCurrency(baseAmount)} + {taxRatePct > 0 ? `${taxRatePct}% GST` : 'Tax'})
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-medium">
+                                      Incl. Tax
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
@@ -1336,7 +1371,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                                   onChange={(e) => {
                                     if (isViewOnly) return;
                                     const newStatus = e.target.value;
-                                    const itemVal = parseFloat(String(item.total_amount || 0));
+                                    const itemVal = taxInclusiveAmount;
                                     const verifiedPaid = parseFloat(String(activeQuotation?.total_paid || 0));
 
                                     const applyChange = () => {
@@ -1354,8 +1389,12 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                                       setShortfallConfirm({
                                         item,
                                         itemVal,
+                                        baseAmount,
+                                        taxInclusiveAmount,
+                                        isTaxExclusive,
+                                        taxRatePct,
                                         verifiedPaid,
-                                        shortfall: itemVal - verifiedPaid,
+                                        shortfall: Math.round((itemVal - verifiedPaid) * 100) / 100,
                                         quoteNetTotal: parseFloat(String(activeQuotation?.net_total || 0)),
                                         quoteBalanceDue: parseFloat(String(activeQuotation?.balance_due || 0)),
                                         actionDescription: `Proceed with setting status to "${newStatus}"`,
@@ -1487,6 +1526,11 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                   <strong className="text-slate-900 font-bold">
                     ₹ {formatCurrency(shortfallConfirm.itemVal)}
                   </strong>
+                  {shortfallConfirm.isTaxExclusive && (
+                    <span className="text-xs text-amber-800 font-medium ml-1">
+                      (Base ₹{formatCurrency(shortfallConfirm.baseAmount || 0)} + {shortfallConfirm.taxRatePct && shortfallConfirm.taxRatePct > 0 ? `${shortfallConfirm.taxRatePct}% GST` : 'Tax'})
+                    </span>
+                  )}
                   , creating an uncovered shortfall of{' '}
                   <strong className="text-rose-700 font-extrabold">
                     ₹ {formatCurrency(shortfallConfirm.shortfall)}
@@ -1498,11 +1542,16 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               <div className="grid grid-cols-3 gap-2.5 text-center">
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    Item Value
+                    Item Value {shortfallConfirm.isTaxExclusive ? '(Incl. Tax)' : ''}
                   </span>
                   <span className="text-sm font-extrabold text-slate-900 block mt-1 tabular-nums">
                     ₹ {formatCurrency(shortfallConfirm.itemVal)}
                   </span>
+                  {shortfallConfirm.isTaxExclusive && (
+                    <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
+                      Base: ₹{formatCurrency(shortfallConfirm.baseAmount || 0)}
+                    </span>
+                  )}
                 </div>
                 <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">

@@ -237,8 +237,13 @@ export const AllClosedView: React.FC<Props> = ({
                         <div className="font-extrabold text-slate-900 font-mono text-[13px]">
                           ₹ {formatCurrency(q.net_total)}
                         </div>
-                        <div className="text-[10px] text-slate-500 font-medium">
-                          {q.total_items} items ({Math.round(q.total_ordered_qty || 0)} boxes)
+                        <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+                          <span>{q.total_items} items ({Math.round(q.total_ordered_qty || 0)} boxes)</span>
+                          {((q as any).tax_type === 'exclusive' || ((q as any).gross_total > 0 && Math.abs(parseFloat(String(q.net_total || 0)) - parseFloat(String((q as any).gross_total || 0))) > 1.0)) && (
+                            <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 font-mono">
+                              Excl. Tax
+                            </span>
+                          )}
                         </div>
                       </td>
 

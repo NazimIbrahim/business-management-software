@@ -34,7 +34,11 @@ export interface LocalItem {
   product_type?: string;
   required_quantity: number;
   quoted_rate: number;
+  quoted_rate_with_tax?: number;
   total_amount: number;
+  tax_inclusive_amount?: number;
+  is_tax_exclusive?: boolean;
+  tax_rate_percent?: number;
   vendor_name: string;
   vendor_contact?: string;
   actual_purchase_rate?: number;
@@ -286,8 +290,14 @@ export const LocalTrackerView: React.FC<Props> = ({
                           {it.brand && <span>Brand: {it.brand}</span>}
                           {it.size && <span>Size: {it.size}</span>}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                          Rate: ₹{formatCurrency(it.quoted_rate)} | Total: ₹{formatCurrency(it.total_amount)}
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center flex-wrap gap-1">
+                          <span>Rate: ₹{formatCurrency(it.quoted_rate_with_tax || it.quoted_rate)}</span>
+                          <span>| Total: <strong className="text-slate-900">₹{formatCurrency(it.tax_inclusive_amount || it.total_amount)}</strong></span>
+                          {it.is_tax_exclusive && (
+                            <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
+                              Excl. Tax (Base ₹{formatCurrency(it.total_amount)})
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -557,9 +567,14 @@ export const LocalTrackerView: React.FC<Props> = ({
             {/* Current Item Specs */}
             <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
               <div className="font-bold text-slate-900">{paymentModalItem.description}</div>
-              <div className="text-slate-500 mt-0.5">
-                Target: {paymentModalItem.required_quantity} boxes @ ₹{formatCurrency(paymentModalItem.quoted_rate)} = ₹
-                {formatCurrency(paymentModalItem.total_amount)}
+              <div className="text-slate-500 mt-0.5 flex items-center flex-wrap gap-1">
+                <span>Target: {paymentModalItem.required_quantity} boxes @ ₹{formatCurrency(paymentModalItem.quoted_rate_with_tax || paymentModalItem.quoted_rate)}</span>
+                <span>= <strong className="text-slate-900">₹{formatCurrency(paymentModalItem.tax_inclusive_amount || paymentModalItem.total_amount)}</strong></span>
+                {paymentModalItem.is_tax_exclusive && (
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-mono">
+                    (Excl. Tax Base: ₹{formatCurrency(paymentModalItem.total_amount)})
+                  </span>
+                )}
               </div>
             </div>
 

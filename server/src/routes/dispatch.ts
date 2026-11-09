@@ -734,19 +734,49 @@ dispatchRouter.get('/quotations/:id', async (req: Request, res: Response) => {
       [id]
     );
 
+    // Compute tax ratio & tax inclusivity
+    const grossTotal = parseFloat(quotation.gross_total || quotation.taxable_amount || 0);
+    const netTotal = parseFloat(quotation.net_total || 0);
+    const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+    const isTaxExclusive = quotation.tax_type === 'exclusive' || (grossTotal > 0 && Math.abs(netTotal - grossTotal) > 1.0);
+    const taxRatePct = Math.round((taxMultiplier - 1.0) * 100);
+
+    const enrichedItems = items.map((it: any) => {
+      const ordered = parseFloat(it.quantity_boxes || it.quantity_sqft || 1);
+      const baseAmount = parseFloat(it.total_amount || 0);
+      const payableAmount = Math.round(baseAmount * taxMultiplier * 100) / 100;
+      const ratePerUnitWithTax = ordered > 0 ? (payableAmount / ordered) : 0;
+      const baseRatePerUnit = ordered > 0 ? (baseAmount / ordered) : 0;
+
+      return {
+        ...it,
+        base_amount: baseAmount,
+        tax_inclusive_amount: payableAmount,
+        rate_per_unit: baseRatePerUnit,
+        rate_per_unit_with_tax: ratePerUnitWithTax,
+        tax_multiplier: taxMultiplier,
+        is_tax_exclusive: isTaxExclusive,
+      };
+    });
+
     // Group items by area
     const areasWithItems = areas.map((a: any) => ({
       ...a,
-      items: items.filter((it: any) => it.area_id === a.id),
+      items: enrichedItems.filter((it: any) => it.area_id === a.id),
     }));
 
     res.json({
       quotation: {
         ...quotation,
+        gross_total: grossTotal,
+        net_total: netTotal,
+        tax_multiplier: taxMultiplier,
+        is_tax_exclusive: isTaxExclusive,
+        tax_rate_percent: taxRatePct,
         dispatch_status: quotation.dispatch_status || 'Yet to Update',
       },
       areas: areasWithItems,
-      items,
+      items: enrichedItems,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1429,6 +1459,9 @@ dispatchRouter.get('/all-closed', async (req: Request, res: Response) => {
         q.project_name,
         q.quotation_type,
         q.sales_person_name,
+        q.gross_total,
+        q.taxable_amount,
+        q.tax_type,
         q.net_total,
         q.status as quotation_status,
         COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
@@ -3096,7 +3129,14 @@ dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
         qi.product_type,
         COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as required_quantity,
         COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) as quoted_rate,
+        ROUND((COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) * (CASE WHEN q.gross_total > 0 AND q.net_total > 0 THEN (q.net_total / q.gross_total) ELSE 1.0 END))::numeric, 2) as quoted_rate_with_tax,
         qi.total_amount,
+        ROUND((qi.total_amount * (CASE WHEN q.gross_total > 0 AND q.net_total > 0 THEN (q.net_total / q.gross_total) ELSE 1.0 END))::numeric, 2) as tax_inclusive_amount,
+        (q.tax_type = 'exclusive' OR (q.gross_total > 0 AND ABS(q.net_total - q.gross_total) > 1.0)) as is_tax_exclusive,
+        ROUND(((CASE WHEN q.gross_total > 0 AND q.net_total > 0 THEN (q.net_total / q.gross_total) ELSE 1.0 END) - 1.0) * 100) as tax_rate_percent,
+        q.gross_total,
+        q.net_total,
+        q.tax_type,
         COALESCE(lp.vendor_name, qi.brand, 'Local Distributor') as vendor_name,
         lp.vendor_contact,
         lp.actual_purchase_rate,
