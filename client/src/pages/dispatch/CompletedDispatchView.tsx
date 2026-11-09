@@ -20,6 +20,7 @@ import {
   History,
 } from 'lucide-react';
 import { formatCurrency } from '../DispatchManagement';
+import { useServer } from '../../context/ServerContext';
 
 export interface CompletedInvoice {
   id: number;
@@ -27,6 +28,7 @@ export interface CompletedInvoice {
   invoice_date?: string;
   file_name?: string;
   file_url?: string;
+  view_url?: string;
   file_size?: number;
   created_at?: string;
 }
@@ -44,6 +46,7 @@ export interface CompletedDispatchHistoryItem {
   invoice_id?: number;
   invoice_number?: string;
   invoice_file_url?: string;
+  invoice_view_url?: string;
   dispatched_at: string;
   created_by_name?: string;
 }
@@ -88,6 +91,31 @@ export const CompletedDispatchView: React.FC<Props> = ({
   const [search, setSearch] = useState('');
   const [expandedQuotes, setExpandedQuotes] = useState<Record<number, boolean>>({});
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const { serverUrl } = useServer();
+
+  const getInvoicePdfUrl = (invoice?: { id?: number; file_url?: string; view_url?: string } | null) => {
+    if (!invoice) return '';
+    const base = serverUrl || '';
+    const token = localStorage.getItem('token');
+    const tokenParam = token ? `token=${encodeURIComponent(token)}` : '';
+
+    if (invoice.view_url) {
+      const url = invoice.view_url.startsWith('http') ? invoice.view_url : `${base}${invoice.view_url}`;
+      return tokenParam ? `${url}${url.includes('?') ? '&' : '?'}${tokenParam}` : url;
+    }
+    if (invoice.id) {
+      const url = `${base}/api/dispatch/invoices/${invoice.id}/view-pdf`;
+      return tokenParam ? `${url}?${tokenParam}` : url;
+    }
+    if (invoice.file_url) {
+      if (invoice.file_url.startsWith('http://') || invoice.file_url.startsWith('https://')) {
+        return invoice.file_url;
+      }
+      const url = `${base}${invoice.file_url.startsWith('/') ? '' : '/'}${invoice.file_url}`;
+      return tokenParam ? `${url}${url.includes('?') ? '&' : '?'}${tokenParam}` : url;
+    }
+    return '';
+  };
 
   const toggleExpand = (quotationId: number) => {
     setExpandedQuotes((prev) => ({
@@ -290,7 +318,7 @@ export const CompletedDispatchView: React.FC<Props> = ({
                                   key={inv.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (inv.file_url) setPreviewPdfUrl(inv.file_url);
+                                    setPreviewPdfUrl(getInvoicePdfUrl(inv));
                                   }}
                                   className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
                                   title={`Click to view Tax Invoice #${inv.invoice_number} PDF`}
@@ -368,10 +396,10 @@ export const CompletedDispatchView: React.FC<Props> = ({
                                             ({new Date(inv.invoice_date).toLocaleDateString('en-IN')})
                                           </span>
                                         )}
-                                        {inv.file_url && (
+                                        {(inv.file_url || inv.view_url || inv.id) && (
                                           <button
                                             type="button"
-                                            onClick={() => setPreviewPdfUrl(inv.file_url!)}
+                                            onClick={() => setPreviewPdfUrl(getInvoicePdfUrl(inv))}
                                             className="ml-1 inline-flex items-center space-x-0.5 text-indigo-600 hover:text-indigo-800 underline text-[11px] cursor-pointer"
                                           >
                                             <Eye size={11} />
@@ -427,11 +455,11 @@ export const CompletedDispatchView: React.FC<Props> = ({
                                               {h.invoice_number ? (
                                                 <button
                                                   type="button"
-                                                  onClick={() => h.invoice_file_url && setPreviewPdfUrl(h.invoice_file_url)}
+                                                  onClick={() => setPreviewPdfUrl(getInvoicePdfUrl({ id: h.invoice_id, file_url: h.invoice_file_url, view_url: h.invoice_view_url }))}
                                                   className="inline-flex items-center space-x-1 text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
                                                 >
                                                   <span>#{h.invoice_number}</span>
-                                                  {h.invoice_file_url && <Eye size={10} />}
+                                                  {(h.invoice_file_url || h.invoice_view_url || h.invoice_id) && <Eye size={10} />}
                                                 </button>
                                               ) : (
                                                 <span className="text-slate-400">-</span>
@@ -475,37 +503,63 @@ export const CompletedDispatchView: React.FC<Props> = ({
 
       {/* PDF Preview Modal */}
       {previewPdfUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden">
             <div className="p-3 sm:p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
-                <FileText size={16} className="text-indigo-600" />
+                <FileText size={16} className="text-emerald-600" />
                 <span className="font-extrabold text-slate-900 text-sm">Tax Invoice PDF Viewer</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  Verified Tax Invoice
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <a
                   href={previewPdfUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold cursor-pointer transition"
+                  title="Open PDF in a new browser tab"
                 >
-                  <ExternalLink size={12} />
+                  <ExternalLink size={13} />
                   <span>Open in New Tab</span>
                 </a>
                 <button
                   onClick={() => setPreviewPdfUrl(null)}
-                  className="p-1.5 rounded-xl hover:bg-slate-200 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                  title="Close Preview"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 bg-slate-100">
-              <iframe
-                src={previewPdfUrl}
-                title="Tax Invoice Preview"
-                className="w-full h-full border-none"
-              />
+            <div className="flex-1 min-h-0 bg-slate-100 relative">
+              <object
+                data={previewPdfUrl}
+                type="application/pdf"
+                className="w-full h-full"
+              >
+                <iframe
+                  src={previewPdfUrl}
+                  title="Tax Invoice Preview"
+                  className="w-full h-full border-none"
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-50">
+                  <FileText className="text-slate-400 mb-3" size={42} />
+                  <p className="text-xs font-semibold text-slate-700 mb-2">
+                    PDF Preview is loading or your browser requires opening in a new tab.
+                  </p>
+                  <a
+                    href={previewPdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Tax Invoice PDF</span>
+                  </a>
+                </div>
+              </object>
             </div>
           </div>
         </div>

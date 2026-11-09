@@ -39,6 +39,7 @@ export interface DispatchInvoice {
   invoice_date?: string;
   file_name: string;
   file_url: string;
+  view_url?: string;
   file_size: number;
   customer_phone_detected?: string;
   customer_gstin_detected?: string;
@@ -162,6 +163,30 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   const [uploadingQuoteId, setUploadingQuoteId] = useState<number | null>(null);
   const [mismatchErrors, setMismatchErrors] = useState<Record<number, string>>({});
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+
+  const getInvoicePdfUrl = (invoice?: { id?: number; file_url?: string; view_url?: string } | null) => {
+    if (!invoice) return '';
+    const base = serverUrl || '';
+    const token = localStorage.getItem('token');
+    const tokenParam = token ? `token=${encodeURIComponent(token)}` : '';
+
+    if (invoice.view_url) {
+      const url = invoice.view_url.startsWith('http') ? invoice.view_url : `${base}${invoice.view_url}`;
+      return tokenParam ? `${url}${url.includes('?') ? '&' : '?'}${tokenParam}` : url;
+    }
+    if (invoice.id) {
+      const url = `${base}/api/dispatch/invoices/${invoice.id}/view-pdf`;
+      return tokenParam ? `${url}?${tokenParam}` : url;
+    }
+    if (invoice.file_url) {
+      if (invoice.file_url.startsWith('http://') || invoice.file_url.startsWith('https://')) {
+        return invoice.file_url;
+      }
+      const url = `${base}${invoice.file_url.startsWith('/') ? '' : '/'}${invoice.file_url}`;
+      return tokenParam ? `${url}${url.includes('?') ? '&' : '?'}${tokenParam}` : url;
+    }
+    return '';
+  };
   const [reconcileDrawer, setReconcileDrawer] = useState<{
     quote: ProcessingQuotation;
     reconciliation: any;
@@ -859,7 +884,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                               Tax Invoice #{inv.invoice_number} Verified
                             </button>
                             <button
-                              onClick={() => setPreviewPdfUrl(inv.file_url)}
+                              onClick={() => setPreviewPdfUrl(getInvoicePdfUrl(inv))}
                               className="text-indigo-600 hover:text-indigo-800 underline text-[11px] ml-1 flex items-center space-x-0.5 cursor-pointer"
                               title="Preview Invoice PDF"
                             >
@@ -1326,7 +1351,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                 <div className="flex items-center space-x-2 shrink-0">
                   {reconcileDrawer.invoice.file_url && (
                     <button
-                      onClick={() => setPreviewPdfUrl(reconcileDrawer.invoice.file_url)}
+                      onClick={() => setPreviewPdfUrl(getInvoicePdfUrl(reconcileDrawer.invoice))}
                       className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
                     >
                       <Eye size={12} />
@@ -1919,33 +1944,59 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
       {/* 4. PDF Preview Modal */}
       {previewPdfUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-4xl w-full h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-5xl w-full h-[88vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
             <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2 font-bold text-slate-800 text-xs">
-                <FileText size={15} className="text-indigo-600" />
-                <span>Tax Invoice Document Preview</span>
+                <FileText size={16} className="text-emerald-600" />
+                <span className="font-extrabold text-slate-900 text-sm">Tax Invoice PDF Viewer</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  Verified Tax Invoice
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <a
                   href={previewPdfUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-[11px] flex items-center space-x-1"
+                  className="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center space-x-1.5 transition"
+                  title="Open PDF in a new browser tab"
                 >
-                  <ExternalLink size={11} />
+                  <ExternalLink size={13} />
                   <span>Open in New Tab</span>
                 </a>
                 <button
                   onClick={() => setPreviewPdfUrl(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                  title="Close Preview"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 w-full bg-slate-100">
-              <iframe src={previewPdfUrl} className="w-full h-full border-none" title="Invoice Preview" />
+            <div className="flex-1 min-h-0 w-full bg-slate-100 relative">
+              <object
+                data={previewPdfUrl}
+                type="application/pdf"
+                className="w-full h-full"
+              >
+                <iframe src={previewPdfUrl} className="w-full h-full border-none" title="Invoice Preview" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-50">
+                  <FileText className="text-slate-400 mb-3" size={42} />
+                  <p className="text-xs font-semibold text-slate-700 mb-2">
+                    PDF Preview is loading or your browser requires opening in a new tab.
+                  </p>
+                  <a
+                    href={previewPdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Tax Invoice PDF</span>
+                  </a>
+                </div>
+              </object>
             </div>
           </div>
         </div>
