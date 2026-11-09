@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   Printer,
@@ -18,6 +18,7 @@ import {
   Eye,
   X,
   History,
+  AlertCircle,
 } from 'lucide-react';
 import { formatCurrency } from '../DispatchManagement';
 import { useServer } from '../../context/ServerContext';
@@ -91,12 +92,15 @@ export const CompletedDispatchView: React.FC<Props> = ({
   const [search, setSearch] = useState('');
   const [expandedQuotes, setExpandedQuotes] = useState<Record<number, boolean>>({});
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [previewPdfBlobUrl, setPreviewPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const { serverUrl } = useServer();
 
   const getInvoicePdfUrl = (invoice?: { id?: number; file_url?: string; view_url?: string } | null) => {
     if (!invoice) return '';
     const base = serverUrl || '';
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('ama_token') || localStorage.getItem('token') || '';
     const tokenParam = token ? `token=${encodeURIComponent(token)}` : '';
 
     if (invoice.view_url) {
@@ -116,6 +120,51 @@ export const CompletedDispatchView: React.FC<Props> = ({
     }
     return '';
   };
+
+  useEffect(() => {
+    if (!previewPdfUrl) {
+      if (previewPdfBlobUrl) {
+        URL.revokeObjectURL(previewPdfBlobUrl);
+        setPreviewPdfBlobUrl(null);
+      }
+      setPdfError(null);
+      setPdfLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setPdfLoading(true);
+    setPdfError(null);
+
+    const token = localStorage.getItem('ama_token') || localStorage.getItem('token') || '';
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    fetch(previewPdfUrl, { headers })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          throw new Error(`Server returned HTTP ${res.status}: ${errText || res.statusText}`);
+        }
+        const blob = await res.blob();
+        if (isMounted) {
+          const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+          setPreviewPdfBlobUrl(blobUrl);
+          setPdfLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Failed to load PDF preview:', err);
+          setPdfError(err.message || 'Failed to load PDF document');
+          setPdfLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [previewPdfUrl]);
 
   const toggleExpand = (quotationId: number) => {
     setExpandedQuotes((prev) => ({
@@ -515,7 +564,7 @@ export const CompletedDispatchView: React.FC<Props> = ({
               </div>
               <div className="flex items-center space-x-2">
                 <a
-                  href={previewPdfUrl}
+                  href={previewPdfBlobUrl || previewPdfUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold cursor-pointer transition"
@@ -533,33 +582,50 @@ export const CompletedDispatchView: React.FC<Props> = ({
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 bg-slate-100 relative">
-              <object
-                data={previewPdfUrl}
-                type="application/pdf"
-                className="w-full h-full"
-              >
-                <iframe
-                  src={previewPdfUrl}
-                  title="Tax Invoice Preview"
-                  className="w-full h-full border-none"
-                />
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-50">
-                  <FileText className="text-slate-400 mb-3" size={42} />
-                  <p className="text-xs font-semibold text-slate-700 mb-2">
-                    PDF Preview is loading or your browser requires opening in a new tab.
-                  </p>
-                  <a
-                    href={previewPdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
-                  >
-                    <ExternalLink size={13} />
-                    <span>Open Tax Invoice PDF</span>
-                  </a>
+            <div className="flex-1 min-h-0 bg-slate-100 relative overflow-hidden">
+              {pdfLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 z-20">
+                  <RefreshCw className="animate-spin text-emerald-600 mb-3" size={32} />
+                  <p className="text-xs font-bold text-slate-700">Loading Tax Invoice PDF...</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Preparing verified document stream</p>
                 </div>
-              </object>
+              )}
+              {pdfError ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 p-6 text-center z-20">
+                  <AlertCircle className="text-rose-500 mb-3" size={44} />
+                  <p className="text-sm font-bold text-slate-800 mb-1">Unable to preview PDF document in-app</p>
+                  <p className="text-xs text-rose-600 max-w-md mb-4 bg-rose-50 p-2.5 rounded-lg border border-rose-200 font-mono">
+                    {pdfError}
+                  </p>
+                  <div className="flex items-center space-x-3">
+                    <a
+                      href={previewPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
+                    >
+                      <ExternalLink size={13} />
+                      <span>Open Direct Link in New Tab</span>
+                    </a>
+                    <button
+                      onClick={() => {
+                        const url = previewPdfUrl;
+                        setPreviewPdfUrl(null);
+                        setTimeout(() => setPreviewPdfUrl(url), 50);
+                      }}
+                      className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              ) : previewPdfBlobUrl ? (
+                <iframe
+                  src={previewPdfBlobUrl}
+                  className="w-full h-full border-none"
+                  title="Tax Invoice Preview"
+                />
+              ) : null}
             </div>
           </div>
         </div>
