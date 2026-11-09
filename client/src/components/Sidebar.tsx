@@ -577,7 +577,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       </div>
       <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
         <span>App Build:</span>
-        <span className="font-mono text-[#E0E1DD]/80">v2.4.58</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.61</span>
       </div>
     </div>
   );

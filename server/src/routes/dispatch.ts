@@ -1510,11 +1510,18 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         q.site_location,
         COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
         q.sales_person_name,
+        q.gross_total,
+        q.taxable_amount,
+        q.tax_type,
+        q.cgst_rate,
+        q.sgst_rate,
+        q.igst_rate,
         q.net_total,
         COALESCE(q.dispatch_status, 'Yet to Update') as dispatch_status,
         q.expected_dispatch_date,
         q.scheduled_dispatch_date,
         q.dispatch_notes,
+        q.manager_approval_note,
         COALESCE(p_pay.verified_paid, 0) as verified_paid,
         GREATEST(0, q.net_total - COALESCE(p_pay.verified_paid, 0)) as balance_due,
         COALESCE(dr.vehicle_no, '') as vehicle_no,
@@ -1674,28 +1681,59 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       const progressPercent = totalOrdered > 0 ? Math.min(100, Math.round((totalDispatched / totalOrdered) * 100)) : 0;
       const allDispatched = items.length > 0 && items.every((it: any) => it.dispatch_status === 'Dispatched');
 
+      // Tax factor calculation
+      const grossTotal = parseFloat(q.gross_total || q.taxable_amount || 0);
+      const netTotal = parseFloat(q.net_total || 0);
+      const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+
       // Financial safety gate metrics
       const totalReceivedAmount = parseFloat(q.verified_paid || 0);
+      let dispatchedTotalValue = 0;
       let readyStockTotalValue = 0;
       let localPurchaseTotalValue = 0;
 
-      for (const it of items) {
-        const itemVal = parseFloat(it.total_amount || 0);
-        if (it.dispatch_status === 'Ready Stock' || it.dispatch_status === 'Dispatched') {
-          readyStockTotalValue += itemVal;
-        } else if (it.dispatch_status === 'Need to Arrange from Local') {
-          localPurchaseTotalValue += itemVal;
-        }
-      }
+      const enrichedItems = items.map((it: any) => {
+        const ordered = parseFloat(it.ordered_quantity || 1);
+        const dispatched = parseFloat(it.quantity_dispatched || 0);
+        const pending = Math.max(0, ordered - dispatched);
+        const baseAmount = parseFloat(it.total_amount || 0);
+        const payableAmount = Math.round(baseAmount * taxMultiplier * 100) / 100;
+        const ratePerUnitWithTax = ordered > 0 ? (payableAmount / ordered) : 0;
 
-      const committedImmediateValue = readyStockTotalValue + localPurchaseTotalValue;
+        const dispVal = Math.min(payableAmount, Math.round(dispatched * ratePerUnitWithTax * 100) / 100);
+        const pendVal = Math.round(pending * ratePerUnitWithTax * 100) / 100;
+
+        dispatchedTotalValue += dispVal;
+        if (it.dispatch_status === 'Need to Arrange from Local') {
+          localPurchaseTotalValue += pendVal;
+        } else {
+          readyStockTotalValue += pendVal;
+        }
+
+        return {
+          ...it,
+          base_amount: baseAmount,
+          tax_inclusive_amount: payableAmount,
+          unit_rate_with_tax: ratePerUnitWithTax,
+          dispatched_value: dispVal,
+          pending_value: pendVal,
+        };
+      });
+
+      dispatchedTotalValue = Math.round(dispatchedTotalValue * 100) / 100;
+      readyStockTotalValue = Math.round(readyStockTotalValue * 100) / 100;
+      localPurchaseTotalValue = Math.round(localPurchaseTotalValue * 100) / 100;
+
+      const committedImmediateValue = Math.round((dispatchedTotalValue + readyStockTotalValue + localPurchaseTotalValue) * 100) / 100;
       const isPaymentSufficient = totalReceivedAmount >= (committedImmediateValue - 0.5);
       const deficitAmount = isPaymentSufficient ? 0 : Math.round((committedImmediateValue - totalReceivedAmount) * 100) / 100;
       const paymentCoverageStatus = isPaymentSufficient ? 'COVERED' : 'INSUFFICIENT';
 
       return {
         ...q,
-        items,
+        gross_total: grossTotal,
+        tax_multiplier: taxMultiplier,
+        items: enrichedItems,
         invoices,
         has_verified_invoice: invoices.length > 0,
         latest_invoice: invoices[0] || null,
@@ -1704,6 +1742,7 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         progress_percent: progressPercent,
         all_items_dispatched: allDispatched,
         total_received_amount: totalReceivedAmount,
+        dispatched_total_value: dispatchedTotalValue,
         ready_stock_total_value: readyStockTotalValue,
         local_purchase_total_value: localPurchaseTotalValue,
         committed_immediate_value: committedImmediateValue,
@@ -1776,6 +1815,87 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       res.status(400).json({
         error: '🚫 Dispatch Blocked: Please upload a valid Tax Invoice PDF before dispatching items.',
         code: 'TAX_INVOICE_REQUIRED',
+      });
+      return;
+    }
+
+    // Rule 2: Financial Safety Gate - Payment Sufficiency Check
+    const quoteRows = await query(
+      `SELECT q.*, COALESCE(p_pay.verified_paid, 0) as verified_paid
+       FROM quotations q
+       LEFT JOIN (
+         SELECT quotation_id, SUM(amount) as verified_paid
+         FROM payments
+         WHERE status IN ('Cleared', 'Verified')
+         GROUP BY quotation_id
+       ) p_pay ON p_pay.quotation_id = q.id
+       WHERE q.id = $1`,
+      [qId]
+    );
+    if (quoteRows.length === 0) {
+      res.status(404).json({ error: 'Quotation not found' });
+      return;
+    }
+    const quote = quoteRows[0];
+    const grossTotal = parseFloat(quote.gross_total || quote.taxable_amount || 0);
+    const netTotal = parseFloat(quote.net_total || 0);
+    const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+    const verifiedPaid = parseFloat(quote.verified_paid || 0);
+
+    const allItems = await query(`SELECT * FROM quotation_items WHERE quotation_id = $1`, [qId]);
+    let alreadyDispatchedValue = 0;
+    for (const it of allItems) {
+      const itQuoted = parseFloat(it.quantity_boxes || it.quantity_sqft || 1);
+      const itAlready = parseFloat(it.dispatched_quantity || 0);
+      const itBaseAmount = parseFloat(it.total_amount || 0);
+      const itPayable = Math.round(itBaseAmount * taxMultiplier * 100) / 100;
+      const itRate = itQuoted > 0 ? (itPayable / itQuoted) : 0;
+      alreadyDispatchedValue += Math.min(itPayable, Math.round(itAlready * itRate * 100) / 100);
+    }
+
+    const itemBase = parseFloat(item.total_amount || 0);
+    const itemPayable = Math.round(itemBase * taxMultiplier * 100) / 100;
+    const itemRate = ordered > 0 ? (itemPayable / ordered) : 0;
+    const itemSliceValue = Math.round(qty * itemRate * 100) / 100;
+
+    const totalRequiredPayment = Math.round((alreadyDispatchedValue + itemSliceValue) * 100) / 100;
+    const isPaymentSufficient = verifiedPaid >= (totalRequiredPayment - 0.50);
+    const deficitAmount = isPaymentSufficient ? 0 : Math.round((totalRequiredPayment - verifiedPaid) * 100) / 100;
+
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrMgr = ['admin', 'manager'].includes(userRole);
+    const isManagementApproved = req.body.supervisor_override && isAdminOrMgr;
+
+    if (!isPaymentSufficient && !isManagementApproved) {
+      const deficitNote = `[PAYMENT DEFICIT BLOCKED] Attempted dispatch of "${item.description}" (${qty} units, value ₹${itemSliceValue.toFixed(2)}) requires cumulative payment of ₹${totalRequiredPayment.toFixed(2)}, but received payment is ₹${verifiedPaid.toFixed(2)} (Deficit: ₹${deficitAmount.toFixed(2)}). Order held pending management approval.`;
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = 'PENDING_MANAGEMENT_APPROVAL',
+             dispatch_notes = CASE WHEN dispatch_notes IS NULL OR dispatch_notes = '' THEN $1 ELSE dispatch_notes || E'\n' || $1 END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [deficitNote, qId]
+      );
+      broadcast({
+        type: 'dispatch:updated',
+        payload: {
+          quotation_id: qId,
+          dispatch_status: 'PENDING_MANAGEMENT_APPROVAL',
+          deficit_amount: deficitAmount,
+          required_payment: totalRequiredPayment,
+          verified_paid: verifiedPaid,
+        },
+      });
+      res.status(403).json({
+        success: false,
+        code: 'INSUFFICIENT_PAYMENT_BLOCKED',
+        error: `🚫 Dispatch Blocked: Verified payment received is ₹${verifiedPaid.toLocaleString('en-IN')}, but dispatching this item requires cumulative ₹${totalRequiredPayment.toLocaleString('en-IN')} (Deficit: ₹${deficitAmount.toLocaleString('en-IN')}). Order marked as PENDING MANAGEMENT APPROVAL.`,
+        requires_management_approval: true,
+        deficit_amount: deficitAmount,
+        required_payment: totalRequiredPayment,
+        verified_paid: verifiedPaid,
+        slice_dispatch_value: itemSliceValue,
+        status: 'PENDING_MANAGEMENT_APPROVAL',
       });
       return;
     }
@@ -2412,7 +2532,32 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
 
     const targetInvoice = invoice_id ? invRows.find((i: any) => i.id === invoice_id) || invRows[0] : invRows[0];
 
-    // Verify overages
+    // Fetch quotation details and verified payments
+    const quoteRows = await query(
+      `SELECT q.*, COALESCE(p_pay.verified_paid, 0) as verified_paid
+       FROM quotations q
+       LEFT JOIN (
+         SELECT quotation_id, SUM(amount) as verified_paid
+         FROM payments
+         WHERE status IN ('Cleared', 'Verified')
+         GROUP BY quotation_id
+       ) p_pay ON p_pay.quotation_id = q.id
+       WHERE q.id = $1`,
+      [quotationId]
+    );
+
+    if (quoteRows.length === 0) {
+      res.status(404).json({ error: 'Quotation not found' });
+      return;
+    }
+
+    const quote = quoteRows[0];
+    const grossTotal = parseFloat(quote.gross_total || quote.taxable_amount || 0);
+    const netTotal = parseFloat(quote.net_total || 0);
+    const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+    const verifiedPaid = parseFloat(quote.verified_paid || 0);
+
+    // Verify items and overages
     const itemRows = await query(`SELECT * FROM quotation_items WHERE quotation_id = $1`, [quotationId]);
     const itemsMap = new Map<number, any>(itemRows.map((it: any) => [it.id, it]));
 
@@ -2430,8 +2575,79 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
       }
     }
 
+    // Financial Safety Gate: calculate cumulative value committed by this slice
+    let alreadyDispatchedValue = 0;
+    for (const dbItem of itemRows) {
+      const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 1);
+      const already = parseFloat(dbItem.dispatched_quantity || 0);
+      const baseAmount = parseFloat(dbItem.total_amount || 0);
+      const payableAmount = Math.round(baseAmount * taxMultiplier * 100) / 100;
+      const ratePerUnit = quoted > 0 ? (payableAmount / quoted) : 0;
+      alreadyDispatchedValue += Math.min(payableAmount, Math.round(already * ratePerUnit * 100) / 100);
+    }
+
+    let sliceDispatchValue = 0;
+    for (const reqItem of items) {
+      const dbItem = itemsMap.get(reqItem.quotation_item_id);
+      if (!dbItem) continue;
+      const quoted = parseFloat(dbItem.quantity_boxes || dbItem.quantity_sqft || 1);
+      const sliceQty = parseFloat(reqItem.dispatch_qty ?? reqItem.invoice_qty ?? 0);
+      if (sliceQty <= 0) continue;
+      const baseAmount = parseFloat(dbItem.total_amount || 0);
+      const payableAmount = Math.round(baseAmount * taxMultiplier * 100) / 100;
+      const ratePerUnit = quoted > 0 ? (payableAmount / quoted) : 0;
+      sliceDispatchValue += Math.round(sliceQty * ratePerUnit * 100) / 100;
+    }
+
+    const totalRequiredPayment = Math.round((alreadyDispatchedValue + sliceDispatchValue) * 100) / 100;
+    const isPaymentSufficient = verifiedPaid >= (totalRequiredPayment - 0.50);
+    const deficitAmount = isPaymentSufficient ? 0 : Math.round((totalRequiredPayment - verifiedPaid) * 100) / 100;
+
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrMgr = ['admin', 'manager'].includes(userRole);
+    const isManagementApproved = supervisor_override && isAdminOrMgr;
+
+    if (!isPaymentSufficient && !isManagementApproved) {
+      const deficitNote = `[PAYMENT DEFICIT BLOCKED] Attempted dispatch slice value ₹${sliceDispatchValue.toFixed(2)} requires cumulative verified payment of ₹${totalRequiredPayment.toFixed(2)}, but received payment is ₹${verifiedPaid.toFixed(2)} (Deficit: ₹${deficitAmount.toFixed(2)}). Order held pending management approval.`;
+      
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = 'PENDING_MANAGEMENT_APPROVAL',
+             dispatch_notes = CASE 
+               WHEN dispatch_notes IS NULL OR dispatch_notes = '' THEN $1
+               ELSE dispatch_notes || E'\n' || $1
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [deficitNote, quotationId]
+      );
+
+      broadcast({
+        type: 'dispatch:updated',
+        payload: {
+          quotation_id: quotationId,
+          dispatch_status: 'PENDING_MANAGEMENT_APPROVAL',
+          deficit_amount: deficitAmount,
+          required_payment: totalRequiredPayment,
+          verified_paid: verifiedPaid,
+        },
+      });
+
+      res.status(403).json({
+        success: false,
+        code: 'INSUFFICIENT_PAYMENT_BLOCKED',
+        error: `🚫 Dispatch Blocked: Verified payment received is ₹${verifiedPaid.toLocaleString('en-IN')}, but releasing this dispatch requires ₹${totalRequiredPayment.toLocaleString('en-IN')} (Deficit: ₹${deficitAmount.toLocaleString('en-IN')}). Quotation has been marked as PENDING MANAGEMENT APPROVAL.`,
+        requires_management_approval: true,
+        deficit_amount: deficitAmount,
+        required_payment: totalRequiredPayment,
+        verified_paid: verifiedPaid,
+        slice_dispatch_value: sliceDispatchValue,
+        status: 'PENDING_MANAGEMENT_APPROVAL',
+      });
+      return;
+    }
+
     if (hasOverage && !supervisor_override) {
-      const isAdminOrMgr = ['admin', 'manager'].includes((req.user?.role || '').toLowerCase());
       if (!isAdminOrMgr) {
         res.status(400).json({
           error: '⚠️ Extra Quantity Detected: Dispatch quantity exceeds quotation ordered quantity. Warehouse supervisor confirmation required.',
@@ -2439,6 +2655,11 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
         });
         return;
       }
+    }
+
+    let managerOverrideNote: string | null = null;
+    if (!isPaymentSufficient && isManagementApproved) {
+      managerOverrideNote = `[MANAGEMENT APPROVED OVERRIDE] Authorized by ${req.user?.full_name || 'Manager'} (${userRole}) with deficit ₹${deficitAmount.toFixed(2)}. Note: ${supervisor_notes || 'Authorized by management'}`;
     }
 
     let totalRemainingPending = 0;
@@ -2538,9 +2759,11 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
                closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP),
                dispatched_at = CURRENT_TIMESTAMP,
                dispatched_by_id = $2,
-               dispatched_by_name = $3
+               dispatched_by_name = $3,
+               manager_approval_note = COALESCE($4, manager_approval_note),
+               dispatch_notes = CASE WHEN $4 IS NOT NULL THEN COALESCE(dispatch_notes, '') || E'\n' || $4 ELSE dispatch_notes END
            WHERE id = $1`,
-          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff']
+          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff', managerOverrideNote]
         );
       } else {
         await client.query(
@@ -2548,9 +2771,11 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
            SET dispatch_status = 'PARTIALLY_DISPATCHED',
                dispatched_at = CURRENT_TIMESTAMP,
                dispatched_by_id = $2,
-               dispatched_by_name = $3
+               dispatched_by_name = $3,
+               manager_approval_note = COALESCE($4, manager_approval_note),
+               dispatch_notes = CASE WHEN $4 IS NOT NULL THEN COALESCE(dispatch_notes, '') || E'\n' || $4 ELSE dispatch_notes END
            WHERE id = $1`,
-          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff']
+          [quotationId, req.user?.id || null, req.user?.full_name || 'Staff', managerOverrideNote]
         );
       }
     });
@@ -2598,6 +2823,48 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
 
 dispatchRouter.post('/:quotationId/apply-invoice-dispatch', handleApplyInvoiceDispatch);
 dispatchRouter.post('/:quotationId/reconcile-dispatch', handleApplyInvoiceDispatch);
+
+// Direct Management Approval Override Endpoint
+dispatchRouter.patch('/:quotationId/management-approval', async (req: Request, res: Response) => {
+  try {
+    const quotationId = parseInt(req.params.quotationId as string, 10);
+    const { approved, note } = req.body;
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrMgr = ['admin', 'manager'].includes(userRole);
+
+    if (!isAdminOrMgr) {
+      res.status(403).json({ error: 'Only Administrator or Manager can authorize payment deficit dispatch.' });
+      return;
+    }
+
+    if (approved) {
+      const approvalNote = `[MANAGEMENT AUTHORIZED] Approved by ${req.user?.full_name || 'Manager'}: ${note || 'Approved for dispatch'}`;
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = 'PARTIALLY_DISPATCHED',
+             manager_approval_note = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [approvalNote, quotationId]
+      );
+      broadcast({ type: 'dispatch:updated', payload: { quotation_id: quotationId, dispatch_status: 'PARTIALLY_DISPATCHED' } });
+      res.json({ success: true, message: 'Management approval granted. Order ready for dispatch.' });
+    } else {
+      const rejectNote = `[MANAGEMENT REJECTED] Rejected by ${req.user?.full_name || 'Manager'}: ${note || 'Payment required before dispatch'}`;
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = 'PENDING_MANAGEMENT_APPROVAL',
+             dispatch_notes = CASE WHEN dispatch_notes IS NULL THEN $1 ELSE dispatch_notes || E'\n' || $1 END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [rejectNote, quotationId]
+      );
+      res.json({ success: true, message: 'Dispatch authorization rejected. Order kept on hold.' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // 4. DISPATCH COMPLETED (Archive of 100% fulfilled dispatches)
 dispatchRouter.get('/completed', async (req: Request, res: Response) => {
@@ -2870,11 +3137,12 @@ dispatchRouter.get('/local-tracker', async (req: Request, res: Response) => {
       ) p_pay ON p_pay.quotation_id = q.id
       LEFT JOIN (
         SELECT 
-          quotation_id,
-          SUM(CASE WHEN dispatch_status IN ('Ready Stock', 'Dispatched') THEN total_amount ELSE 0 END) as ready_stock_val,
-          SUM(CASE WHEN dispatch_status = 'Need to Arrange from Local' THEN total_amount ELSE 0 END) as local_purchase_val
-        FROM quotation_items
-        GROUP BY quotation_id
+          qi2.quotation_id,
+          SUM(CASE WHEN qi2.dispatch_status IN ('Ready Stock', 'Dispatched') THEN qi2.total_amount * (CASE WHEN q2.gross_total > 0 AND q2.net_total > 0 THEN (q2.net_total / q2.gross_total) ELSE 1.0 END) ELSE 0 END) as ready_stock_val,
+          SUM(CASE WHEN qi2.dispatch_status = 'Need to Arrange from Local' THEN qi2.total_amount * (CASE WHEN q2.gross_total > 0 AND q2.net_total > 0 THEN (q2.net_total / q2.gross_total) ELSE 1.0 END) ELSE 0 END) as local_purchase_val
+        FROM quotation_items qi2
+        JOIN quotations q2 ON q2.id = qi2.quotation_id
+        GROUP BY qi2.quotation_id
       ) q_comm ON q_comm.quotation_id = q.id
       WHERE qi.dispatch_status = 'Need to Arrange from Local'
         AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'

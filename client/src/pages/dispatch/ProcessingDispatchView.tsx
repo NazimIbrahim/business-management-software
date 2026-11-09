@@ -68,6 +68,10 @@ export interface ProcessingItem {
   expected_dispatch_date?: string;
   item_image?: string;
   total_amount?: number;
+  tax_inclusive_amount?: number;
+  unit_rate_with_tax?: number;
+  dispatched_value?: number;
+  pending_value?: number;
 }
 
 export interface ProcessingQuotation {
@@ -78,8 +82,13 @@ export interface ProcessingQuotation {
   site_location?: string;
   delivery_address?: string;
   sales_person_name?: string;
+  gross_total?: number | string;
+  tax_type?: string;
+  tax_multiplier?: number;
   net_total: number | string;
   dispatch_status: string;
+  manager_approval_note?: string;
+  dispatched_total_value?: number;
   expected_dispatch_date?: string;
   scheduled_dispatch_date?: string;
   dispatch_notes?: string;
@@ -182,6 +191,11 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     excessQty: number;
   } | null>(null);
   const [supervisorOverageReason, setSupervisorOverageReason] = useState('');
+  const [managementPaymentOverride, setManagementPaymentOverride] = useState(false);
+  const [managementOverrideNote, setManagementOverrideNote] = useState('');
+  const [reviewApprovalQuote, setReviewApprovalQuote] = useState<ProcessingQuotation | null>(null);
+  const [reviewApprovalActionNote, setReviewApprovalActionNote] = useState('');
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
 
   // Helper to open reconciliation drawer with guaranteed extractedItems and auto-match fallback
   const openReconciliationDrawer = (
@@ -537,8 +551,14 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     }
   };
 
-  // Apply Auto-Reconciliation Commit
-  const handleCommitReconciliation = async (quoteId: number, invoiceId: number, items: any[]) => {
+  // Apply Auto-Reconciliation Commit with Payment & Overage Safety Enforcement
+  const handleCommitReconciliation = async (
+    quoteId: number,
+    invoiceId: number,
+    items: any[],
+    override: boolean = false,
+    overrideNote: string = ''
+  ) => {
     setIsCommittingReconcile(true);
     try {
       const res = await fetchApi<any>(`/api/dispatch/${quoteId}/apply-invoice-dispatch`, {
@@ -551,13 +571,15 @@ export const ProcessingDispatchView: React.FC<Props> = ({
             dispatch_qty: it.invoice_qty,
             is_overage: it.is_overage,
           })),
-          supervisor_override: true,
-          supervisor_notes: supervisorOverageReason || 'Reconciliation approved by user',
+          supervisor_override: override || Boolean(supervisorOverageReason),
+          supervisor_notes: overrideNote || supervisorOverageReason || 'Reconciliation approved by user',
         }),
       });
 
       setReconcileDrawer(null);
       setSupervisorOverageReason('');
+      setManagementPaymentOverride(false);
+      setManagementOverrideNote('');
       onRefresh();
 
       if (res?.is_completed) {
@@ -567,8 +589,51 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       }
     } catch (err: any) {
       alert(err.message || 'Failed to apply dispatch reconciliation');
+      onRefresh();
     } finally {
       setIsCommittingReconcile(false);
+    }
+  };
+
+  // Staff action: Request Management Approval when payment is insufficient
+  const handleRequestManagementApproval = async (quoteId: number, deficit: number, sliceVal: number) => {
+    setIsCommittingReconcile(true);
+    try {
+      const note = `[STAFF SUBMITTED FOR APPROVAL] Attempted dispatch slice of ${formatCurrency(sliceVal)} with deficit of ${formatCurrency(deficit)}. Awaiting management authorization.`;
+      await fetchApi<any>(`/api/dispatch/${quoteId}/management-approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approved: false, note }),
+      });
+      alert('⚠️ Dispatch request submitted for Management Approval. Order status set to PENDING MANAGEMENT APPROVAL.');
+      setReconcileDrawer(null);
+      setSafetyModalItem(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Error submitting for management approval');
+    } finally {
+      setIsCommittingReconcile(false);
+    }
+  };
+
+  // Direct Management Decision (Approve / Reject)
+  const handleDirectManagementDecision = async (quoteId: number, approved: boolean) => {
+    setIsSubmittingApproval(true);
+    try {
+      const res = await fetchApi<any>(`/api/dispatch/${quoteId}/management-approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          approved,
+          note: reviewApprovalActionNote.trim() || (approved ? 'Authorized by Management' : 'Held by Management'),
+        }),
+      });
+      alert(res?.message || (approved ? 'Management authorization granted!' : 'Order kept on hold.'));
+      setReviewApprovalQuote(null);
+      setReviewApprovalActionNote('');
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update management approval');
+    } finally {
+      setIsSubmittingApproval(false);
     }
   };
 
@@ -895,14 +960,32 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                         {formatCurrency(d.committed_immediate_value || 0)}
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
-                        (Ready: {formatCurrency(d.ready_stock_total_value || 0)} + Local:{' '}
+                        (Dispatched: {formatCurrency(d.dispatched_total_value || 0)} + Ready: {formatCurrency(d.ready_stock_total_value || 0)} + Local:{' '}
                         {formatCurrency(d.local_purchase_total_value || 0)})
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    {d.is_payment_sufficient !== false ? (
+                    {d.dispatch_status === 'PENDING_MANAGEMENT_APPROVAL' ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                          <AlertTriangle size={12} className="text-amber-700" />
+                          <span>⚠️ Pending Management Approval</span>
+                        </span>
+                        {isAdminOrManager && (
+                          <button
+                            onClick={() => {
+                              setReviewApprovalQuote(d);
+                              setReviewApprovalActionNote(d.manager_approval_note || '');
+                            }}
+                            className="px-2.5 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] cursor-pointer shadow-2xs transition-colors"
+                          >
+                            Authorize / Review
+                          </button>
+                        )}
+                      </div>
+                    ) : d.is_payment_sufficient !== false ? (
                       <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                         <ShieldCheck size={12} />
                         <span>Payment Covered</span>
@@ -1580,29 +1663,254 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   </div>
                 </div>
               )}
+
+              {/* Financial Payment Safety Gate in Invoice Modal */}
+              {(() => {
+                const quote = reconcileDrawer.quote;
+                const grossTotal = parseFloat(String(quote.gross_total || 0));
+                const netTotal = parseFloat(String(quote.net_total || 0));
+                const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+                const verifiedPaid = parseFloat(String(quote.total_received_amount || quote.verified_paid || 0));
+                const alreadyDispatchedVal = parseFloat(String(quote.dispatched_total_value || 0));
+
+                const matchedItems = reconcileDrawer.reconciliation.matched_items || [];
+                const sliceDispatchValue = matchedItems.reduce((acc: number, m: any) => {
+                  const qIt = quote.items.find((it: any) => it.id === m.quotation_item_id);
+                  const ordered = parseFloat(String(qIt?.ordered_quantity || 1));
+                  const baseAmount = parseFloat(String(qIt?.total_amount || 0));
+                  const payableAmount = baseAmount * taxMultiplier;
+                  const ratePerUnit = ordered > 0 ? (payableAmount / ordered) : 0;
+                  const invQty = parseFloat(String(m.invoice_qty || 0));
+                  return acc + (invQty * ratePerUnit);
+                }, 0);
+
+                const totalRequiredPayment = Math.round((alreadyDispatchedVal + sliceDispatchValue) * 100) / 100;
+                const isSufficient = verifiedPaid >= (totalRequiredPayment - 0.50);
+                const deficit = isSufficient ? 0 : Math.round((totalRequiredPayment - verifiedPaid) * 100) / 100;
+
+                if (isSufficient) return null;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs space-y-2 mt-2">
+                    <div className="flex items-center space-x-2 font-bold text-rose-800">
+                      <ShieldAlert size={15} className="text-rose-600" />
+                      <span>INSUFFICIENT PAYMENT DETECTED FOR THIS TAX INVOICE</span>
+                    </div>
+                    <div className="text-[11px] text-rose-700 grid grid-cols-2 gap-2 bg-white/80 p-2.5 rounded-lg border border-rose-200">
+                      <div>
+                        Billed Invoice Slice Value: <span className="font-mono font-bold text-slate-900">{formatCurrency(sliceDispatchValue)}</span>
+                      </div>
+                      <div>
+                        Verified Payments Received: <span className="font-mono font-bold text-emerald-700">{formatCurrency(verifiedPaid)}</span>
+                      </div>
+                      <div>
+                        Total Cumulative Required: <span className="font-mono font-bold text-slate-900">{formatCurrency(totalRequiredPayment)}</span>
+                      </div>
+                      <div className="text-rose-700 font-bold">
+                        Outstanding Payment Deficit: <span className="font-mono text-rose-800">{formatCurrency(deficit)}</span>
+                      </div>
+                    </div>
+
+                    {isAdminOrManager ? (
+                      <div className="pt-2 border-t border-rose-200 space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="mgmtPaymentOverrideCheck"
+                            checked={managementPaymentOverride}
+                            onChange={(e) => setManagementPaymentOverride(e.target.checked)}
+                            className="w-4 h-4 text-rose-600 rounded cursor-pointer"
+                          />
+                          <label htmlFor="mgmtPaymentOverrideCheck" className="font-bold text-slate-800 cursor-pointer">
+                            Management Override: Authorize dispatch with payment deficit
+                          </label>
+                        </div>
+                        {managementPaymentOverride && (
+                          <input
+                            type="text"
+                            value={managementOverrideNote}
+                            onChange={(e) => setManagementOverrideNote(e.target.value)}
+                            placeholder="Mandatory management authorization note (e.g. Credit approved by Management)..."
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-rose-500/20"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-2 rounded-lg bg-amber-100/70 border border-amber-300 text-amber-900 font-semibold text-[11px]">
+                        🔒 Staff Dispatch Blocked: Insufficient payment. Please collect payment or submit for Management Approval.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Footer */}
             <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-2 shrink-0">
               <button
-                onClick={() => setReconcileDrawer(null)}
+                onClick={() => {
+                  setReconcileDrawer(null);
+                  setManagementPaymentOverride(false);
+                  setManagementOverrideNote('');
+                }}
                 className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 font-semibold text-xs text-slate-700 cursor-pointer"
               >
                 Close Without Applying
               </button>
-              <button
-                onClick={() =>
-                  handleCommitReconciliation(
-                    reconcileDrawer.quote.id,
-                    reconcileDrawer.invoice.id,
-                    reconcileDrawer.reconciliation.matched_items || []
-                  )
+              {(() => {
+                const quote = reconcileDrawer.quote;
+                const grossTotal = parseFloat(String(quote.gross_total || 0));
+                const netTotal = parseFloat(String(quote.net_total || 0));
+                const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
+                const verifiedPaid = parseFloat(String(quote.total_received_amount || quote.verified_paid || 0));
+                const alreadyDispatchedVal = parseFloat(String(quote.dispatched_total_value || 0));
+
+                const matchedItems = reconcileDrawer.reconciliation.matched_items || [];
+                const sliceDispatchValue = matchedItems.reduce((acc: number, m: any) => {
+                  const qIt = quote.items.find((it: any) => it.id === m.quotation_item_id);
+                  const ordered = parseFloat(String(qIt?.ordered_quantity || 1));
+                  const baseAmount = parseFloat(String(qIt?.total_amount || 0));
+                  const payableAmount = baseAmount * taxMultiplier;
+                  const ratePerUnit = ordered > 0 ? (payableAmount / ordered) : 0;
+                  const invQty = parseFloat(String(m.invoice_qty || 0));
+                  return acc + (invQty * ratePerUnit);
+                }, 0);
+
+                const totalRequiredPayment = Math.round((alreadyDispatchedVal + sliceDispatchValue) * 100) / 100;
+                const isSufficient = verifiedPaid >= (totalRequiredPayment - 0.50);
+                const deficit = isSufficient ? 0 : Math.round((totalRequiredPayment - verifiedPaid) * 100) / 100;
+
+                if (!isSufficient) {
+                  if (!isAdminOrManager) {
+                    return (
+                      <button
+                        onClick={() => handleRequestManagementApproval(quote.id, deficit, sliceDispatchValue)}
+                        disabled={isCommittingReconcile}
+                        className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                      >
+                        <AlertTriangle size={13} />
+                        <span>{isCommittingReconcile ? 'Submitting...' : 'Submit for Management Approval'}</span>
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <button
+                      onClick={() =>
+                        handleCommitReconciliation(
+                          reconcileDrawer.quote.id,
+                          reconcileDrawer.invoice.id,
+                          reconcileDrawer.reconciliation.matched_items || [],
+                          true,
+                          managementOverrideNote
+                        )
+                      }
+                      disabled={isCommittingReconcile || !managementPaymentOverride || !managementOverrideNote.trim()}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                    >
+                      <ShieldCheck size={13} />
+                      <span>{isCommittingReconcile ? 'Authorizing...' : 'Authorize & Apply Dispatch (Management Override)'}</span>
+                    </button>
+                  );
                 }
-                disabled={isCommittingReconcile}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+
+                return (
+                  <button
+                    onClick={() =>
+                      handleCommitReconciliation(
+                        reconcileDrawer.quote.id,
+                        reconcileDrawer.invoice.id,
+                        reconcileDrawer.reconciliation.matched_items || []
+                      )
+                    }
+                    disabled={isCommittingReconcile}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                  >
+                    <Check size={13} />
+                    <span>{isCommittingReconcile ? 'Applying...' : 'Apply Reconciled Dispatch'}</span>
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Management Approval Review Modal */}
+      {reviewApprovalQuote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-5 border border-slate-200 shadow-2xl animate-fadeIn space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 font-bold text-slate-800 text-sm">
+                <AlertTriangle size={17} className="text-amber-600" />
+                <span>Management Authorization Review</span>
+              </div>
+              <button
+                onClick={() => setReviewApprovalQuote(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="text-xs space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Quotation:</span>
+                <span className="font-bold text-slate-900">{reviewApprovalQuote.quotation_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Customer:</span>
+                <span className="font-bold text-slate-900">{reviewApprovalQuote.customer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Net Payable:</span>
+                <span className="font-bold text-slate-900">{formatCurrency(reviewApprovalQuote.net_total || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Verified Paid:</span>
+                <span className="font-bold text-emerald-700">{formatCurrency(reviewApprovalQuote.total_received_amount || 0)}</span>
+              </div>
+              <div className="flex justify-between text-rose-700 font-bold border-t border-slate-200 pt-1">
+                <span>Payment Deficit:</span>
+                <span>{formatCurrency(reviewApprovalQuote.deficit_amount || 0)}</span>
+              </div>
+            </div>
+
+            {reviewApprovalQuote.dispatch_notes && (
+              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 max-h-28 overflow-y-auto">
+                <div className="font-bold mb-1">Dispatch Notes / Audit Trail:</div>
+                <pre className="whitespace-pre-wrap font-sans text-[11px]">{reviewApprovalQuote.dispatch_notes}</pre>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Management Decision Note
+              </label>
+              <input
+                type="text"
+                value={reviewApprovalActionNote}
+                onChange={(e) => setReviewApprovalActionNote(e.target.value)}
+                placeholder="e.g. Authorized by Management, client promised cheque tomorrow..."
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200">
+              <button
+                onClick={() => handleDirectManagementDecision(reviewApprovalQuote.id, false)}
+                disabled={isSubmittingApproval}
+                className="px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-xs cursor-pointer disabled:opacity-50"
+              >
+                Reject / Keep on Hold
+              </button>
+              <button
+                onClick={() => handleDirectManagementDecision(reviewApprovalQuote.id, true)}
+                disabled={isSubmittingApproval}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50 shadow-sm flex items-center space-x-1"
               >
                 <Check size={13} />
-                <span>{isCommittingReconcile ? 'Applying...' : 'Apply Reconciled Dispatch'}</span>
+                <span>Authorize Dispatch</span>
               </button>
             </div>
           </div>
