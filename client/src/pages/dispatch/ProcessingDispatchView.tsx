@@ -106,6 +106,14 @@ export interface ProcessingQuotation {
   latest_invoice?: DispatchInvoice | null;
 }
 
+export interface ParsedInvoiceItem {
+  id: string;
+  description: string;
+  raw_description?: string;
+  quantity: number;
+  unit?: string;
+}
+
 interface Props {
   dispatches: ProcessingQuotation[];
   loading: boolean;
@@ -148,6 +156,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   const [reconcileDrawer, setReconcileDrawer] = useState<{
     quote: ProcessingQuotation;
     reconciliation: any;
+    extractedItems: ParsedInvoiceItem[];
     invoice: DispatchInvoice;
   } | null>(null);
   const [isCommittingReconcile, setIsCommittingReconcile] = useState(false);
@@ -174,13 +183,120 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   } | null>(null);
   const [supervisorOverageReason, setSupervisorOverageReason] = useState('');
 
+  // Helper to open reconciliation drawer with guaranteed extractedItems and auto-match fallback
+  const openReconciliationDrawer = (
+    quote: ProcessingQuotation,
+    reconciliationData: any,
+    invoice: DispatchInvoice,
+    rawExtractedList?: any[]
+  ) => {
+    const rawList =
+      rawExtractedList ||
+      reconciliationData?.extractedItems ||
+      reconciliationData?.extracted_items ||
+      reconciliationData?.unmapped_invoice_lines ||
+      reconciliationData?.matched_items?.map((m: any, idx: number) => ({
+        id: m.invoice_item_id || `inv_${idx}`,
+        description: m.invoice_description || m.description,
+        quantity: m.invoice_qty,
+        unit: m.unit || 'BOX',
+      })) ||
+      [];
+
+    const extractedItems: ParsedInvoiceItem[] = rawList.map((it: any, idx: number) => ({
+      id: String(it.id || `inv_${idx}`),
+      description: it.description || it.raw_description || `Invoice Line #${idx + 1}`,
+      raw_description: it.raw_description || it.description || '',
+      quantity: parseFloat(String(it.quantity || 0)),
+      unit: it.unit || 'BOX',
+    }));
+
+    let matchedItems: any[] = [...(reconciliationData?.matched_items || [])];
+    const matchedQuoteIds = new Set(matchedItems.map((m: any) => String(m.quotation_item_id)));
+    const usedInvoiceIds = new Set(matchedItems.map((m: any) => String(m.invoice_item_id || '')));
+
+    // Case-insensitive substring auto-match fallback for any unmapped items
+    for (const qIt of quote.items || []) {
+      if (!matchedQuoteIds.has(String(qIt.id))) {
+        const qClean = (qIt.description || (qIt as any).name || (qIt as any).item_name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!qClean) continue;
+
+        const foundInv = extractedItems.find((inv) => {
+          if (usedInvoiceIds.has(inv.id)) return false;
+          const iClean = (inv.description || inv.raw_description || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          return iClean.includes(qClean) || qClean.includes(iClean);
+        });
+
+        if (foundInv) {
+          const quoted = parseFloat(String(qIt.ordered_quantity || 0));
+          const already = parseFloat(String(qIt.quantity_dispatched || 0));
+          const qty = foundInv.quantity;
+          const newDispatched = Math.round((already + qty) * 100) / 100;
+          const pending = Math.max(0, Math.round((quoted - newDispatched) * 100) / 100);
+          const isOverage = newDispatched > quoted;
+          const excess = isOverage ? Math.round((newDispatched - quoted) * 100) / 100 : 0;
+          const fulfillmentStatus =
+            newDispatched >= quoted
+              ? 'DISPATCHED'
+              : newDispatched > 0
+              ? 'PARTIALLY_DISPATCHED'
+              : 'PENDING';
+
+          matchedItems.push({
+            quotation_item_id: qIt.id,
+            invoice_item_id: foundInv.id,
+            description: qIt.description,
+            brand: qIt.brand,
+            size: qIt.size,
+            invoice_description: foundInv.description,
+            quoted_qty: quoted,
+            already_dispatched_qty: already,
+            invoice_qty: qty,
+            unit: foundInv.unit || 'BOX',
+            new_dispatched_qty: newDispatched,
+            pending_qty: pending,
+            fulfillment_status: fulfillmentStatus,
+            is_overage: isOverage,
+            excess_qty: excess,
+            match_score: 1.0,
+            confidence: 'EXACT',
+          });
+
+          matchedQuoteIds.add(String(qIt.id));
+          usedInvoiceIds.add(foundInv.id);
+        }
+      }
+    }
+
+    setReconcileDrawer({
+      quote,
+      reconciliation: {
+        ...reconciliationData,
+        matched_items: matchedItems,
+        has_overages: matchedItems.some((m: any) => m.is_overage),
+        total_matched_count: matchedItems.length,
+      },
+      extractedItems,
+      invoice,
+    });
+  };
+
   // Reactive Quantity Editor for Tax Invoice Reconciliation
-  const handleInvoiceQtyChange = (quotationItemId: number, rawQty: number) => {
+  const handleInvoiceQtyChange = (quotationItemId: number | string, rawQty: number) => {
     if (!reconcileDrawer) return;
     const qty = isNaN(rawQty) || rawQty < 0 ? 0 : rawQty;
 
     const updatedMatched = (reconcileDrawer.reconciliation.matched_items || []).map((it: any) => {
-      if (it.quotation_item_id === quotationItemId) {
+      if (String(it.quotation_item_id) === String(quotationItemId)) {
         const quoted = parseFloat(it.quoted_qty || 0);
         const already = parseFloat(it.already_dispatched_qty || 0);
         const newDispatched = Math.round((already + qty) * 100) / 100;
@@ -219,16 +335,26 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     });
   };
 
-  // Manual Item Mapper: Bind an unmapped invoice line to a quotation item
-  const handleMapUnmappedLine = (unmappedIdx: number, targetQuoteItemId: number) => {
+  // 1-Click Manual Item Mapper from Dropdown
+  const handleManualMap = (quoteItemId: number | string, invoiceItemId: string) => {
     if (!reconcileDrawer) return;
-    const unmappedLine = reconcileDrawer.reconciliation.unmapped_invoice_lines?.[unmappedIdx];
-    const targetQuoteItem = reconcileDrawer.quote.items.find((i) => i.id === targetQuoteItemId);
-    if (!unmappedLine || !targetQuoteItem) return;
+
+    if (!invoiceItemId) {
+      handleUnbindMatchedItem(quoteItemId);
+      return;
+    }
+
+    const targetQuoteItem = (reconcileDrawer.quote.items || []).find(
+      (i) => String(i.id) === String(quoteItemId)
+    );
+    if (!targetQuoteItem) return;
+
+    const selectedInv = (reconcileDrawer.extractedItems || []).find((inv) => inv.id === invoiceItemId);
+    if (!selectedInv) return;
 
     const quoted = parseFloat(String(targetQuoteItem.ordered_quantity || 0));
     const already = parseFloat(String(targetQuoteItem.quantity_dispatched || 0));
-    const qty = parseFloat(String(unmappedLine.quantity || 0));
+    const qty = parseFloat(String(selectedInv.quantity || 0));
     const newDispatched = Math.round((already + qty) * 100) / 100;
     const pending = Math.max(0, Math.round((quoted - newDispatched) * 100) / 100);
     const isOverage = newDispatched > quoted;
@@ -242,38 +368,36 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
     const newMatchedItem = {
       quotation_item_id: targetQuoteItem.id,
+      invoice_item_id: selectedInv.id,
       description: targetQuoteItem.description,
       brand: targetQuoteItem.brand,
       size: targetQuoteItem.size,
-      invoice_description: unmappedLine.raw_description,
+      invoice_description: selectedInv.description,
       quoted_qty: quoted,
       already_dispatched_qty: already,
       invoice_qty: qty,
-      unit: unmappedLine.unit || 'BOX',
+      unit: selectedInv.unit || 'BOX',
       new_dispatched_qty: newDispatched,
       pending_qty: pending,
       fulfillment_status: fulfillmentStatus,
       is_overage: isOverage,
       excess_qty: excess,
       match_score: 1.0,
-      confidence: 'MANUAL',
+      confidence: 'Mapped',
     };
 
-    const nextMatched = [...(reconcileDrawer.reconciliation.matched_items || []), newMatchedItem];
-    const nextUnmapped = (reconcileDrawer.reconciliation.unmapped_invoice_lines || []).filter(
-      (_: any, idx: number) => idx !== unmappedIdx
-    );
-    const nextUnmatched = (reconcileDrawer.reconciliation.unmatched_items || []).filter(
-      (u: any) => u.quotation_item_id !== targetQuoteItemId
-    );
+    const nextMatched = [
+      ...(reconcileDrawer.reconciliation.matched_items || []).filter(
+        (m: any) => String(m.quotation_item_id) !== String(quoteItemId)
+      ),
+      newMatchedItem,
+    ];
 
     setReconcileDrawer({
       ...reconcileDrawer,
       reconciliation: {
         ...reconcileDrawer.reconciliation,
         matched_items: nextMatched,
-        unmapped_invoice_lines: nextUnmapped,
-        unmatched_items: nextUnmatched,
         has_overages: nextMatched.some((m: any) => m.is_overage),
         total_matched_count: nextMatched.length,
       },
@@ -281,52 +405,31 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   };
 
   // Unbind a matched item back to manual selector state
-  const handleUnbindMatchedItem = (quoteItemId: number) => {
+  const handleUnbindMatchedItem = (quoteItemId: number | string) => {
     if (!reconcileDrawer) return;
-    const matchedItem = (reconcileDrawer.reconciliation.matched_items || []).find(
-      (m: any) => m.quotation_item_id === quoteItemId
-    );
-    if (!matchedItem) return;
-
-    const restoredInvoiceLine = {
-      raw_description: matchedItem.invoice_description || matchedItem.description,
-      clean_description: matchedItem.invoice_description || matchedItem.description,
-      quantity: matchedItem.invoice_qty,
-      unit: matchedItem.unit || 'BOX',
-    };
 
     const nextMatched = (reconcileDrawer.reconciliation.matched_items || []).filter(
-      (m: any) => m.quotation_item_id !== quoteItemId
+      (m: any) => String(m.quotation_item_id) !== String(quoteItemId)
     );
-    const nextUnmapped = [...(reconcileDrawer.reconciliation.unmapped_invoice_lines || []), restoredInvoiceLine];
-
-    const quoteItem = (reconcileDrawer.quote.items || []).find((i) => i.id === quoteItemId);
-    const nextUnmatched = quoteItem
-      ? [
-          ...(reconcileDrawer.reconciliation.unmatched_items || []),
-          {
-            quotation_item_id: quoteItem.id,
-            description: quoteItem.description,
-            brand: quoteItem.brand,
-            size: quoteItem.size,
-            quoted_qty: quoteItem.ordered_quantity,
-            already_dispatched_qty: quoteItem.quantity_dispatched,
-            remaining_qty: Math.max(0, quoteItem.ordered_quantity - quoteItem.quantity_dispatched),
-          },
-        ]
-      : reconcileDrawer.reconciliation.unmatched_items;
 
     setReconcileDrawer({
       ...reconcileDrawer,
       reconciliation: {
         ...reconcileDrawer.reconciliation,
         matched_items: nextMatched,
-        unmapped_invoice_lines: nextUnmapped,
-        unmatched_items: nextUnmatched,
         has_overages: nextMatched.some((m: any) => m.is_overage),
         total_matched_count: nextMatched.length,
       },
     });
+  };
+
+  // Map an unmapped invoice line to a quotation item from the secondary helper card
+  const handleMapUnmappedLine = (unmappedIdx: number, targetQuoteItemId: number) => {
+    if (!reconcileDrawer) return;
+    const unmapped = reconcileDrawer.reconciliation.unmapped_invoice_lines?.[unmappedIdx];
+    if (!unmapped) return;
+    const invId = unmapped.id || `inv_${unmappedIdx}`;
+    handleManualMap(targetQuoteItemId, invId);
   };
 
   const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
@@ -370,11 +473,12 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       // Success: open reconciliation review drawer
       const quote = dispatches.find((q) => q.id === quotationId);
       if (quote) {
-        setReconcileDrawer({
+        openReconciliationDrawer(
           quote,
-          reconciliation: data.reconciliation,
-          invoice: data.invoice,
-        });
+          data.reconciliation || {},
+          data.invoice,
+          data.extractedItems || data.extracted_items
+        );
       }
 
       onRefresh();
@@ -635,7 +739,16 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                             className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold shadow-2xs"
                           >
                             <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                            <span>Tax Invoice #{inv.invoice_number} Verified</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openReconciliationDrawer(d, inv.reconciliation_summary || {}, inv);
+                              }}
+                              className="font-bold text-emerald-950 hover:underline cursor-pointer text-left"
+                              title="Click to view/edit reconciliation table"
+                            >
+                              Tax Invoice #{inv.invoice_number} Verified
+                            </button>
                             <button
                               onClick={() => setPreviewPdfUrl(inv.file_url)}
                               className="text-indigo-600 hover:text-indigo-800 underline text-[11px] ml-1 flex items-center space-x-0.5 cursor-pointer"
@@ -1119,10 +1232,17 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                     <tbody className="divide-y divide-slate-100">
                       {(() => {
                         const quoteItems = reconcileDrawer.quote.items || [];
-                        const matchedMap = new Map<number, any>();
+                        const matchedMap = new Map<string, any>();
                         (reconcileDrawer.reconciliation.matched_items || []).forEach((m: any) => {
-                          matchedMap.set(m.quotation_item_id, m);
+                          matchedMap.set(String(m.quotation_item_id), m);
                         });
+
+                        const extractedInvoiceItems = reconcileDrawer.extractedItems || [];
+                        const mappedInvoiceItemIds = new Set(
+                          (reconcileDrawer.reconciliation.matched_items || [])
+                            .map((m: any) => String(m.invoice_item_id || ''))
+                            .filter(Boolean)
+                        );
 
                         // If no quote items exist on the quote object, fall back to matched_items
                         if (quoteItems.length === 0) {
@@ -1152,10 +1272,10 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                   <span className="text-[10px] text-slate-400 font-mono">{it.unit || 'BOX'}</span>
                                 </div>
                               </td>
-                              <td className="py-2 px-2 text-right font-mono font-bold text-emerald-700">
+                              <td className="py-2 px-2 text-right font-mono text-emerald-700 font-bold">
                                 {it.new_dispatched_qty}
                               </td>
-                              <td className="py-2 px-2 text-right font-mono font-bold text-amber-700">
+                              <td className="py-2 px-2 text-right font-mono text-amber-700 font-bold">
                                 {it.pending_qty}
                               </td>
                               <td className="py-2 px-3 text-center">
@@ -1174,7 +1294,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                         }
 
                         return quoteItems.map((qIt) => {
-                          const it = matchedMap.get(qIt.id);
+                          const it = matchedMap.get(String(qIt.id));
 
                           if (it) {
                             // MATCHED ITEM ROW (Confidence >= 70% or user mapped)
@@ -1190,7 +1310,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                             ? 'bg-emerald-100 text-emerald-800'
                                             : it.confidence === 'HIGH'
                                             ? 'bg-blue-100 text-blue-800'
-                                            : 'bg-indigo-100 text-indigo-800'
+                                            : 'bg-emerald-100 text-emerald-800'
                                         }`}
                                       >
                                         {it.confidence}
@@ -1248,11 +1368,10 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                             );
                           }
 
-                          // UNMATCHED ITEM ROW (Confidence < 70%): Render inline dropdown
+                          // UNMATCHED ITEM ROW (Needs Mapping): Render inline dropdown populated from extractedInvoiceItems
                           const quoted = parseFloat(String(qIt.ordered_quantity || 0));
                           const already = parseFloat(String(qIt.quantity_dispatched || 0));
                           const pending = Math.max(0, quoted - already);
-                          const unmappedLines = reconcileDrawer.reconciliation.unmapped_invoice_lines || [];
 
                           return (
                             <tr key={qIt.id} className="bg-amber-50/40 hover:bg-amber-50/70 transition-colors">
@@ -1271,20 +1390,24 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                               <td className="py-2 px-2 text-right" colSpan={1}>
                                 <div className="flex items-center justify-end">
                                   <select
-                                    className="max-w-[210px] w-full text-[11px] px-2 py-1 border border-amber-300 rounded-lg bg-white font-medium text-slate-800 focus:ring-1 focus:ring-amber-500 shadow-2xs cursor-pointer"
+                                    className="max-w-[240px] w-full text-[11px] px-2 py-1.5 border border-amber-300 rounded-lg bg-white font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+                                    value=""
                                     onChange={(e) => {
                                       if (e.target.value !== '') {
-                                        handleMapUnmappedLine(parseInt(e.target.value, 10), qIt.id);
+                                        handleManualMap(qIt.id, e.target.value);
                                       }
                                     }}
-                                    defaultValue=""
                                   >
                                     <option value="">Select matching invoice item: ▼</option>
-                                    {unmappedLines.map((unmapped: any, uIdx: number) => (
-                                      <option key={uIdx} value={uIdx}>
-                                        {unmapped.raw_description} ({unmapped.quantity} {unmapped.unit || 'BOX'})
-                                      </option>
-                                    ))}
+                                    {extractedInvoiceItems.map((invItem) => {
+                                      const isMappedToOther = mappedInvoiceItemIds.has(invItem.id);
+                                      return (
+                                        <option key={invItem.id} value={invItem.id} disabled={isMappedToOther}>
+                                          {invItem.description} — {invItem.quantity} {invItem.unit || 'BOX'}
+                                          {isMappedToOther ? ' (Already Mapped)' : ''}
+                                        </option>
+                                      );
+                                    })}
                                   </select>
                                 </div>
                               </td>

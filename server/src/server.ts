@@ -56,7 +56,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.56',
+    version: '2.4.57',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -689,7 +689,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.56' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.57' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');

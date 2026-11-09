@@ -1932,6 +1932,27 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       return;
     }
 
+    // Format and log extracted invoice lines
+    const extractedItems = (parsedInvoice.items || []).map((it: any, idx: number) => ({
+      id: `inv_${idx}`,
+      index: idx,
+      description: it.raw_description,
+      raw_description: it.raw_description,
+      clean_description: it.clean_description,
+      quantity: it.quantity,
+      unit: it.unit || 'BOX',
+      hsn: it.hsn || '',
+      rate: it.rate || 0,
+      amount: it.amount || 0,
+    }));
+
+    console.log('Extracted Invoice Lines:', extractedItems.map((e: any) => ({
+      id: e.id,
+      description: e.description,
+      quantity: e.quantity,
+      unit: e.unit,
+    })));
+
     // Line Items Reconciliation Analysis with Robust Ceramic Fuzzy Normalization
     const itemRows = await query(
       `SELECT * FROM quotation_items WHERE quotation_id = $1 ORDER BY id ASC`,
@@ -1970,6 +1991,7 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
 
           matchedItems.push({
             quotation_item_id: qItem.id,
+            invoice_item_id: `inv_${invIdx}`,
             description: qItem.description,
             brand: qItem.brand,
             size: qItem.size,
@@ -2011,14 +2033,16 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
 
     // 3. Unmapped invoice lines (lines in the invoice that weren't automatically bound to a quote item)
     const unmappedInvoiceLines = (parsedInvoice.items || [])
-      .filter((_: any, idx: number) => !usedInvoiceIndices.has(idx))
-      .map((inv: any) => ({
+      .map((inv: any, idx: number) => ({
+        id: `inv_${idx}`,
+        index: idx,
         raw_description: inv.raw_description,
         clean_description: inv.clean_description,
         quantity: inv.quantity,
         unit: inv.unit,
         raw_line: inv.raw_line,
-      }));
+      }))
+      .filter((inv: any) => !usedInvoiceIndices.has(inv.index));
 
     // Save Invoice Record
     const relativeFileUrl = `/uploads/invoices/${path.basename(req.file.path)}`;
@@ -2028,6 +2052,8 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       customer_matched: true,
       matched_phones: detectedPhones,
       matched_gstins: detectedGstins,
+      extracted_items: extractedItems,
+      extractedItems: extractedItems,
       matched_items: matchedItems,
       unmatched_items: unmatchedItems,
       unmapped_invoice_lines: unmappedInvoiceLines,
@@ -2079,15 +2105,21 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
         quotation_id: quotationId,
         invoice: savedInvoice,
         reconciliation: reconciliationSummary,
+        extractedItems,
       },
     });
 
     res.json({
       success: true,
       matched: true,
+      invoiceNumber: invoiceNumber,
+      customerMatched: true,
       message: `Tax Invoice #${invoiceNumber} Verified!`,
-      invoice: savedInvoice,
+      extractedItems,
+      extracted_items: extractedItems,
+      reconciledItems: matchedItems,
       reconciliation: reconciliationSummary,
+      invoice: savedInvoice,
     });
   } catch (error: any) {
     if (req.file && fs.existsSync(req.file.path)) {
