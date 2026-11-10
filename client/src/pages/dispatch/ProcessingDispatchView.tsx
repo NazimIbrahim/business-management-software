@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Check,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { formatCurrency } from '../DispatchManagement';
 import { useServer } from '../../context/ServerContext';
@@ -126,6 +127,7 @@ export interface ProcessingQuotation {
   invoices?: DispatchInvoice[];
   has_verified_invoice?: boolean;
   latest_invoice?: DispatchInvoice | null;
+  credit_notes?: any[];
 }
 
 export interface ParsedInvoiceItem {
@@ -986,6 +988,15 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                             Challan: {d.challan_number}
                           </span>
                         )}
+                        {d.credit_notes && d.credit_notes.length > 0 && (
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1 shadow-2xs"
+                            title={`Credit Note #${d.credit_notes[0].credit_note_number} applied: ${d.credit_notes[0].total_returned_boxes} box(es) returned for ${d.credit_notes[0].reason || 'Damage/Replacement'}`}
+                          >
+                            <RotateCcw size={10} className="text-amber-700" />
+                            <span>Replacement Inbound (CN #{d.credit_notes[0].credit_note_number})</span>
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-3 text-xs text-slate-600 mt-0.5">
                         <span className="font-semibold text-slate-800 flex items-center space-x-1">
@@ -1307,6 +1318,11 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                   {it.last_invoice_number && (
                                     <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                       Inv #{it.last_invoice_number}
+                                    </span>
+                                  )}
+                                  {it.pending_notes && (it.pending_notes.includes('CN #') || it.pending_notes.includes('REPLACEMENT')) && (
+                                    <span className="text-amber-800 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                      {it.pending_notes}
                                     </span>
                                   )}
                                 </div>

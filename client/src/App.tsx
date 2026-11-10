@@ -188,6 +188,7 @@ const AppContent: React.FC = () => {
     if (isDispatch) {
       if (activeTab === 'dispatch-processing') return <DispatchManagement initialView="processing" />;
       if (activeTab === 'dispatch-completed') return <DispatchManagement initialView="completed" />;
+      if (activeTab === 'dispatch-damage-replacement') return <DispatchManagement initialView="damage-replacement" />;
       if (activeTab === 'dispatch-schedule') return <DispatchManagement initialView="schedule" />;
       if (activeTab === 'dispatch-local-tracker' || activeTab === 'dispatch-local') return <DispatchManagement initialView="local-tracker" />;
       if (activeTab === 'dispatch-factory-tracker' || activeTab === 'dispatch-factory') return <DispatchManagement initialView="factory-tracker" />;
@@ -274,6 +275,8 @@ const AppContent: React.FC = () => {
         return <DispatchManagement initialView="processing" />;
       case 'dispatch-completed':
         return <DispatchManagement initialView="completed" />;
+      case 'dispatch-damage-replacement':
+        return <DispatchManagement initialView="damage-replacement" />;
       case 'dispatch-schedule':
         return <DispatchManagement initialView="schedule" />;
       case 'dispatch-local-tracker':

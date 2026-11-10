@@ -457,4 +457,46 @@ CREATE TABLE IF NOT EXISTS dispatch_invoices (
 CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_qid ON dispatch_invoices (quotation_id);
 CREATE INDEX IF NOT EXISTS idx_dispatch_invoices_inv_no ON dispatch_invoices (invoice_number);
 
+-- Credit Notes & Damage Replacement System
+CREATE TABLE IF NOT EXISTS credit_notes (
+    id SERIAL PRIMARY KEY,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    credit_note_number VARCHAR(100) NOT NULL,
+    credit_note_date DATE,
+    file_url TEXT NOT NULL,
+    file_name VARCHAR(255),
+    file_size INTEGER,
+    file_base64 TEXT,
+    reason VARCHAR(255) DEFAULT 'Transit Damage',
+    customer_phone_detected VARCHAR(50),
+    customer_gstin_detected VARCHAR(50),
+    total_returned_boxes NUMERIC(10, 2) DEFAULT 0,
+    total_credit_amount NUMERIC(12, 2) DEFAULT 0,
+    status VARCHAR(50) DEFAULT 'APPLIED',
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_by_name VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_quotation_id ON credit_notes(quotation_id);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_number ON credit_notes(LOWER(TRIM(credit_note_number)));
+
+CREATE TABLE IF NOT EXISTS credit_note_items (
+    id SERIAL PRIMARY KEY,
+    credit_note_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
+    quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+    item_description VARCHAR(255) NOT NULL,
+    damaged_quantity NUMERIC(10, 2) NOT NULL,
+    unit VARCHAR(50) DEFAULT 'BOX',
+    replacement_sourcing_status VARCHAR(50) DEFAULT 'READY_STOCK',
+    status VARCHAR(50) DEFAULT 'AWAITING_REDISPATCH',
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_credit_note_items_cn_id ON credit_note_items(credit_note_id);
+CREATE INDEX IF NOT EXISTS idx_credit_note_items_item_id ON credit_note_items(quotation_item_id);
+
+
 

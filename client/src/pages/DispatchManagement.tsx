@@ -33,10 +33,12 @@ import {
   ExternalLink,
   History,
   BarChart3,
+  RotateCcw,
 } from 'lucide-react';
 import { AllClosedView } from './dispatch/AllClosedView';
 import { ProcessingDispatchView } from './dispatch/ProcessingDispatchView';
 import { CompletedDispatchView } from './dispatch/CompletedDispatchView';
+import { DamageReplacementView } from './dispatch/DamageReplacementView';
 import { ScheduleView } from './dispatch/ScheduleView';
 import { LocalTrackerView } from './dispatch/LocalTrackerView';
 import { FactoryTrackerView } from './dispatch/FactoryTrackerView';
@@ -87,6 +89,7 @@ export type DispatchViewType =
   | 'all-closed'
   | 'processing'
   | 'completed'
+  | 'damage-replacement'
   | 'schedule'
   | 'local-tracker'
   | 'factory-tracker'
@@ -106,6 +109,7 @@ export const normalizeDispatchView = (v?: string): string => {
   if (!v || v === 'all' || v === 'all-closed') return 'all-closed';
   if (v === 'local-purchase' || v === 'local-tracker' || v === 'dispatch-local') return 'local-tracker';
   if (v === 'factory-orders' || v === 'factory-tracker' || v === 'dispatch-factory') return 'factory-tracker';
+  if (v === 'damage-replacement' || v === 'dispatch-damage-replacement') return 'damage-replacement';
   return v;
 };
 
@@ -779,6 +783,12 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       badgeColor: 'bg-slate-200 text-slate-700',
     },
     {
+      id: 'damage-replacement',
+      label: 'Damage Replacement / Credit Note',
+      icon: RotateCcw,
+      badgeColor: 'bg-rose-500 text-white',
+    },
+    {
       id: 'schedule',
       label: 'Dispatch Schedule',
       icon: Calendar,
@@ -914,6 +924,17 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
             loading={completedLoading}
             onRefresh={loadCompleted}
             onPrintChallan={(id) => handlePrintChallan(id)}
+          />
+        );
+      case 'damage-replacement':
+        return (
+          <DamageReplacementView
+            onRefresh={() => {
+              loadProcessing();
+              loadCompleted();
+              loadStats();
+            }}
+            canEdit={canEditDispatch}
           />
         );
       case 'schedule':

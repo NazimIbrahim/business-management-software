@@ -10,6 +10,7 @@ import { authenticateToken, optionalAuthenticateToken, requireRole } from '../mi
 import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 import { parseTaxInvoiceWithCoordinates } from '../utils/pdfTableParser';
+import { parseCreditNotePdf } from '../utils/creditNoteParser';
 import { matchInvoiceItemToQuotationItems, normalizeCeramicName, isItemMatch, ItemMatchEvaluation } from '../utils/fuzzyItemMatcher';
 import { generateDeliveryChallanPdf } from '../utils/challanGenerator';
 
@@ -71,6 +72,36 @@ const uploadInvoice = multer({
       cb(null, true);
     } else {
       cb(new Error('Only PDF documents are supported for Tax Invoices.'));
+    }
+  },
+});
+
+// Configure storage for Credit Note PDFs
+const CREDIT_NOTES_UPLOAD_DIR = path.resolve(process.cwd(), 'uploads/credit-notes');
+if (!fs.existsSync(CREDIT_NOTES_UPLOAD_DIR)) {
+  fs.mkdirSync(CREDIT_NOTES_UPLOAD_DIR, { recursive: true });
+}
+
+const creditNoteStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, CREDIT_NOTES_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const qId = req.params.quotationId || req.body?.quotation_id || 'general';
+    const safeName = `CN_${qId}_${Date.now()}${ext}`;
+    cb(null, safeName);
+  },
+});
+
+const uploadCreditNote = multer({
+  storage: creditNoteStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF documents are supported for Credit Notes.'));
     }
   },
 });
@@ -466,6 +497,47 @@ export async function ensureDispatchSchema(): Promise<void> {
             AND (ds.dispatch_invoice_id = di.dispatch_invoice_id OR (ds.dispatch_invoice_id IS NULL AND di.dispatch_invoice_id IS NULL))
           JOIN quotation_items qi ON qi.id = di.quotation_item_id;
         END IF;
+
+        -- Credit Notes & Damage Replacement System
+        CREATE TABLE IF NOT EXISTS credit_notes (
+          id SERIAL PRIMARY KEY,
+          quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+          credit_note_number VARCHAR(100) NOT NULL,
+          credit_note_date DATE,
+          file_url TEXT NOT NULL,
+          file_name VARCHAR(255),
+          file_size INTEGER,
+          file_base64 TEXT,
+          reason VARCHAR(255) DEFAULT 'Transit Damage',
+          customer_phone_detected VARCHAR(50),
+          customer_gstin_detected VARCHAR(50),
+          total_returned_boxes NUMERIC(10, 2) DEFAULT 0,
+          total_credit_amount NUMERIC(12, 2) DEFAULT 0,
+          status VARCHAR(50) DEFAULT 'APPLIED',
+          notes TEXT,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_by_name VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_credit_notes_quotation_id ON credit_notes(quotation_id);
+        CREATE INDEX IF NOT EXISTS idx_credit_notes_number ON credit_notes(LOWER(TRIM(credit_note_number)));
+
+        CREATE TABLE IF NOT EXISTS credit_note_items (
+          id SERIAL PRIMARY KEY,
+          credit_note_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
+          quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+          quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+          item_description VARCHAR(255) NOT NULL,
+          damaged_quantity NUMERIC(10, 2) NOT NULL,
+          unit VARCHAR(50) DEFAULT 'BOX',
+          replacement_sourcing_status VARCHAR(50) DEFAULT 'READY_STOCK',
+          status VARCHAR(50) DEFAULT 'AWAITING_REDISPATCH',
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_credit_note_items_cn_id ON credit_note_items(credit_note_id);
+        CREATE INDEX IF NOT EXISTS idx_credit_note_items_item_id ON credit_note_items(quotation_item_id);
       END $$;
     `);
 
@@ -2307,6 +2379,22 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       invoicesByQuote.set(inv.quotation_id, arr);
     }
 
+    // Fetch active/recent credit note damage replacements
+    const creditNotesRes = await query(
+      `SELECT cn.id, cn.quotation_id, cn.credit_note_number, cn.credit_note_date, cn.total_returned_boxes, cn.reason, cn.created_at,
+        (SELECT json_agg(cni.*) FROM credit_note_items cni WHERE cni.credit_note_id = cn.id) as items
+       FROM credit_notes cn
+       WHERE cn.quotation_id = ANY($1::int[])
+       ORDER BY cn.created_at DESC`,
+      [quoteIds]
+    );
+    const creditNotesByQuote = new Map<number, any[]>();
+    for (const cn of creditNotesRes) {
+      const arr = creditNotesByQuote.get(cn.quotation_id) || [];
+      arr.push(cn);
+      creditNotesByQuote.set(cn.quotation_id, arr);
+    }
+
     // Group items by quote and calculate fulfillment %
     const itemsByQuote = new Map<number, any[]>();
     for (const it of itemsRes) {
@@ -2422,6 +2510,7 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         items: enrichedItems,
         invoices,
         shipments: shipmentsByQuote.get(q.id) || [],
+        credit_notes: creditNotesByQuote.get(q.id) || [],
         has_verified_invoice: invoices.length > 0,
         latest_invoice: invoices[0] || null,
         active_shipment_value: activeBatchValue,
@@ -5364,4 +5453,505 @@ dispatchRouter.post('/heal-invoiced-quantities', async (req: Request, res: Respo
     res.status(500).json({ error: error.message });
   }
 });
+
+// ============================================================================
+// CREDIT NOTE & DAMAGE REPLACEMENT SYSTEM ENDPOINTS
+// ============================================================================
+
+// 1. List All Credit Notes & KPI Summary
+dispatchRouter.get('/credit-notes', async (req: Request, res: Response) => {
+  try {
+    await ensureDispatchSchema();
+    const rows = await query(`
+      SELECT 
+        cn.*,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', cni.id,
+              'quotation_item_id', cni.quotation_item_id,
+              'item_description', cni.item_description,
+              'damaged_quantity', cni.damaged_quantity,
+              'unit', cni.unit,
+              'replacement_sourcing_status', cni.replacement_sourcing_status,
+              'status', cni.status,
+              'notes', cni.notes
+            ) ORDER BY cni.id ASC
+          )
+          FROM credit_note_items cni
+          WHERE cni.credit_note_id = cn.id
+        ) as items
+      FROM credit_notes cn
+      JOIN quotations q ON q.id = cn.quotation_id
+      ORDER BY cn.created_at DESC
+    `);
+
+    let totalDamagedBoxes = 0;
+    let pendingRedispatchBoxes = 0;
+    let resolvedBoxes = 0;
+
+    for (const r of rows) {
+      totalDamagedBoxes += parseFloat(r.total_returned_boxes || 0);
+      const items = r.items || [];
+      for (const it of items) {
+        if (it.status === 'REDISPATCHED') {
+          resolvedBoxes += parseFloat(it.damaged_quantity || 0);
+        } else {
+          pendingRedispatchBoxes += parseFloat(it.damaged_quantity || 0);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      count: rows.length,
+      credit_notes: rows,
+      stats: {
+        total_requests: rows.length,
+        total_damaged_boxes: Math.round(totalDamagedBoxes * 100) / 100,
+        pending_redispatch_boxes: Math.round(pendingRedispatchBoxes * 100) / 100,
+        resolved_boxes: Math.round(resolvedBoxes * 100) / 100,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Search Customer Quotations with Dispatched Items
+dispatchRouter.get('/credit-notes/customer-dispatches', async (req: Request, res: Response) => {
+  try {
+    await ensureDispatchSchema();
+    const queryStr = (req.query.query as string || '').trim().toLowerCase();
+
+    const filterClause = queryStr ? `
+      AND (
+        LOWER(q.customer_name) LIKE '%' || $1 || '%' OR
+        LOWER(COALESCE(q.customer_phone, '')) LIKE '%' || $1 || '%' OR
+        LOWER(q.quotation_number) LIKE '%' || $1 || '%'
+      )
+    ` : '';
+    const params = queryStr ? [queryStr] : [];
+
+    const quotes = await query(`
+      SELECT 
+        q.id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        q.customer_gstin,
+        COALESCE(q.delivery_address, q.site_location, 'Site Address') as delivery_address,
+        q.dispatch_status,
+        q.status,
+        q.net_total,
+        q.created_at
+      FROM quotations q
+      WHERE LOWER(q.status) IN ('closed', 'approved', 'won')
+        AND EXISTS (
+          SELECT 1 FROM quotation_items qi 
+          WHERE qi.quotation_id = q.id AND COALESCE(qi.dispatched_quantity, 0) > 0
+        )
+        ${filterClause}
+      ORDER BY q.id DESC
+      LIMIT 25
+    `, params);
+
+    if (quotes.length === 0) {
+      res.json({ success: true, count: 0, quotations: [] });
+      return;
+    }
+
+    const quoteIds = quotes.map((q: any) => q.id);
+    const itemsRes = await query(`
+      SELECT 
+        qi.id,
+        qi.quotation_id,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as ordered_quantity,
+        COALESCE(qi.dispatched_quantity, 0) as dispatched_quantity,
+        GREATEST(0, COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) - COALESCE(qi.dispatched_quantity, 0)) as pending_quantity,
+        COALESCE(qi.fulfillment_status, 'PARTIALLY_DISPATCHED') as fulfillment_status,
+        COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) as rate_per_box,
+        qi.total_amount
+      FROM quotation_items qi
+      WHERE qi.quotation_id = ANY($1::int[]) AND COALESCE(qi.dispatched_quantity, 0) > 0
+      ORDER BY qi.id ASC
+    `, [quoteIds]);
+
+    const itemsByQuote = new Map<number, any[]>();
+    for (const it of itemsRes) {
+      const arr = itemsByQuote.get(it.quotation_id) || [];
+      arr.push(it);
+      itemsByQuote.set(it.quotation_id, arr);
+    }
+
+    const result = quotes.map((q: any) => ({
+      ...q,
+      items: itemsByQuote.get(q.id) || [],
+    }));
+
+    res.json({ success: true, count: result.length, quotations: result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Upload & Parse Credit Note PDF
+dispatchRouter.post('/credit-notes/upload', uploadCreditNote.single('credit_note_pdf'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'Please upload a Credit Note PDF file.' });
+      return;
+    }
+
+    const quotationId = parseInt(req.body.quotation_id as string, 10);
+    if (!quotationId || isNaN(quotationId)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: 'Valid quotation_id is required.' });
+      return;
+    }
+
+    const quoteRows = await query(`SELECT * FROM quotations WHERE id = $1`, [quotationId]);
+    if (quoteRows.length === 0) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(404).json({ error: 'Quotation not found.' });
+      return;
+    }
+    const quotation = quoteRows[0];
+
+    const pdfBuffer = fs.readFileSync(req.file.path);
+    const parsedCN = await parseCreditNotePdf(pdfBuffer);
+
+    // Verify Customer Identity
+    const targetPhoneCandidates = [quotation.customer_phone, quotation.cust_mobile]
+      .filter(Boolean)
+      .map((p: string) => p.replace(/\D/g, '').slice(-10));
+    const targetGstinCandidates = [quotation.customer_gstin, quotation.cust_gstin]
+      .filter(Boolean)
+      .map((g: string) => g.trim().toUpperCase());
+
+    const phoneMatched = targetPhoneCandidates.some((tp) => tp && parsedCN.customer_phones.includes(tp));
+    const gstinMatched = targetGstinCandidates.some((tg) => tg && parsedCN.customer_gstins.includes(tg));
+    const customerMatched = phoneMatched || gstinMatched || parsedCN.customer_phones.length === 0;
+
+    // Match extracted items against quotation line items with previous dispatches
+    const itemRows = await query(
+      `SELECT * FROM quotation_items WHERE quotation_id = $1 AND COALESCE(dispatched_quantity, 0) > 0 ORDER BY id ASC`,
+      [quotationId]
+    );
+
+    const matchedItems: any[] = [];
+    const usedCNItemIndices = new Set<number>();
+
+    for (const qItem of itemRows) {
+      const quoteDesc = qItem.description || qItem.name || '';
+      let bestMatchIdx = -1;
+      let highestScore = 0;
+      let bestConfidence: any = 'NONE';
+
+      for (let cnIdx = 0; cnIdx < parsedCN.items.length; cnIdx++) {
+        if (usedCNItemIndices.has(cnIdx)) continue;
+        const cnItem = parsedCN.items[cnIdx];
+        const cnDesc = cnItem.raw_description || cnItem.clean_description || '';
+
+        const eval1 = isItemMatch(quoteDesc, cnDesc);
+        const eval2 = qItem.brand ? isItemMatch(`${qItem.brand} ${quoteDesc}`, cnDesc) : null;
+        const eval3 = qItem.size ? isItemMatch(`${quoteDesc} ${qItem.size}`, cnDesc) : null;
+
+        const candidates = [eval1, eval2, eval3].filter(Boolean) as ItemMatchEvaluation[];
+        const topCandidate = candidates.sort((a, b) => b.score - a.score)[0];
+
+        if (topCandidate && topCandidate.isMatch && topCandidate.score > highestScore) {
+          highestScore = topCandidate.score;
+          bestMatchIdx = cnIdx;
+          bestConfidence = topCandidate.confidence;
+        }
+      }
+
+      const deliveredQty = parseFloat(qItem.dispatched_quantity || 0);
+
+      if (bestMatchIdx !== -1 && highestScore >= 0.6) {
+        usedCNItemIndices.add(bestMatchIdx);
+        const cnItem = parsedCN.items[bestMatchIdx];
+        const returnQty = Math.min(deliveredQty, cnItem.quantity);
+
+        matchedItems.push({
+          quotation_item_id: qItem.id,
+          description: qItem.description,
+          brand: qItem.brand,
+          size: qItem.size,
+          unit: cnItem.unit || qItem.product_type || 'BOX',
+          delivered_quantity: deliveredQty,
+          cn_extracted_qty: cnItem.quantity,
+          return_quantity: returnQty,
+          replacement_sourcing_status: 'READY_STOCK',
+          confidence: bestConfidence,
+          match_score: highestScore,
+        });
+      } else {
+        matchedItems.push({
+          quotation_item_id: qItem.id,
+          description: qItem.description,
+          brand: qItem.brand,
+          size: qItem.size,
+          unit: qItem.product_type || 'BOX',
+          delivered_quantity: deliveredQty,
+          cn_extracted_qty: 0,
+          return_quantity: 0,
+          replacement_sourcing_status: 'READY_STOCK',
+          confidence: 'MANUAL',
+          match_score: 0,
+        });
+      }
+    }
+
+    const relativeUrl = `/uploads/credit-notes/${path.basename(req.file.path)}`;
+    const fileBase64 = compressPdfForStorage(pdfBuffer);
+
+    res.json({
+      success: true,
+      credit_note_number: parsedCN.credit_note_number,
+      credit_note_date: parsedCN.credit_note_date,
+      customer_matched: customerMatched,
+      detected_phones: parsedCN.customer_phones,
+      detected_gstins: parsedCN.customer_gstins,
+      file_url: relativeUrl,
+      file_name: req.file.originalname,
+      file_size: req.file.size,
+      file_base64: fileBase64,
+      matched_items: matchedItems,
+      extracted_items_raw: parsedCN.items,
+    });
+  } catch (err: any) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Apply Credit Note & Reverse Lifecycle into Processing Dispatch
+dispatchRouter.post('/credit-notes/apply', async (req: Request, res: Response) => {
+  try {
+    await ensureDispatchSchema();
+    const {
+      quotation_id,
+      credit_note_number,
+      credit_note_date,
+      file_url,
+      file_name,
+      file_size,
+      file_base64,
+      reason = 'Transit Damage',
+      items = [],
+      notes = '',
+    } = req.body;
+
+    const quotationId = parseInt(String(quotation_id), 10);
+    if (!quotationId || isNaN(quotationId)) {
+      res.status(400).json({ error: 'Valid quotation_id is required.' });
+      return;
+    }
+
+    if (!credit_note_number || !credit_note_number.trim()) {
+      res.status(400).json({ error: 'Credit Note Number is required.' });
+      return;
+    }
+
+    const validItems = items.filter((it: any) => parseFloat(it.return_quantity || it.damaged_quantity || 0) > 0);
+    if (validItems.length === 0) {
+      res.status(400).json({ error: 'Please specify at least one item with a return quantity greater than 0.' });
+      return;
+    }
+
+    // Check duplicate Credit Note Number
+    const existingCN = await query(
+      `SELECT id FROM credit_notes WHERE LOWER(TRIM(credit_note_number)) = LOWER(TRIM($1))`,
+      [credit_note_number.trim()]
+    );
+    if (existingCN.length > 0) {
+      res.status(400).json({
+        error: `🚫 Credit Note #${credit_note_number} has already been applied in the system. Duplicate Credit Notes cannot be applied.`,
+      });
+      return;
+    }
+
+    let createdCreditNoteId: number = 0;
+    let totalBoxes = 0;
+
+    await withTransaction(async (client) => {
+      // 1. Insert credit_notes
+      const cnRes = await client.query(
+        `INSERT INTO credit_notes (
+          quotation_id, credit_note_number, credit_note_date, file_url, file_name, file_size, file_base64,
+          reason, total_returned_boxes, status, notes, created_by, created_by_name
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'APPLIED', $10, $11, $12)
+        RETURNING id`,
+        [
+          quotationId,
+          credit_note_number.trim(),
+          credit_note_date || null,
+          file_url || '',
+          file_name || 'Credit_Note.pdf',
+          file_size || 0,
+          file_base64 || null,
+          reason,
+          0,
+          notes,
+          req.user?.id || null,
+          req.user?.full_name || 'Warehouse Staff',
+        ]
+      );
+      createdCreditNoteId = cnRes.rows[0].id;
+
+      // 2. Insert items & adjust quotation_items
+      for (const it of validItems) {
+        const qiId = parseInt(it.quotation_item_id, 10);
+        const returnQty = parseFloat(it.return_quantity || it.damaged_quantity || 0);
+        const sourcingStatus = it.replacement_sourcing_status || 'READY_STOCK';
+        totalBoxes += returnQty;
+
+        const itemRow = await client.query(`SELECT * FROM quotation_items WHERE id = $1`, [qiId]);
+        if (itemRow.rows.length === 0) continue;
+        const qItem = itemRow.rows[0];
+
+        const prevDispatched = parseFloat(qItem.dispatched_quantity || 0);
+        const newDispatched = Math.max(0, Math.round((prevDispatched - returnQty) * 100) / 100);
+        const ordered = parseFloat(qItem.quantity_boxes || qItem.quantity_sqft || 1);
+        const newPending = Math.max(0, Math.round((ordered - newDispatched) * 100) / 100);
+
+        await client.query(
+          `INSERT INTO credit_note_items (
+            credit_note_id, quotation_id, quotation_item_id, item_description, damaged_quantity, unit,
+            replacement_sourcing_status, status, notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'AWAITING_REDISPATCH', $8)`,
+          [
+            createdCreditNoteId,
+            quotationId,
+            qiId,
+            qItem.description,
+            returnQty,
+            it.unit || qItem.product_type || 'BOX',
+            sourcingStatus,
+            it.notes || `Damaged return via CN #${credit_note_number}`,
+          ]
+        );
+
+        const newFulfillmentStatus = newDispatched <= 0 ? 'PENDING' : 'PARTIALLY_DISPATCHED';
+        const pendingNote = `[REPLACEMENT INBOUND] CN #${credit_note_number} deducted ${returnQty} box(es). Pending re-dispatch: ${newPending} box(es). Sourcing: ${sourcingStatus}`;
+
+        await client.query(
+          `UPDATE quotation_items
+           SET dispatched_quantity = $1,
+               pending_quantity = $2,
+               fulfillment_status = $3,
+               pending_sourcing_status = $4,
+               dispatch_status = CASE WHEN $4 = 'LOCAL_ARRANGE' THEN 'Need to Arrange from Local' WHEN $4 = 'FACTORY_ORDER' THEN 'Factory Order' ELSE 'Ready Stock' END,
+               pending_notes = CASE WHEN pending_notes IS NULL OR pending_notes = '' THEN $5 ELSE pending_notes || E'\n' || $5 END,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $6`,
+          [
+            newDispatched,
+            newPending,
+            newFulfillmentStatus,
+            sourcingStatus,
+            pendingNote,
+            qiId,
+          ]
+        );
+      }
+
+      // Update total returned boxes in credit_notes
+      await client.query(
+        `UPDATE credit_notes SET total_returned_boxes = $1 WHERE id = $2`,
+        [totalBoxes, createdCreditNoteId]
+      );
+
+      // 3. Re-open parent quotation into Processing Dispatch
+      const reopenNote = `[DAMAGE REPLACEMENT RE-OPENED] Credit Note #${credit_note_number} applied for ${totalBoxes} boxes (${reason}). Re-injected into Processing Dispatch.`;
+      await client.query(
+        `UPDATE quotations
+         SET dispatch_status = 'PARTIALLY_DISPATCHED',
+             dispatch_notes = CASE WHEN dispatch_notes IS NULL OR dispatch_notes = '' THEN $1 ELSE dispatch_notes || E'\n' || $1 END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [reopenNote, quotationId]
+      );
+    });
+
+    broadcast({
+      type: 'dispatch:credit_note_applied',
+      payload: {
+        quotation_id: quotationId,
+        credit_note_number,
+        total_returned_boxes: totalBoxes,
+      },
+    });
+
+    broadcast({
+      type: 'dispatch:updated',
+      payload: {
+        quotation_id: quotationId,
+        dispatch_status: 'PARTIALLY_DISPATCHED',
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Credit Note #${credit_note_number} successfully applied! ${totalBoxes} box(es) returned and re-injected into Processing Dispatch.`,
+      credit_note_id: createdCreditNoteId,
+      total_returned_boxes: totalBoxes,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. View Credit Note PDF
+dispatchRouter.get('/credit-notes/:id/view-pdf', async (req: Request, res: Response) => {
+  try {
+    const cnId = parseInt(req.params.id as string, 10);
+    const rows = await query(`SELECT * FROM credit_notes WHERE id = $1`, [cnId]);
+    if (rows.length === 0) {
+      res.status(404).send('Credit Note record not found.');
+      return;
+    }
+    const cn = rows[0];
+
+    const localPath = path.resolve(process.cwd(), (cn.file_url || '').replace(/^\//, ''));
+    const serverPath = path.resolve(process.cwd(), 'uploads/credit-notes', path.basename(cn.file_url || ''));
+
+    let pdfBuffer: Buffer | null = null;
+    if (fs.existsSync(localPath)) {
+      pdfBuffer = fs.readFileSync(localPath);
+    } else if (fs.existsSync(serverPath)) {
+      pdfBuffer = fs.readFileSync(serverPath);
+    } else if (cn.file_base64 && cn.file_base64.trim().length > 0) {
+      try {
+        pdfBuffer = decompressPdfFromStorage(cn.file_base64);
+      } catch (e) {
+        console.warn('Decompression failed for credit note:', e);
+      }
+    }
+
+    if (!pdfBuffer) {
+      res.status(404).send('Credit Note PDF file not found on storage.');
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Credit_Note_${cn.credit_note_number}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).send('Error viewing Credit Note PDF: ' + err.message);
+  }
+});
+
 

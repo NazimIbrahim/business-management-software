@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Calendar,
   History,
+  RotateCcw,
   X,
 } from 'lucide-react';
 
@@ -36,6 +37,7 @@ export type NavTab =
   | 'dispatch-all-closed'
   | 'dispatch-processing'
   | 'dispatch-completed'
+  | 'dispatch-damage-replacement'
   | 'dispatch-schedule'
   | 'dispatch-local-tracker'
   | 'dispatch-factory-tracker'
@@ -168,6 +170,11 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       id: 'dispatch-completed' as NavTab,
       label: 'Dispatch Completed',
       icon: PackageCheck,
+    },
+    {
+      id: 'dispatch-damage-replacement' as NavTab,
+      label: 'Damage / Credit Note',
+      icon: RotateCcw,
     },
     {
       id: 'dispatch-schedule' as NavTab,

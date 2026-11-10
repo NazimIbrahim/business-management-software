@@ -28,6 +28,7 @@ export interface WsEvent {
     | 'dispatch:updated'
     | 'dispatch:pending_status_updated'
     | 'dispatch:shipment_created'
+    | 'dispatch:credit_note_applied'
     | 'item_status:changed'
     | 'payment:recorded'
     | 'target:updated'
