@@ -165,6 +165,8 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   const [partialModal, setPartialModal] = useState<{
     quote: any;
     item: any;
+    maxDispatchable?: number;
+    totalInvoiced?: number;
   } | null>(null);
   const [partialQty, setPartialQty] = useState<number | string>('');
   const [partialVehicle, setPartialVehicle] = useState<string>('');
@@ -523,8 +525,24 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       : item.pending_quantity !== undefined
       ? parseFloat(String(item.pending_quantity))
       : Math.max(0, ordered - dispatched);
-    setPartialModal({ quote, item });
-    setPartialQty(rem > 0 ? rem : 1);
+
+    // Calculate verified tax-invoiced quantity available
+    const totalInvoiced = (quote.invoices || []).reduce((acc: number, inv: any) => {
+      const matched = inv?.reconciliation_summary?.matched_items || [];
+      const found = matched.find((m: any) => String(m.quotation_item_id) === String(item.id));
+      return acc + (found ? parseFloat(String(found.invoice_qty || found.quantity || 0)) : 0);
+    }, 0);
+
+    const invoicedAvail = item.invoiced_available_to_dispatch !== undefined
+      ? parseFloat(String(item.invoiced_available_to_dispatch))
+      : totalInvoiced > 0
+      ? Math.max(0, Math.round((totalInvoiced - dispatched) * 100) / 100)
+      : rem;
+
+    const maxDispatchable = invoicedAvail > 0 ? invoicedAvail : rem;
+
+    setPartialModal({ quote, item, maxDispatchable, totalInvoiced });
+    setPartialQty(maxDispatchable > 0 ? maxDispatchable : 1);
     setPartialVehicle(quote.vehicle_no || '');
     setPartialDriverName(quote.driver_name || '');
     setPartialDriverPhone(quote.driver_phone || '');
@@ -539,16 +557,10 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       alert('Please enter a valid dispatch quantity');
       return;
     }
-    const ordered = parseFloat(String(partialModal.item.ordered_quantity || 0));
-    const dispatched = parseFloat(String(partialModal.item.quantity_dispatched || 0));
-    const rem = partialModal.item.remaining_quantity !== undefined
-      ? parseFloat(String(partialModal.item.remaining_quantity))
-      : partialModal.item.pending_quantity !== undefined
-      ? parseFloat(String(partialModal.item.pending_quantity))
-      : Math.max(0, ordered - dispatched);
+    const maxAllowed = partialModal.maxDispatchable !== undefined ? partialModal.maxDispatchable : 999999;
 
-    if (qty > rem + 0.001) {
-      alert(`Cannot dispatch ${qty}. Only ${rem} remaining.`);
+    if (qty > maxAllowed + 0.001) {
+      alert(`Cannot dispatch ${qty}. Only ${maxAllowed} units are available from verified Tax Invoices.`);
       return;
     }
 
@@ -1151,10 +1163,10 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                       step="any"
                       min="0.01"
                       max={
-                        partialModal.item.remaining_quantity !== undefined
+                        partialModal.maxDispatchable !== undefined
+                          ? partialModal.maxDispatchable
+                          : partialModal.item.remaining_quantity !== undefined
                           ? parseFloat(String(partialModal.item.remaining_quantity))
-                          : partialModal.item.pending_quantity !== undefined
-                          ? parseFloat(String(partialModal.item.pending_quantity))
                           : Math.max(0, parseFloat(String(partialModal.item.ordered_quantity || 0)) - parseFloat(String(partialModal.item.quantity_dispatched || 0)))
                       }
                       value={partialQty}
@@ -1167,13 +1179,23 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                       Units / Boxes
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Max dispatchable right now:{' '}
-                    {partialModal.item.remaining_quantity !== undefined
-                      ? parseFloat(String(partialModal.item.remaining_quantity))
-                      : partialModal.item.pending_quantity !== undefined
-                      ? parseFloat(String(partialModal.item.pending_quantity))
-                      : Math.max(0, parseFloat(String(partialModal.item.ordered_quantity || 0)) - parseFloat(String(partialModal.item.quantity_dispatched || 0)))}
+                  <p className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+                    <span>
+                      Max dispatchable right now:{' '}
+                      <strong className="text-teal-700">
+                        {partialModal.maxDispatchable !== undefined
+                          ? partialModal.maxDispatchable
+                          : partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
+                      </strong>
+                      {partialModal.totalInvoiced !== undefined && partialModal.totalInvoiced > 0 && (
+                        <span className="text-slate-400 font-normal"> (tax invoiced)</span>
+                      )}
+                    </span>
+                    {partialModal.totalInvoiced !== undefined && partialModal.totalInvoiced > 0 && (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Invoiced: {partialModal.totalInvoiced} • Dispatched: {parseFloat(String(partialModal.item.quantity_dispatched || 0))}
+                      </span>
+                    )}
                   </p>
                 </div>
 

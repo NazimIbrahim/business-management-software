@@ -77,6 +77,9 @@ export interface ProcessingItem {
   unit_rate_with_tax?: number;
   dispatched_value?: number;
   pending_value?: number;
+  total_invoiced_quantity?: number;
+  invoiced_available_to_dispatch?: number;
+  is_invoice_fulfilled?: boolean;
 }
 
 export interface ProcessingQuotation {
@@ -809,6 +812,23 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       }
     }
 
+    // Rule 2b: Tax-Invoiced Quantity Gate - Only tax-invoiced quantities can be marked as dispatched
+    const totalInvoiced = (quote.invoices || []).reduce((acc: number, inv: any) => {
+      const matched = inv?.reconciliation_summary?.matched_items || [];
+      const found = matched.find((m: any) => String(m.quotation_item_id) === String(item.id));
+      return acc + (found ? parseFloat(String(found.invoice_qty || found.quantity || 0)) : 0);
+    }, 0);
+
+    const alreadyDisp = parseFloat(String(item.quantity_dispatched || 0));
+    const invAvail = item.invoiced_available_to_dispatch !== undefined
+      ? parseFloat(String(item.invoiced_available_to_dispatch))
+      : Math.max(0, Math.round((totalInvoiced - alreadyDisp) * 100) / 100);
+
+    if (totalInvoiced > 0 && invAvail <= 0) {
+      alert(`🚫 All ${totalInvoiced} tax-invoiced units for "${item.description}" have already been dispatched. Only tax-invoiced quantities can be dispatched. To dispatch the remaining pending quantity, please upload the next Tax Invoice PDF.`);
+      return;
+    }
+
     // Rule 3: Batch-level Financial Payment Safety Gate
     // Check if customer verified payment covers previously dispatched goods plus this specific item
     const quoted = parseFloat(String(item.ordered_quantity || 1));
@@ -1223,6 +1243,17 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                           const isReady = it.dispatch_status === 'Ready Stock';
                           const isOverage = dispatched > ordered;
 
+                          // Compute tax-invoiced quantity and available units for this item
+                          const totalInvoicedForItem = (d.invoices || []).reduce((acc: number, inv: any) => {
+                            const matched = inv?.reconciliation_summary?.matched_items || [];
+                            const found = matched.find((m: any) => String(m.quotation_item_id) === String(it.id));
+                            return acc + (found ? parseFloat(String(found.invoice_qty || found.quantity || 0)) : 0);
+                          }, 0);
+
+                          const invoicedAvailable = it.invoiced_available_to_dispatch !== undefined
+                            ? parseFloat(String(it.invoiced_available_to_dispatch))
+                            : Math.max(0, Math.round((totalInvoicedForItem - dispatched) * 100) / 100);
+
                           // Granular pending status & target date overrides
                           const override = pendingStatusOverrides[it.id];
                           const rawStatus = override?.status !== undefined ? override.status : (it.pending_sourcing_status || 'READY_STOCK');
@@ -1393,6 +1424,19 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                     <CheckCircle2 size={13} />
                                     <span>Completed</span>
                                   </span>
+                                ) : totalInvoicedForItem > 0 && invoicedAvailable <= 0 ? (
+                                  <div className="flex flex-col items-end space-y-0.5">
+                                    <span
+                                      className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+                                      title={`Tax Invoiced quantity (${totalInvoicedForItem} boxes) is already dispatched. Please upload the next Tax Invoice to dispatch remaining ${pending} boxes.`}
+                                    >
+                                      <Check size={10} className="text-emerald-600" />
+                                      <span>Invoiced ({totalInvoicedForItem}) Dispatched</span>
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                      Awaiting Next Invoice ({pending} bal)
+                                    </span>
+                                  </div>
                                 ) : canEdit ? (
                                   <button
                                     onClick={() => handleInitiatePartial(d, it)}
@@ -1401,10 +1445,20 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                         ? 'btn-emerald text-white'
                                         : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
                                     }`}
-                                    title={hasInvoice ? 'Record Partial / Full Dispatch' : 'Tax Invoice required before dispatch'}
+                                    title={
+                                      !hasInvoice
+                                        ? 'Tax Invoice required before dispatch'
+                                        : invoicedAvailable > 0
+                                        ? `Record dispatch for ${invoicedAvailable} tax-invoiced units`
+                                        : 'Record Partial / Full Dispatch'
+                                    }
                                   >
                                     <Truck size={13} className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Record Dispatch</span>
+                                    <span>
+                                      {invoicedAvailable > 0
+                                        ? `Record Dispatch (${invoicedAvailable})`
+                                        : 'Record Dispatch'}
+                                    </span>
                                   </button>
                                 ) : (
                                   <span className="text-[11px] text-slate-400">View Only</span>

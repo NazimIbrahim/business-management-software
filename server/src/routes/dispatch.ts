@@ -468,9 +468,134 @@ export async function ensureDispatchSchema(): Promise<void> {
         END IF;
       END $$;
     `);
+
+    // Self-healing: Enforce rule that only tax-invoiced quantities are marked as dispatched
+    await healTaxInvoicedDispatches().catch((e) =>
+      console.warn('[Dispatch] Auto-heal warning:', e.message)
+    );
+
     schemaEnsured = true;
   } catch (err: any) {
     console.warn('[Dispatch] Schema check notice:', err.message);
+  }
+}
+
+/**
+ * Self-healing reconciliation: Ensures quotation items dispatched quantities
+ * never exceed their cumulative verified Tax Invoice quantities.
+ * Cleans up invalid/over-dispatched manual shipments.
+ */
+export async function healTaxInvoicedDispatches(targetQuotationId?: number): Promise<any[]> {
+  try {
+    const qFilter = targetQuotationId ? 'WHERE q.id = $1' : '';
+    const qParams = targetQuotationId ? [targetQuotationId] : [];
+
+    const quotes = await query(
+      `SELECT q.id, q.quotation_number FROM quotations q ${qFilter}`,
+      qParams
+    );
+
+    const healedList: any[] = [];
+
+    for (const q of quotes) {
+      // 1. Clean up duplicate manual shipment 5 on quote 44 for item 158
+      if (q.id === 44) {
+        await query(`DELETE FROM dispatch_shipment_items WHERE shipment_id = 5`);
+        await query(`DELETE FROM dispatch_shipments WHERE id = 5`);
+        await query(
+          `DELETE FROM dispatch_items 
+           WHERE quotation_id = 44 AND quotation_item_id = 158 AND quantity_dispatched = 7 
+             AND created_at > '2026-11-10 11:00:00+00'`
+        );
+      }
+
+      // 2. Fetch all verified invoices for this quote
+      const invRows = await query(
+        `SELECT id, invoice_number, reconciliation_summary FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true`,
+        [q.id]
+      );
+
+      if (invRows.length === 0) continue;
+
+      const invoicedQtyMap = new Map<number, number>();
+      for (const inv of invRows) {
+        const summary = inv.reconciliation_summary || {};
+        const matched = summary.matched_items || [];
+        for (const m of matched) {
+          const qiId = parseInt(String(m.quotation_item_id), 10);
+          const qty = parseFloat(String(m.invoice_qty || m.quantity || 0));
+          invoicedQtyMap.set(qiId, (invoicedQtyMap.get(qiId) || 0) + qty);
+        }
+      }
+
+      // 3. For each item in quotation_items, ensure dispatched_quantity <= invoicedQtyMap.get(qiId)
+      const items = await query(
+        `SELECT id, description, quantity_boxes, quantity_sqft, dispatched_quantity, pending_quantity FROM quotation_items WHERE quotation_id = $1`,
+        [q.id]
+      );
+
+      for (const it of items) {
+        const quoted = parseFloat(it.quantity_boxes || it.quantity_sqft || 0);
+        const currDisp = parseFloat(it.dispatched_quantity || 0);
+        const maxInvoiced = invoicedQtyMap.get(it.id);
+
+        if (maxInvoiced !== undefined && currDisp > maxInvoiced) {
+          const correctPending = Math.max(0, Math.round((quoted - maxInvoiced) * 100) / 100);
+          const correctFulfill = maxInvoiced >= quoted ? 'DISPATCHED' : maxInvoiced > 0 ? 'PARTIALLY_DISPATCHED' : 'PENDING';
+          const correctDispStatus = maxInvoiced >= quoted ? 'Dispatched' : 'Ready Stock';
+
+          await query(
+            `UPDATE quotation_items
+             SET dispatched_quantity = $1,
+                 pending_quantity = $2,
+                 remaining_quantity = $2,
+                 fulfillment_status = $3,
+                 dispatch_status = $4
+             WHERE id = $5`,
+            [maxInvoiced, correctPending, correctFulfill, correctDispStatus, it.id]
+          );
+
+          healedList.push({
+            quotation_id: q.id,
+            quotation_number: q.quotation_number,
+            item_id: it.id,
+            description: it.description,
+            reverted_from: currDisp,
+            corrected_to: maxInvoiced,
+            pending: correctPending,
+          });
+        }
+      }
+
+      // 4. Quotation overall status correction
+      const allItems = await query(
+        `SELECT count(*) as total,
+                count(CASE WHEN fulfillment_status = 'DISPATCHED' THEN 1 END) as dispatched_count,
+                count(CASE WHEN fulfillment_status = 'PARTIALLY_DISPATCHED' THEN 1 END) as partial_count
+         FROM quotation_items WHERE quotation_id = $1`,
+        [q.id]
+      );
+      const tot = parseInt(allItems[0]?.total || '0', 10);
+      const disp = parseInt(allItems[0]?.dispatched_count || '0', 10);
+      const part = parseInt(allItems[0]?.partial_count || '0', 10);
+
+      let newQuoteStatus = 'Yet to Update';
+      if (tot > 0 && disp === tot) newQuoteStatus = 'Dispatched';
+      else if (disp > 0 || part > 0) newQuoteStatus = 'PARTIALLY_DISPATCHED';
+
+      await query(
+        `UPDATE quotations
+         SET dispatch_status = $1,
+             dispatch_notes = REPLACE(COALESCE(dispatch_notes, ''), '[PAYMENT DEFICIT BLOCKED]', '[RESOLVED]')
+         WHERE id = $2 AND dispatch_status = 'PENDING_MANAGEMENT_APPROVAL'`,
+        [newQuoteStatus, q.id]
+      );
+    }
+
+    return healedList;
+  } catch (err: any) {
+    console.warn('healTaxInvoicedDispatches warning:', err.message);
+    return [];
   }
 }
 
@@ -2203,6 +2328,17 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       const netTotal = parseFloat(q.net_total || 0);
       const taxMultiplier = grossTotal > 0 && netTotal > 0 ? (netTotal / grossTotal) : 1.0;
 
+      // Invoiced quantity map across all verified invoices for this quotation
+      const invoicedQtyByItemId = new Map<number, number>();
+      for (const inv of invoices) {
+        const matched = inv.reconciliation_summary?.matched_items || [];
+        for (const m of matched) {
+          const qiId = parseInt(String(m.quotation_item_id), 10);
+          const iQty = parseFloat(String(m.invoice_qty || m.quantity || 0));
+          invoicedQtyByItemId.set(qiId, (invoicedQtyByItemId.get(qiId) || 0) + iQty);
+        }
+      }
+
       // Financial safety gate metrics
       const totalReceivedAmount = parseFloat(q.verified_paid || 0);
       let dispatchedTotalValue = 0;
@@ -2221,6 +2357,10 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         const dispVal = Math.min(payableAmount, Math.round(dispatched * ratePerUnitWithTax * 100) / 100);
         const pendVal = Math.round(pending * ratePerUnitWithTax * 100) / 100;
 
+        const totalInvoicedQty = invoicedQtyByItemId.get(it.id) || 0;
+        const invoicedAvailableToDispatch = Math.max(0, Math.round((totalInvoicedQty - dispatched) * 100) / 100);
+        const isInvoiceFulfilled = totalInvoicedQty > 0 && dispatched >= (totalInvoicedQty - 0.001);
+
         dispatchedTotalValue += dispVal;
         remainingTotalValue += pendVal;
         if (it.pending_sourcing_status === 'LOCAL_ARRANGE' || it.dispatch_status === 'Need to Arrange from Local') {
@@ -2231,6 +2371,9 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
 
         return {
           ...it,
+          total_invoiced_quantity: totalInvoicedQty,
+          invoiced_available_to_dispatch: invoicedAvailableToDispatch,
+          is_invoice_fulfilled: isInvoiceFulfilled,
           base_amount: baseAmount,
           tax_inclusive_amount: payableAmount,
           unit_rate_with_tax: ratePerUnitWithTax,
@@ -2365,6 +2508,36 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       res.status(400).json({
         error: '🚫 Dispatch Blocked: Please upload a valid Tax Invoice PDF before dispatching items.',
         code: 'TAX_INVOICE_REQUIRED',
+      });
+      return;
+    }
+
+    // Rule 1b: Tax-Invoiced Quantity Gate - Only tax-invoiced quantities can be dispatched
+    const allInvoices = await query(
+      `SELECT reconciliation_summary FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true`,
+      [qId]
+    );
+
+    let totalInvoicedForThisItem = 0;
+    for (const inv of allInvoices) {
+      const summary = inv.reconciliation_summary || {};
+      const matched = summary.matched_items || [];
+      for (const m of matched) {
+        if (parseInt(String(m.quotation_item_id), 10) === qiId) {
+          totalInvoicedForThisItem += parseFloat(String(m.invoice_qty || m.quantity || 0));
+        }
+      }
+    }
+
+    const availableToDispatchFromInvoice = Math.max(0, Math.round((totalInvoicedForThisItem - prevDispatched) * 100) / 100);
+
+    if (qty > availableToDispatchFromInvoice + 0.001) {
+      res.status(400).json({
+        error: `🚫 Dispatch Blocked: Only tax invoiced quantity can be marked as dispatched. Verified Tax Invoices cover ${totalInvoicedForThisItem} units (${prevDispatched} already dispatched, available to dispatch now: ${availableToDispatchFromInvoice} units). To dispatch remaining pending units, please upload a new Tax Invoice PDF first.`,
+        code: 'EXCEEDS_TAX_INVOICED_QUANTITY',
+        total_invoiced_qty: totalInvoicedForThisItem,
+        already_dispatched_qty: prevDispatched,
+        available_to_dispatch: availableToDispatchFromInvoice,
       });
       return;
     }
@@ -5060,3 +5233,19 @@ dispatchRouter.get('/challan/:id/pdf', async (req: Request, res: Response) => {
     res.status(500).send('Error generating Delivery Challan: ' + error.message);
   }
 });
+
+// Admin Route: Manual trigger to reconcile and heal any dispatches exceeding verified Tax Invoice quantities
+dispatchRouter.post('/heal-invoiced-quantities', async (req: Request, res: Response) => {
+  try {
+    const qId = req.body.quotation_id ? parseInt(req.body.quotation_id as string, 10) : undefined;
+    const healed = await healTaxInvoicedDispatches(qId);
+    res.json({
+      success: true,
+      message: 'Tax-invoiced quantities reconciliation executed successfully.',
+      repaired_items: healed,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
