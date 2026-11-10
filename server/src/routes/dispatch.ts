@@ -269,6 +269,63 @@ export async function ensureDispatchSchema(): Promise<void> {
       ALTER TABLE local_purchases DROP CONSTRAINT IF EXISTS uq_local_purchases_item;
       ALTER TABLE local_purchases ADD CONSTRAINT uq_local_purchases_item UNIQUE (quotation_item_id);
 
+      -- Clean up any duplicates in factory_orders before adding unique constraint
+      DELETE FROM factory_orders a USING factory_orders b
+      WHERE a.id < b.id AND a.quotation_item_id = b.quotation_item_id;
+
+      ALTER TABLE factory_orders DROP CONSTRAINT IF EXISTS uq_factory_orders_item;
+      ALTER TABLE factory_orders ADD CONSTRAINT uq_factory_orders_item UNIQUE (quotation_item_id);
+
+      -- Auto-heal completed factory orders
+      INSERT INTO factory_orders (
+        quotation_item_id, quotation_id, factory_name, brand_name, status, unloaded_date, notes
+      )
+      SELECT 
+        qi.id, qi.quotation_id, COALESCE(qi.brand, 'Factory Plant'), qi.brand, 'UNLOADED', 
+        COALESCE(qi.procurement_updated_at, CURRENT_TIMESTAMP), 'Completed Factory Order'
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      WHERE (qi.procurement_category = 'factory' OR qi.procurement_status = 'Reached to Godown' OR (q.dispatch_status = 'Factory Order' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+        AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')
+      ON CONFLICT (quotation_item_id) DO UPDATE
+      SET status = 'UNLOADED',
+          unloaded_date = COALESCE(factory_orders.unloaded_date, EXCLUDED.unloaded_date),
+          updated_at = CURRENT_TIMESTAMP;
+
+      -- Auto-heal completed local purchases
+      INSERT INTO local_purchases (
+        quotation_item_id, quotation_id, vendor_name, required_quantity, quoted_rate, purchase_status, completed_date, notes
+      )
+      SELECT 
+        qi.id, qi.quotation_id, COALESCE(qi.brand, 'Local Distributor'), 
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1), COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0),
+        'ARRIVED_AT_GODOWN', COALESCE(qi.procurement_updated_at, CURRENT_TIMESTAMP), 'Completed Local Purchase'
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      WHERE (qi.procurement_category = 'local' OR (qi.procurement_status = 'Reached to Godown' AND qi.procurement_category != 'factory') OR (q.dispatch_status = 'Need to Arrange from Local' AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+        AND qi.dispatch_status IN ('Ready Stock', 'Dispatched')
+      ON CONFLICT (quotation_item_id) DO UPDATE
+      SET purchase_status = 'ARRIVED_AT_GODOWN',
+          completed_date = COALESCE(local_purchases.completed_date, EXCLUDED.completed_date),
+          updated_at = CURRENT_TIMESTAMP;
+
+      -- Auto-heal quotation dispatch_status where all factory/local orders are completed
+      UPDATE quotations q
+      SET dispatch_status = CASE
+            WHEN (SELECT count(*) FROM quotation_items qi WHERE qi.quotation_id = q.id AND qi.dispatch_status != 'Dispatched') = 0 
+                 AND (SELECT count(*) FROM quotation_items qi WHERE qi.quotation_id = q.id) > 0 THEN 'COMPLETED'
+            WHEN (SELECT count(*) FROM quotation_items qi WHERE qi.quotation_id = q.id AND (qi.dispatch_status = 'Dispatched' OR COALESCE(qi.dispatched_quantity, 0) > 0)) > 0 THEN 'PARTIALLY_DISPATCHED'
+            ELSE 'Ready Stock'
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE q.dispatch_status IN ('Factory Order', 'Need to Arrange from Local')
+        AND NOT EXISTS (
+          SELECT 1 FROM quotation_items qi
+          WHERE qi.quotation_id = q.id
+            AND qi.dispatch_status IN ('Factory Order', 'Need to Arrange from Local')
+            AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
+        );
+
       -- Tax Invoice PDF Verification & Auto-Reconciliation Schema
       CREATE TABLE IF NOT EXISTS dispatch_invoices (
           id SERIAL PRIMARY KEY,
@@ -355,6 +412,65 @@ function normalizeStatus(st?: string): string {
     (v) => v.toLowerCase() === st.trim().toLowerCase()
   );
   return found || 'Yet to Update';
+}
+
+/**
+ * Automatically calculates and synchronizes the parent quotation's dispatch_status
+ * based on the real-time statuses of its line items.
+ */
+export async function syncQuotationDispatchStatus(quotationId: number, dbClient?: any) {
+  try {
+    const runner = dbClient || { query };
+    const itemStatusRows = await runner.query(
+      `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
+      [quotationId]
+    );
+    const rows = itemStatusRows.rows || itemStatusRows;
+    const totalRows = await runner.query(
+      `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
+      [quotationId]
+    );
+    const total = parseInt((totalRows.rows || totalRows)[0]?.count || '0', 10);
+    const dispatched = parseInt(rows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0', 10);
+    const factory = parseInt(rows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0', 10);
+    const local = parseInt(rows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0', 10);
+    const ready = parseInt(rows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0', 10);
+
+    const partDispatchedRows = await runner.query(
+      `SELECT count(*) as count FROM quotation_items 
+       WHERE quotation_id = $1 
+         AND COALESCE(dispatched_quantity, 0) > 0 
+         AND COALESCE(dispatched_quantity, 0) < COALESCE(quantity_boxes, quantity_sqft, 1)`,
+      [quotationId]
+    );
+    const hasPartial = parseInt((partDispatchedRows.rows || partDispatchedRows)[0]?.count || '0', 10) > 0;
+
+    let finalQuotationStatus = 'Ready Stock';
+    if (total > 0 && dispatched === total) {
+      finalQuotationStatus = 'COMPLETED';
+    } else if (dispatched > 0 || hasPartial) {
+      finalQuotationStatus = 'PARTIALLY_DISPATCHED';
+    } else if (factory > 0) {
+      finalQuotationStatus = 'Factory Order';
+    } else if (local > 0) {
+      finalQuotationStatus = 'Need to Arrange from Local';
+    } else if (ready > 0) {
+      finalQuotationStatus = 'Ready Stock';
+    }
+
+    await runner.query(
+      `UPDATE quotations
+       SET dispatch_status = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [finalQuotationStatus, quotationId]
+    );
+
+    return finalQuotationStatus;
+  } catch (err: any) {
+    console.warn('[Dispatch] Error syncing quotation status:', err.message);
+    return 'Ready Stock';
+  }
 }
 
 // 1. Get Summary Stats for Dispatch Pipeline
@@ -898,18 +1014,88 @@ dispatchRouter.put(
               it.dispatched_quantity !== undefined && it.dispatched_quantity !== null && it.dispatched_quantity !== ''
                 ? Math.max(0, parseFloat(it.dispatched_quantity) || 0)
                 : (isItemDispatched ? (parseFloat(it.quantity_boxes) || parseFloat(it.quantity_sqft) || 1) : 0);
-            const itProcurementStatus =
-              it.procurement_status && typeof it.procurement_status === 'string' && it.procurement_status.trim()
-                ? it.procurement_status.trim()
-                : null;
+
+            // Fetch previous item state to detect transitions
+            const prevItemRes = await client.query(
+              'SELECT dispatch_status, procurement_status, procurement_category, brand, quantity_boxes, quantity_sqft, rate_per_box, rate_per_sqft FROM quotation_items WHERE id = $1',
+              [it.id]
+            );
+            const prevItem = prevItemRes.rows[0] || {};
+            const prevStatus = prevItem.dispatch_status;
+            const prevCat = prevItem.procurement_category;
+
+            let finalCategory = prevCat;
+            if (itStatus === 'Need to Arrange from Local') finalCategory = 'local';
+            else if (itStatus === 'Factory Order') finalCategory = 'factory';
+
+            let finalProcStatus = it.procurement_status && typeof it.procurement_status === 'string' && it.procurement_status.trim()
+              ? it.procurement_status.trim()
+              : (prevItem.procurement_status || null);
             const itProcurementNotes = it.procurement_notes || null;
 
-            const itProcurementCategory =
-              itStatus === 'Need to Arrange from Local'
-                ? 'local'
-                : itStatus === 'Factory Order'
-                ? 'factory'
-                : null;
+            if (itStatus === 'Factory Order') {
+              finalCategory = 'factory';
+              await client.query(
+                `INSERT INTO factory_orders (
+                  quotation_item_id, quotation_id, factory_name, brand_name, status, notes
+                ) VALUES ($1, $2, $3, $4, 'ORDER_PLACED', $5)
+                ON CONFLICT (quotation_item_id) DO NOTHING`,
+                [it.id, id, it.brand || prevItem.brand || 'Factory Plant', it.brand || prevItem.brand, it.dispatch_notes || null]
+              );
+            } else if (itStatus === 'Need to Arrange from Local') {
+              finalCategory = 'local';
+              await client.query(
+                `INSERT INTO local_purchases (
+                  quotation_item_id, quotation_id, vendor_name, required_quantity, quoted_rate, purchase_status, notes
+                ) VALUES ($1, $2, $3, $4, $5, 'PO_RAISED', $6)
+                ON CONFLICT (quotation_item_id) DO NOTHING`,
+                [
+                  it.id,
+                  id,
+                  it.brand || prevItem.brand || 'Local Distributor',
+                  parseFloat(it.quantity_boxes || prevItem.quantity_boxes || 1),
+                  parseFloat(it.rate_per_box || prevItem.rate_per_box || 0),
+                  it.dispatch_notes || null,
+                ]
+              );
+            } else if (itStatus === 'Ready Stock') {
+              // If previously factory ordered: mark completed in factory_orders
+              if (prevStatus === 'Factory Order' || prevCat === 'factory') {
+                finalCategory = 'factory';
+                finalProcStatus = 'Reached to Godown';
+                await client.query(
+                  `INSERT INTO factory_orders (
+                    quotation_item_id, quotation_id, factory_name, brand_name, status, unloaded_date, notes, updated_at
+                  ) VALUES ($1, $2, $3, $4, 'UNLOADED', CURRENT_TIMESTAMP, $5, CURRENT_TIMESTAMP)
+                  ON CONFLICT (quotation_item_id) DO UPDATE
+                  SET status = 'UNLOADED',
+                      unloaded_date = COALESCE(factory_orders.unloaded_date, CURRENT_TIMESTAMP),
+                      updated_at = CURRENT_TIMESTAMP`,
+                  [it.id, id, it.brand || prevItem.brand || 'Factory Plant', it.brand || prevItem.brand, it.dispatch_notes || 'Marked Ready Stock in Godown']
+                );
+              } else if (prevStatus === 'Need to Arrange from Local' || prevCat === 'local') {
+                // If previously local purchase: mark arrived in local_purchases
+                finalCategory = 'local';
+                finalProcStatus = 'Reached to Godown';
+                await client.query(
+                  `INSERT INTO local_purchases (
+                    quotation_item_id, quotation_id, vendor_name, required_quantity, quoted_rate, purchase_status, completed_date, notes, updated_at
+                  ) VALUES ($1, $2, $3, $4, $5, 'ARRIVED_AT_GODOWN', CURRENT_TIMESTAMP, $6, CURRENT_TIMESTAMP)
+                  ON CONFLICT (quotation_item_id) DO UPDATE
+                  SET purchase_status = 'ARRIVED_AT_GODOWN',
+                      completed_date = COALESCE(local_purchases.completed_date, CURRENT_TIMESTAMP),
+                      updated_at = CURRENT_TIMESTAMP`,
+                  [
+                    it.id,
+                    id,
+                    it.brand || prevItem.brand || 'Local Distributor',
+                    parseFloat(it.quantity_boxes || prevItem.quantity_boxes || 1),
+                    parseFloat(it.rate_per_box || prevItem.rate_per_box || 0),
+                    it.dispatch_notes || 'Marked Ready Stock in Godown',
+                  ]
+                );
+              }
+            }
 
             await client.query(
               `UPDATE quotation_items
@@ -922,7 +1108,7 @@ dispatchRouter.put(
                    procurement_status = $6,
                    procurement_notes = $7,
                    procurement_updated_at = CASE WHEN $6::varchar IS NOT NULL THEN CURRENT_TIMESTAMP ELSE procurement_updated_at END,
-                   procurement_category = COALESCE($8, procurement_category),
+                   procurement_category = $8,
                    procurement_updated_by_name = CASE WHEN $6::varchar IS NOT NULL THEN $9 ELSE procurement_updated_by_name END
                WHERE id = $10 AND quotation_id = $11`,
               [
@@ -931,9 +1117,9 @@ dispatchRouter.put(
                 it.dispatch_notes || null,
                 isItemDispatched,
                 itDispatchedQty,
-                itProcurementStatus,
+                finalProcStatus,
                 itProcurementNotes,
-                itProcurementCategory,
+                finalCategory,
                 req.user!.full_name,
                 it.id,
                 id,
@@ -942,45 +1128,8 @@ dispatchRouter.put(
           }
         }
 
-        // 2. Compute aggregate quotation dispatch status from items
-        const itemStatusRows = await client.query(
-          `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
-          [id]
-        );
-        const totalRows = await client.query(
-          `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
-          [id]
-        );
-        const total = parseInt(totalRows.rows[0]?.count || '0', 10);
-        const dispatched = parseInt(
-          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0',
-          10
-        );
-        const factory = parseInt(
-          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0',
-          10
-        );
-        const local = parseInt(
-          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
-          10
-        );
-        const ready = parseInt(
-          itemStatusRows.rows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
-          10
-        );
-
-        let finalQuotationStatus = 'Yet to Update';
-        if (total > 0 && dispatched === total) {
-          finalQuotationStatus = 'Dispatched';
-        } else if (factory > 0) {
-          finalQuotationStatus = 'Factory Order';
-        } else if (local > 0) {
-          finalQuotationStatus = 'Need to Arrange from Local';
-        } else if (ready > 0) {
-          finalQuotationStatus = 'Ready Stock';
-        } else if (normalizedOverallStatus && normalizedOverallStatus !== 'Yet to Update') {
-          finalQuotationStatus = normalizedOverallStatus;
-        }
+        // 2. Synchronize aggregate quotation dispatch status from items
+        const finalQuotationStatus = await syncQuotationDispatchStatus(id, client);
 
         // Determine earliest or default expected date for the quotation
         let finalQuotationDate = cleanExpectedDate;
@@ -1321,6 +1470,41 @@ const handleItemProcurementUpdate = async (req: Request, res: Response) => {
         // Transition item directly to Ready Stock in Godown
         nextDispatchStatus = 'Ready Stock';
         nextProcurementStatus = 'Reached to Godown';
+
+        if (nextProcurementCategory === 'factory' || item.dispatch_status === 'Factory Order') {
+          nextProcurementCategory = 'factory';
+          await query(
+            `INSERT INTO factory_orders (
+              quotation_item_id, quotation_id, factory_name, brand_name, status, unloaded_date, notes, updated_at
+            ) VALUES ($1, $2, $3, $4, 'UNLOADED', CURRENT_TIMESTAMP, $5, CURRENT_TIMESTAMP)
+            ON CONFLICT (quotation_item_id) DO UPDATE
+            SET status = 'UNLOADED',
+                unloaded_date = COALESCE(factory_orders.unloaded_date, CURRENT_TIMESTAMP),
+                notes = COALESCE($5, factory_orders.notes),
+                updated_at = CURRENT_TIMESTAMP`,
+            [itemId, quotationId, item.brand || 'Factory Plant', item.brand, procurement_notes || 'Marked Ready Stock in Godown']
+          );
+        } else if (nextProcurementCategory === 'local' || item.dispatch_status === 'Need to Arrange from Local') {
+          nextProcurementCategory = 'local';
+          await query(
+            `INSERT INTO local_purchases (
+              quotation_item_id, quotation_id, vendor_name, required_quantity, quoted_rate, purchase_status, completed_date, notes, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, 'ARRIVED_AT_GODOWN', CURRENT_TIMESTAMP, $6, CURRENT_TIMESTAMP)
+            ON CONFLICT (quotation_item_id) DO UPDATE
+            SET purchase_status = 'ARRIVED_AT_GODOWN',
+                completed_date = COALESCE(local_purchases.completed_date, CURRENT_TIMESTAMP),
+                notes = COALESCE($6, local_purchases.notes),
+                updated_at = CURRENT_TIMESTAMP`,
+            [
+              itemId,
+              quotationId,
+              item.brand || 'Local Distributor',
+              item.quantity_boxes || item.quantity_sqft || 1,
+              item.rate_per_box || item.rate_per_sqft || 0,
+              procurement_notes || 'Arrived at Godown',
+            ]
+          );
+        }
       } else if (procurement_status && typeof procurement_status === 'string') {
         const cleanStage = procurement_status.trim();
         if (VALID_PROCUREMENT_STATUSES.includes(cleanStage as any)) {
@@ -1359,50 +1543,7 @@ const handleItemProcurementUpdate = async (req: Request, res: Response) => {
       );
 
       // Recompute parent quotation's overall dispatch status
-      const itemStatusRows = await query(
-        `SELECT dispatch_status, count(*) as count FROM quotation_items WHERE quotation_id = $1 GROUP BY dispatch_status`,
-        [quotationId]
-      );
-      const totalRows = await query(
-        `SELECT count(*) as count FROM quotation_items WHERE quotation_id = $1`,
-        [quotationId]
-      );
-      const total = parseInt(totalRows[0]?.count || '0', 10);
-      const dispatched = parseInt(
-        itemStatusRows.find((r: any) => r.dispatch_status === 'Dispatched')?.count || '0',
-        10
-      );
-      const factory = parseInt(
-        itemStatusRows.find((r: any) => r.dispatch_status === 'Factory Order')?.count || '0',
-        10
-      );
-      const local = parseInt(
-        itemStatusRows.find((r: any) => r.dispatch_status === 'Need to Arrange from Local')?.count || '0',
-        10
-      );
-      const ready = parseInt(
-        itemStatusRows.find((r: any) => r.dispatch_status === 'Ready Stock')?.count || '0',
-        10
-      );
-
-      let computedQuotationStatus = 'Yet to Update';
-      if (total > 0 && dispatched === total) {
-        computedQuotationStatus = 'Dispatched';
-      } else if (factory > 0) {
-        computedQuotationStatus = 'Factory Order';
-      } else if (local > 0) {
-        computedQuotationStatus = 'Need to Arrange from Local';
-      } else if (ready > 0) {
-        computedQuotationStatus = 'Ready Stock';
-      }
-
-      await query(
-        `UPDATE quotations
-         SET dispatch_status = $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [computedQuotationStatus, quotationId]
-      );
+      const computedQuotationStatus = await syncQuotationDispatchStatus(quotationId);
 
       // Record audit log
       await recordAuditLog({
@@ -3791,6 +3932,7 @@ dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) =
           `UPDATE quotation_items
            SET dispatch_status = 'Ready Stock',
                procurement_status = 'Reached to Godown',
+               procurement_category = 'local',
                procurement_updated_at = CURRENT_TIMESTAMP,
                procurement_updated_by_name = $1
            WHERE id = $2`,
@@ -3810,6 +3952,9 @@ dispatchRouter.patch('/local-tracker/:id', async (req: Request, res: Response) =
           [purchase_status, expected_date || null, req.user!.full_name, itemId]
         );
       }
+
+      // Recompute parent quotation status
+      await syncQuotationDispatchStatus(item.quotation_id, client);
     });
 
     broadcast({
@@ -3864,6 +4009,7 @@ dispatchRouter.get('/factory-tracker', async (req: Request, res: Response) => {
       LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
       WHERE qi.dispatch_status = 'Factory Order'
         AND COALESCE(qi.procurement_status, '') != 'Reached to Godown'
+        AND COALESCE(fo.status, '') != 'UNLOADED'
         AND LOWER(q.status) IN ('closed', 'approved')
       ORDER BY COALESCE(fo.eta_date, qi.expected_dispatch_date) ASC, qi.id ASC`
     );
@@ -3894,9 +4040,9 @@ dispatchRouter.patch('/factory-tracker/:id', async (req: Request, res: Response)
         `INSERT INTO factory_orders (
           quotation_item_id, quotation_id, factory_name, brand_name, batch_shade_code,
           lr_number, transporter_name, truck_number, eta_date, unloaded_date, status,
-          freight_cost, total_pallets, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        ON CONFLICT (id) DO UPDATE
+          freight_cost, total_pallets, notes, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+        ON CONFLICT (quotation_item_id) DO UPDATE
         SET factory_name = COALESCE($3, factory_orders.factory_name),
             batch_shade_code = COALESCE($5, factory_orders.batch_shade_code),
             lr_number = COALESCE($6, factory_orders.lr_number),
@@ -3932,6 +4078,7 @@ dispatchRouter.patch('/factory-tracker/:id', async (req: Request, res: Response)
           `UPDATE quotation_items
            SET dispatch_status = 'Ready Stock',
                procurement_status = 'Reached to Godown',
+               procurement_category = 'factory',
                procurement_updated_at = CURRENT_TIMESTAMP,
                procurement_updated_by_name = $1
            WHERE id = $2`,
@@ -3951,6 +4098,9 @@ dispatchRouter.patch('/factory-tracker/:id', async (req: Request, res: Response)
           [status, eta_date || null, req.user!.full_name, itemId]
         );
       }
+
+      // Recompute parent quotation status
+      await syncQuotationDispatchStatus(item.quotation_id, client);
     });
 
     broadcast({
@@ -4041,15 +4191,19 @@ dispatchRouter.get('/local-history', async (req: Request, res: Response) => {
         ROUND((COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) - COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0)) * COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1), 2) as total_margin_variance,
         COALESCE(lp.vendor_name, qi.brand, 'Local Distributor') as vendor_name,
         lp.invoice_number,
-        COALESCE(lp.completed_date, qi.procurement_updated_at, qi.updated_at) as delivery_date,
+        COALESCE(lp.completed_date, qi.procurement_updated_at, q.updated_at, q.created_at) as delivery_date,
         COALESCE(lp.purchase_status, 'ARRIVED_AT_GODOWN') as purchase_status,
-        lp.notes
+        COALESCE(lp.notes, qi.procurement_notes, 'Arrived at Godown') as notes
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
-      WHERE (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status = 'Dispatched' OR lp.purchase_status = 'ARRIVED_AT_GODOWN')
-        AND (lp.id IS NOT NULL OR qi.dispatch_status IN ('Need to Arrange from Local', 'Dispatched'))
-      ORDER BY COALESCE(lp.completed_date, qi.procurement_updated_at) DESC LIMIT 200`
+      WHERE (
+        lp.purchase_status = 'ARRIVED_AT_GODOWN'
+        OR lp.completed_date IS NOT NULL
+        OR (qi.procurement_category = 'local' AND (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+        OR (lp.id IS NOT NULL AND (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+      )
+      ORDER BY COALESCE(lp.completed_date, qi.procurement_updated_at, q.updated_at, q.created_at) DESC LIMIT 200`
     );
 
     res.json({ success: true, count: rows.length, history: rows });
@@ -4077,18 +4231,22 @@ dispatchRouter.get('/factory-history', async (req: Request, res: Response) => {
         fo.lr_number,
         fo.transporter_name,
         fo.truck_number,
-        fo.order_date,
+        COALESCE(fo.order_date, q.quotation_date::date, q.created_at::date) as order_date,
         fo.eta_date,
-        COALESCE(fo.unloaded_date, qi.procurement_updated_at, qi.updated_at) as unloaded_date,
-        fo.total_pallets,
-        fo.freight_cost,
-        fo.notes
+        COALESCE(fo.unloaded_date, qi.procurement_updated_at, q.updated_at, q.created_at) as unloaded_date,
+        COALESCE(fo.total_pallets, 0) as total_pallets,
+        COALESCE(fo.freight_cost, 0) as freight_cost,
+        COALESCE(fo.notes, qi.procurement_notes, 'Unloaded at Godown') as notes
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
-      WHERE (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status = 'Dispatched' OR fo.status = 'UNLOADED')
-        AND (fo.id IS NOT NULL OR qi.dispatch_status IN ('Factory Order', 'Dispatched'))
-      ORDER BY COALESCE(fo.unloaded_date, qi.procurement_updated_at) DESC LIMIT 200`
+      WHERE (
+        fo.status = 'UNLOADED'
+        OR fo.unloaded_date IS NOT NULL
+        OR (qi.procurement_category = 'factory' AND (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+        OR (fo.id IS NOT NULL AND (qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched')))
+      )
+      ORDER BY COALESCE(fo.unloaded_date, qi.procurement_updated_at, q.updated_at, q.created_at) DESC LIMIT 200`
     );
 
     res.json({ success: true, count: rows.length, history: rows });
@@ -4132,11 +4290,11 @@ dispatchRouter.get('/reports', async (req: Request, res: Response) => {
         COUNT(*) as total_local_items,
         SUM(COALESCE(qi.total_amount, 0)) as total_local_quoted_spend,
         SUM(COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0) * COALESCE(qi.quantity_boxes, 1)) as total_actual_spend,
-        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as items_arrived
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' OR lp.purchase_status = 'ARRIVED_AT_GODOWN' THEN 1 END) as items_arrived
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
-      WHERE qi.dispatch_status = 'Need to Arrange from Local' AND ${dateCondition}`
+      WHERE (qi.dispatch_status = 'Need to Arrange from Local' OR qi.procurement_category = 'local' OR lp.id IS NOT NULL) AND ${dateCondition}`
     );
 
     // 3. Factory orders summary
@@ -4145,11 +4303,11 @@ dispatchRouter.get('/reports', async (req: Request, res: Response) => {
         COUNT(*) as total_factory_items,
         SUM(COALESCE(qi.quantity_boxes, qi.quantity_sqft, 0)) as total_factory_volume,
         SUM(COALESCE(fo.freight_cost, 0)) as total_freight_cost,
-        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' THEN 1 END) as factory_unloaded
+        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' OR fo.status = 'UNLOADED' THEN 1 END) as factory_unloaded
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
-      WHERE qi.dispatch_status = 'Factory Order' AND ${dateCondition}`
+      WHERE (qi.dispatch_status = 'Factory Order' OR qi.procurement_category = 'factory' OR fo.id IS NOT NULL) AND ${dateCondition}`
     );
 
     res.json({
