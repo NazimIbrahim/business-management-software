@@ -5664,8 +5664,10 @@ dispatchRouter.post('/credit-notes/upload', uploadCreditNote.single('credit_note
         const eval1 = isItemMatch(quoteDesc, cnDesc);
         const eval2 = qItem.brand ? isItemMatch(`${qItem.brand} ${quoteDesc}`, cnDesc) : null;
         const eval3 = qItem.size ? isItemMatch(`${quoteDesc} ${qItem.size}`, cnDesc) : null;
+        const eval4 = qItem.brand && qItem.size ? isItemMatch(`${qItem.brand} ${qItem.size} ${quoteDesc}`, cnDesc) : null;
+        const eval5 = isItemMatch(quoteDesc, cnItem.raw_line || '');
 
-        const candidates = [eval1, eval2, eval3].filter(Boolean) as ItemMatchEvaluation[];
+        const candidates = [eval1, eval2, eval3, eval4, eval5].filter(Boolean) as ItemMatchEvaluation[];
         const topCandidate = candidates.sort((a, b) => b.score - a.score)[0];
 
         if (topCandidate && topCandidate.isMatch && topCandidate.score > highestScore) {

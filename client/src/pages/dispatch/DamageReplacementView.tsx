@@ -153,6 +153,7 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
 
   const [returnReason, setReturnReason] = useState('Transit Damage / Breakage');
   const [generalNotes, setGeneralNotes] = useState('');
+  const [editableCnNumber, setEditableCnNumber] = useState('');
   const [isApplying, setIsApplying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -242,6 +243,7 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
       }
 
       setParsedData(data);
+      setEditableCnNumber(data.credit_note_number || '');
     } catch (err: any) {
       setActionError(err.message || 'Error processing Credit Note PDF');
     } finally {
@@ -290,9 +292,16 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
       setIsApplying(true);
       setActionError(null);
 
+      const finalCnNumber = (editableCnNumber || parsedData.credit_note_number || '').trim();
+      if (!finalCnNumber) {
+        setActionError('Please provide a Credit Note Number.');
+        setIsApplying(false);
+        return;
+      }
+
       const payload = {
         quotation_id: selectedQuote.id,
-        credit_note_number: parsedData.credit_note_number,
+        credit_note_number: finalCnNumber,
         credit_note_date: parsedData.credit_note_date,
         file_url: parsedData.file_url,
         file_name: parsedData.file_name,
@@ -837,7 +846,20 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
                       </div>
 
                       {/* Return Parameters */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div>
+                          <label className="font-bold text-slate-700 block text-[11px] mb-1">
+                            Credit Note # *
+                          </label>
+                          <input
+                            type="text"
+                            value={editableCnNumber}
+                            onChange={(e) => setEditableCnNumber(e.target.value)}
+                            placeholder="e.g. CN-5778"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono font-bold text-slate-800"
+                          />
+                        </div>
+
                         <div>
                           <label className="font-bold text-slate-700 block text-[11px] mb-1">
                             Primary Return Reason *
@@ -857,13 +879,13 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
 
                         <div>
                           <label className="font-bold text-slate-700 block text-[11px] mb-1">
-                            Credit Note Remarks / Supervisor Notes
+                            Credit Note Remarks / Notes
                           </label>
                           <input
                             type="text"
                             value={generalNotes}
                             onChange={(e) => setGeneralNotes(e.target.value)}
-                            placeholder="e.g. 5 boxes chipped during unloading at site..."
+                            placeholder="e.g. 5 boxes chipped during unloading..."
                             className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
                           />
                         </div>
@@ -892,11 +914,17 @@ export const DamageReplacementView: React.FC<DamageReplacementViewProps> = ({
                               const newPending = Math.max(0, ordered - newDisp);
 
                               return (
-                                <tr key={it.quotation_item_id} className={it.return_quantity > 0 ? 'bg-rose-50/30' : ''}>
+                                <tr key={it.quotation_item_id} className={it.return_quantity > 0 ? 'bg-rose-50/40 border-l-2 border-rose-500' : 'hover:bg-slate-50/50'}>
                                   <td className="py-2 px-3">
                                     <div className="font-semibold text-slate-800">{it.description}</div>
-                                    <div className="text-[10px] text-slate-400 font-mono">
-                                      {it.brand} {it.size ? `• ${it.size}` : ''}
+                                    <div className="text-[10px] text-slate-400 font-mono flex items-center space-x-2 mt-0.5">
+                                      {it.brand && <span>{it.brand}</span>}
+                                      {it.size && <span>• {it.size}</span>}
+                                      {it.cn_extracted_qty > 0 && (
+                                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                          Detected: {it.cn_extracted_qty} {it.unit}
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-slate-600 font-bold">

@@ -206,7 +206,7 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
 
     // Look for row with Description and Quantity
     const hasDesc = /desc|particular|item\s+name|product/i.test(textLower);
-    const hasQty = /qty|quantity|billed/i.test(textLower);
+    const hasQty = /qty|quantity|billed|return|damage|units?/i.test(textLower);
 
     if (hasDesc && hasQty) {
       headerRowIndex = i;
@@ -216,7 +216,7 @@ export async function parseTaxInvoiceWithCoordinates(pdfBuffer: Buffer): Promise
         if (/^sl\b/i.test(s) && slColX === -1) slColX = item.x;
         if (/desc|particular|item/i.test(s) && descColX === -1) descColX = item.x;
         if (/hsn|sac/i.test(s) && hsnColX === -1) hsnColX = item.x;
-        if (/qty|quantity|billed/i.test(s) && qtyColX === -1) qtyColX = item.x;
+        if (/qty|quantity|billed|return|damage|units?/i.test(s) && qtyColX === -1) qtyColX = item.x;
         if (/rate|price/i.test(s) && rateColX === -1) rateColX = item.x;
         if (/per|uom|unit/i.test(s) && perColX === -1) perColX = item.x;
         if (/amount|total|value/i.test(s) && amountColX === -1) amountColX = item.x;
