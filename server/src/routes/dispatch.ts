@@ -2244,10 +2244,33 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
       readyStockTotalValue = Math.round(readyStockTotalValue * 100) / 100;
       localPurchaseTotalValue = Math.round(localPurchaseTotalValue * 100) / 100;
 
-      const committedImmediateValue = Math.round((dispatchedTotalValue + readyStockTotalValue + localPurchaseTotalValue) * 100) / 100;
-      const isPaymentSufficient = totalReceivedAmount >= (committedImmediateValue - 0.5);
-      const deficitAmount = isPaymentSufficient ? 0 : Math.round((committedImmediateValue - totalReceivedAmount) * 100) / 100;
+      // Batch-level Payment Validation
+      // Value of the active shipment slice: either from latest verified invoice lines,
+      // or from already dispatched units, or ready stock pending dispatch
+      let activeBatchValue = 0;
+      if (invoices.length > 0 && invoices[0]?.reconciliation_summary?.matched_items) {
+        const matched = invoices[0].reconciliation_summary.matched_items;
+        for (const m of matched) {
+          const it = enrichedItems.find((e: any) => e.id === m.quotation_item_id);
+          const unitRate = it?.unit_rate_with_tax || 0;
+          activeBatchValue += Math.round(parseFloat(m.invoice_qty || m.quantity || 0) * unitRate * 100) / 100;
+        }
+      }
+
+      if (activeBatchValue <= 0) {
+        activeBatchValue = dispatchedTotalValue > 0 ? dispatchedTotalValue : readyStockTotalValue;
+      }
+      activeBatchValue = Math.round(activeBatchValue * 100) / 100;
+
+      // Cumulative required payment through current shipment batch
+      const cumulativeRequiredPayment = Math.round(Math.max(activeBatchValue, dispatchedTotalValue) * 100) / 100;
+
+      // Allowed Dispatch Condition: Customer verified advance covers the cumulative shipment value
+      const isPaymentSufficient = totalReceivedAmount >= (cumulativeRequiredPayment - 0.50);
+      const deficitAmount = isPaymentSufficient ? 0 : Math.round((cumulativeRequiredPayment - totalReceivedAmount) * 100) / 100;
+      const surplusAmount = isPaymentSufficient ? Math.round((totalReceivedAmount - cumulativeRequiredPayment) * 100) / 100 : 0;
       const paymentCoverageStatus = isPaymentSufficient ? 'COVERED' : 'INSUFFICIENT';
+      const committedImmediateValue = cumulativeRequiredPayment;
 
       return {
         ...q,
@@ -2258,6 +2281,9 @@ dispatchRouter.get('/processing', async (req: Request, res: Response) => {
         shipments: shipmentsByQuote.get(q.id) || [],
         has_verified_invoice: invoices.length > 0,
         latest_invoice: invoices[0] || null,
+        active_shipment_value: activeBatchValue,
+        cumulative_required_payment: cumulativeRequiredPayment,
+        surplus_amount: surplusAmount,
         total_ordered_qty: totalOrdered,
         total_dispatched_qty: totalDispatched,
         progress_percent: progressPercent,
@@ -2424,6 +2450,9 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
 
     // Generate or use challan number
     const generatedChallan = challan_number?.trim() || `DC-2026-${String(qId).padStart(4, '0')}`;
+    let createdShipmentNumber = 'Shipment #1';
+    let createdShipmentIndex = 1;
+    let createdShipmentChallan = generatedChallan;
 
     await withTransaction(async (client) => {
       // 1. Update quotation_items
@@ -2480,6 +2509,75 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [recordId, qiId, ordered, qty, item.product_type || 'boxes', isNowFullyDispatched ? 'DISPATCHED' : 'PARTIAL', notes || null]
       );
+
+      // 3b. Record Discrete Shipment in dispatch_shipments & dispatch_shipment_items
+      const nextIndexRes = await client.query(
+        `SELECT COALESCE(MAX(shipment_index), 0) + 1 as next_index FROM dispatch_shipments WHERE quotation_id = $1`,
+        [qId]
+      );
+      createdShipmentIndex = parseInt(nextIndexRes.rows[0]?.next_index || '1', 10);
+      createdShipmentNumber = `Shipment #${createdShipmentIndex}`;
+      createdShipmentChallan = `DC-2026-${String(qId).padStart(4, '0')}-S${createdShipmentIndex}`;
+
+      const lastInvRes = await client.query(
+        `SELECT id, invoice_number FROM dispatch_invoices WHERE quotation_id = $1 AND is_verified = true ORDER BY id DESC LIMIT 1`,
+        [qId]
+      );
+      const lastInv = lastInvRes.rows[0] || null;
+
+      const shipmentRes = await client.query(
+        `INSERT INTO dispatch_shipments (
+           quotation_id,
+           shipment_index,
+           shipment_number,
+           invoice_number,
+           dispatch_invoice_id,
+           invoice_pdf_url,
+           challan_number,
+           vehicle_number,
+           driver_name,
+           driver_phone,
+           supervisor_name,
+           dispatched_at,
+           notes
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, $12)
+         RETURNING id`,
+        [
+          qId,
+          createdShipmentIndex,
+          createdShipmentNumber,
+          lastInv?.invoice_number || null,
+          lastInv?.id || null,
+          lastInv ? `/api/dispatch/invoices/${lastInv.id}/view-pdf` : null,
+          createdShipmentChallan,
+          vehicle_no || 'Standard Transport',
+          driver_name || '-',
+          driver_phone || '-',
+          req.user!.full_name || 'Warehouse Dispatcher',
+          notes || `Manual dispatch of ${qty} ${item.product_type || 'boxes'}`,
+        ]
+      );
+      const shipmentId = shipmentRes.rows[0]?.id;
+
+      if (shipmentId) {
+        await client.query(
+          `INSERT INTO dispatch_shipment_items (
+             shipment_id,
+             quotation_item_id,
+             quantity_sent,
+             quoted_rate,
+             total_value,
+             status
+           ) VALUES ($1, $2, $3, $4, $5, 'Dispatched')`,
+          [
+            shipmentId,
+            qiId,
+            qty,
+            itemRate,
+            itemSliceValue,
+          ]
+        );
+      }
 
       // 4. Re-check entire quotation items fulfillment
       const allItemsCheck = await client.query(
@@ -2538,6 +2636,19 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       payload: {
         quotation_id: qId,
         updated_by: req.user!.full_name,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    broadcast({
+      type: 'dispatch:shipment_created',
+      payload: {
+        quotation_id: qId,
+        shipment_index: createdShipmentIndex,
+        shipment_number: createdShipmentNumber,
+        item_id: qiId,
+        quantity: qty,
+        challan_number: createdShipmentChallan,
         timestamp: new Date().toISOString(),
       },
     });

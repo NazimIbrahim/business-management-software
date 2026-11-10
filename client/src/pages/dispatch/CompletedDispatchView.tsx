@@ -550,6 +550,9 @@ export const CompletedDispatchView: React.FC<Props> = ({
                                               ) : (
                                                 <span className="text-xs text-slate-500 italic">Direct Delivery</span>
                                               )}
+                                              <span className="font-mono text-xs font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                Dispatched: {formatCurrency(totalValue)}
+                                              </span>
                                               {s.challan_number && (
                                                 <span className="font-mono text-[11px] text-slate-600">
                                                   Challan: <span className="font-semibold text-slate-800">{s.challan_number}</span>

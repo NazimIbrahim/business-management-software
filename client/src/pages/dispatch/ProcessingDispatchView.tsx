@@ -114,6 +114,9 @@ export interface ProcessingQuotation {
   ready_stock_total_value?: number;
   local_purchase_total_value?: number;
   committed_immediate_value?: number;
+  active_shipment_value?: number;
+  cumulative_required_payment?: number;
+  surplus_amount?: number;
   is_payment_sufficient?: boolean;
   deficit_amount?: number;
   payment_coverage_status?: 'COVERED' | 'INSUFFICIENT';
@@ -806,23 +809,35 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       }
     }
 
-    // Rule 3: Financial Payment Safety Gate
-    if (quote.is_payment_sufficient === false && (quote.deficit_amount || 0) > 0) {
+    // Rule 3: Batch-level Financial Payment Safety Gate
+    // Check if customer verified payment covers previously dispatched goods plus this specific item
+    const quoted = item.ordered_quantity || 1;
+    const unitRateWithTax = item.unit_rate_with_tax || (quoted > 0 ? (item.tax_inclusive_amount || 0) / quoted : 0);
+    const pendingQty = item.pending_quantity !== undefined ? item.pending_quantity : Math.max(0, quoted - (item.quantity_dispatched || 0));
+    const itemPendingValue = Math.round(pendingQty * unitRateWithTax * 100) / 100;
+    const previouslyDispatched = quote.dispatched_total_value || 0;
+    const requiredForThisItem = previouslyDispatched + itemPendingValue;
+    const totalReceived = quote.total_received_amount || 0;
+
+    const isItemPaymentCovered = totalReceived >= (requiredForThisItem - 0.50);
+
+    // Only block if BOTH this item's cumulative required payment is uncovered AND quotation has an active deficit
+    if (!isItemPaymentCovered && quote.is_payment_sufficient === false && (quote.deficit_amount || 0) > 0) {
       setSafetyModalItem({ quote, item });
       setAdminOverrideReason('');
       return;
     }
 
     // Rule 4: Quantity Overage Check
-    const quoted = item.ordered_quantity || 0;
+    const quotedQty = item.ordered_quantity || 0;
     const dispatched = item.quantity_dispatched || 0;
-    if (dispatched > quoted) {
+    if (dispatched > quotedQty) {
       setOverageModalItem({
         quote,
         item,
-        quotedQty: quoted,
+        quotedQty,
         invoicedQty: dispatched,
-        excessQty: Math.round((dispatched - quoted) * 100) / 100,
+        excessQty: Math.round((dispatched - quotedQty) * 100) / 100,
       });
       return;
     }
@@ -1150,10 +1165,15 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                         )}
                       </div>
                     ) : d.is_payment_sufficient !== false ? (
-                      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        <ShieldCheck size={12} />
-                        <span>Payment Covered</span>
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <ShieldCheck size={12} className="text-emerald-700" />
+                          <span>
+                            Payment Verified: Received {formatCurrency(d.total_received_amount || 0)} covers shipment value {formatCurrency(d.active_shipment_value || d.dispatched_total_value || 0)}
+                            {(d.surplus_amount || 0) > 0 ? ` (Surplus: ${formatCurrency(d.surplus_amount || 0)})` : ''}
+                          </span>
+                        </span>
+                      </div>
                     ) : (
                       <div className="flex items-center space-x-2">
                         <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
