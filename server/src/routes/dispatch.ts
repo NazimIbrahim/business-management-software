@@ -2316,7 +2316,9 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
     const {
       quotation_id,
       quotation_item_id,
+      item_id,
       quantity_to_dispatch,
+      quantity_dispatched,
       vehicle_no,
       driver_name,
       driver_phone,
@@ -2325,9 +2327,9 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       notes,
     } = req.body;
 
-    const qId = parseInt(quotation_id, 10);
-    const qiId = parseInt(quotation_item_id, 10);
-    const qty = parseFloat(quantity_to_dispatch || 0);
+    const qId = parseInt((quotation_id || req.body.quote_id) as string, 10);
+    const qiId = parseInt((quotation_item_id || item_id) as string, 10);
+    const qty = parseFloat((quantity_to_dispatch || quantity_dispatched || req.body.quantity || 0) as string);
 
     if (!qId || !qiId || qty <= 0) {
       res.status(400).json({ error: 'Valid quotation_id, quotation_item_id, and positive quantity_to_dispatch required' });
@@ -2454,18 +2456,21 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
     let createdShipmentIndex = 1;
     let createdShipmentChallan = generatedChallan;
 
+    const newPending = Math.max(0, ordered - newDispatched);
+    let overallProgressPercent = 0;
+
     await withTransaction(async (client) => {
       // 1. Update quotation_items
       await client.query(
         `UPDATE quotation_items
          SET dispatched_quantity = $1,
-             pending_quantity = GREATEST(0, $3 - $1),
-             fulfillment_status = CASE WHEN $2 = true THEN 'DISPATCHED' ELSE 'PARTIALLY_DISPATCHED' END,
-             dispatch_status = CASE WHEN $2 = true THEN 'Dispatched' ELSE dispatch_status END,
-             dispatched_at = CASE WHEN $2 = true THEN CURRENT_TIMESTAMP ELSE dispatched_at END,
-             remaining_quantity = GREATEST(0, $3 - $1)
+             pending_quantity = $2,
+             fulfillment_status = CASE WHEN $3 = true THEN 'DISPATCHED' ELSE 'PARTIALLY_DISPATCHED' END,
+             dispatch_status = CASE WHEN $3 = true THEN 'Dispatched' ELSE dispatch_status END,
+             dispatched_at = CASE WHEN $3 = true THEN CURRENT_TIMESTAMP ELSE dispatched_at END,
+             remaining_quantity = $2
          WHERE id = $4`,
-        [newDispatched, isNowFullyDispatched, ordered, qiId]
+        [newDispatched, newPending, isNowFullyDispatched, qiId]
       );
 
       // 2. Insert or update dispatch_records
@@ -2583,7 +2588,9 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       const allItemsCheck = await client.query(
         `SELECT 
           COUNT(*) as total_items,
-          COUNT(CASE WHEN dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items
+          COUNT(CASE WHEN dispatch_status = 'Dispatched' THEN 1 END) as dispatched_items,
+          SUM(COALESCE(quantity_boxes, quantity_sqft, 1)) as total_ordered,
+          SUM(COALESCE(dispatched_quantity, 0)) as total_dispatched
          FROM quotation_items
          WHERE quotation_id = $1`,
         [qId]
@@ -2591,6 +2598,9 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
 
       const tot = parseInt(allItemsCheck.rows[0]?.total_items || '0', 10);
       const disp = parseInt(allItemsCheck.rows[0]?.dispatched_items || '0', 10);
+      const totOrd = parseFloat(allItemsCheck.rows[0]?.total_ordered || '1');
+      const totDisp = parseFloat(allItemsCheck.rows[0]?.total_dispatched || '0');
+      overallProgressPercent = totOrd > 0 ? Math.min(100, Math.round((totDisp / totOrd) * 100)) : 0;
       const isQuoteFullyDispatched = tot > 0 && tot === disp;
 
       if (isQuoteFullyDispatched) {
@@ -2657,7 +2667,8 @@ dispatchRouter.post('/partial-dispatch', async (req: Request, res: Response) => 
       success: true,
       message: isNowFullyDispatched ? 'Item completely dispatched!' : `Recorded ${qty} units dispatched.`,
       dispatched_quantity: newDispatched,
-      remaining_quantity: Math.max(0, ordered - newDispatched),
+      remaining_quantity: newPending,
+      progress_percent: overallProgressPercent,
       is_item_dispatched: isNowFullyDispatched,
       challan_number: generatedChallan,
     });

@@ -516,7 +516,13 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
 
   // Partial Dispatch Recording
   const handleOpenPartialModal = (quote: any, item: any) => {
-    const rem = Number(item.remaining_quantity || item.ordered_quantity || 0);
+    const ordered = parseFloat(String(item.ordered_quantity || 0));
+    const dispatched = parseFloat(String(item.quantity_dispatched || 0));
+    const rem = item.remaining_quantity !== undefined
+      ? parseFloat(String(item.remaining_quantity))
+      : item.pending_quantity !== undefined
+      ? parseFloat(String(item.pending_quantity))
+      : Math.max(0, ordered - dispatched);
     setPartialModal({ quote, item });
     setPartialQty(rem > 0 ? rem : 1);
     setPartialVehicle(quote.vehicle_no || '');
@@ -533,8 +539,15 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
       alert('Please enter a valid dispatch quantity');
       return;
     }
-    const rem = Number(partialModal.item.remaining_quantity || partialModal.item.ordered_quantity || 0);
-    if (qty > rem) {
+    const ordered = parseFloat(String(partialModal.item.ordered_quantity || 0));
+    const dispatched = parseFloat(String(partialModal.item.quantity_dispatched || 0));
+    const rem = partialModal.item.remaining_quantity !== undefined
+      ? parseFloat(String(partialModal.item.remaining_quantity))
+      : partialModal.item.pending_quantity !== undefined
+      ? parseFloat(String(partialModal.item.pending_quantity))
+      : Math.max(0, ordered - dispatched);
+
+    if (qty > rem + 0.001) {
       alert(`Cannot dispatch ${qty}. Only ${rem} remaining.`);
       return;
     }
@@ -545,8 +558,12 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         method: 'POST',
         body: JSON.stringify({
           quotation_id: partialModal.quote.id,
+          quote_id: partialModal.quote.id,
+          quotation_item_id: partialModal.item.id,
           item_id: partialModal.item.id,
+          quantity_to_dispatch: qty,
           quantity_dispatched: qty,
+          quantity: qty,
           vehicle_no: partialVehicle.trim(),
           driver_name: partialDriverName.trim(),
           driver_phone: partialDriverPhone.trim(),
@@ -554,7 +571,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         }),
       });
 
-      showToast(`Dispatched ${qty} units. Overall fulfillment: ${res.progress_percent}%`);
+      showToast(`Dispatched ${qty} units. Overall fulfillment: ${res.progress_percent || 0}%`);
       const qId = partialModal.quote.id;
       const challanNo = res.challan_number;
       setPartialModal(null);
@@ -1100,19 +1117,23 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Ordered</span>
                     <span className="text-xs font-extrabold text-slate-800 font-mono">
-                      {partialModal.item.ordered_quantity}
+                      {parseFloat(String(partialModal.item.ordered_quantity || 0))}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-teal-600 uppercase font-bold block">Delivered</span>
                     <span className="text-xs font-extrabold text-teal-700 font-mono">
-                      {partialModal.item.quantity_dispatched || 0}
+                      {parseFloat(String(partialModal.item.quantity_dispatched || 0))}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-amber-600 uppercase font-bold block">Remaining</span>
                     <span className="text-xs font-extrabold text-amber-700 font-mono">
-                      {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
+                      {partialModal.item.remaining_quantity !== undefined
+                        ? parseFloat(String(partialModal.item.remaining_quantity))
+                        : partialModal.item.pending_quantity !== undefined
+                        ? parseFloat(String(partialModal.item.pending_quantity))
+                        : Math.max(0, parseFloat(String(partialModal.item.ordered_quantity || 0)) - parseFloat(String(partialModal.item.quantity_dispatched || 0)))}
                     </span>
                   </div>
                 </div>
@@ -1129,7 +1150,13 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                       type="number"
                       step="any"
                       min="0.01"
-                      max={Number(partialModal.item.remaining_quantity || partialModal.item.ordered_quantity)}
+                      max={
+                        partialModal.item.remaining_quantity !== undefined
+                          ? parseFloat(String(partialModal.item.remaining_quantity))
+                          : partialModal.item.pending_quantity !== undefined
+                          ? parseFloat(String(partialModal.item.pending_quantity))
+                          : Math.max(0, parseFloat(String(partialModal.item.ordered_quantity || 0)) - parseFloat(String(partialModal.item.quantity_dispatched || 0)))
+                      }
                       value={partialQty}
                       onChange={(e) => setPartialQty(e.target.value)}
                       required
@@ -1141,7 +1168,12 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Max dispatchable right now: {partialModal.item.remaining_quantity || partialModal.item.ordered_quantity}
+                    Max dispatchable right now:{' '}
+                    {partialModal.item.remaining_quantity !== undefined
+                      ? parseFloat(String(partialModal.item.remaining_quantity))
+                      : partialModal.item.pending_quantity !== undefined
+                      ? parseFloat(String(partialModal.item.pending_quantity))
+                      : Math.max(0, parseFloat(String(partialModal.item.ordered_quantity || 0)) - parseFloat(String(partialModal.item.quantity_dispatched || 0)))}
                   </p>
                 </div>
 

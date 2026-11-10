@@ -796,7 +796,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     // If invoice exists, check if this item has been matched in an invoice
     if (quote.latest_invoice && quote.latest_invoice.reconciliation_summary) {
       const summary = quote.latest_invoice.reconciliation_summary;
-      const matched = (summary.matched_items || []).some((m: any) => m.quotation_item_id === item.id);
+      const matched = (summary.matched_items || []).some((m: any) => String(m.quotation_item_id) === String(item.id));
       const isPartiallyOrDispatched = item.fulfillment_status === 'PARTIALLY_DISPATCHED' || item.fulfillment_status === 'DISPATCHED';
 
       if (!matched && !isPartiallyOrDispatched && !item.last_invoice_number) {
@@ -811,13 +811,15 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
     // Rule 3: Batch-level Financial Payment Safety Gate
     // Check if customer verified payment covers previously dispatched goods plus this specific item
-    const quoted = item.ordered_quantity || 1;
-    const unitRateWithTax = item.unit_rate_with_tax || (quoted > 0 ? (item.tax_inclusive_amount || 0) / quoted : 0);
-    const pendingQty = item.pending_quantity !== undefined ? item.pending_quantity : Math.max(0, quoted - (item.quantity_dispatched || 0));
+    const quoted = parseFloat(String(item.ordered_quantity || 1));
+    const unitRateWithTax = parseFloat(String(item.unit_rate_with_tax || (quoted > 0 ? (item.tax_inclusive_amount || 0) / quoted : 0)));
+    const pendingQty = item.pending_quantity !== undefined 
+      ? parseFloat(String(item.pending_quantity)) 
+      : Math.max(0, quoted - parseFloat(String(item.quantity_dispatched || 0)));
     const itemPendingValue = Math.round(pendingQty * unitRateWithTax * 100) / 100;
-    const previouslyDispatched = quote.dispatched_total_value || 0;
+    const previouslyDispatched = parseFloat(String(quote.dispatched_total_value || 0));
     const requiredForThisItem = previouslyDispatched + itemPendingValue;
-    const totalReceived = quote.total_received_amount || 0;
+    const totalReceived = parseFloat(String(quote.total_received_amount || 0));
 
     const isItemPaymentCovered = totalReceived >= (requiredForThisItem - 0.50);
 
@@ -828,10 +830,10 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       return;
     }
 
-    // Rule 4: Quantity Overage Check
-    const quotedQty = item.ordered_quantity || 0;
-    const dispatched = item.quantity_dispatched || 0;
-    if (dispatched > quotedQty) {
+    // Rule 4: Quantity Overage Check (Numeric parsing to prevent string lexicographical comparison bugs e.g. '7.00' > '14.00')
+    const quotedQty = parseFloat(String(item.ordered_quantity || 0));
+    const dispatched = parseFloat(String(item.quantity_dispatched || 0));
+    if (dispatched > quotedQty + 0.0001) {
       setOverageModalItem({
         quote,
         item,
@@ -1211,8 +1213,8 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {d.items.map((it, idx) => {
-                          const ordered = Math.round(it.ordered_quantity || 0);
-                          const dispatched = Math.round(it.quantity_dispatched || 0);
+                          const ordered = Math.round(parseFloat(String(it.ordered_quantity || 0)));
+                          const dispatched = Math.round(parseFloat(String(it.quantity_dispatched || 0)));
                           const pending = Math.max(0, ordered - dispatched);
                           const itemPct = ordered > 0 ? Math.min(100, Math.round((dispatched / ordered) * 100)) : 0;
 
