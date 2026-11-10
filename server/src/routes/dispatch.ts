@@ -5348,6 +5348,102 @@ dispatchRouter.get('/reports', async (req: Request, res: Response) => {
         AND ${foDateFilter}`
     );
 
+    // 4. Detailed Dispatched Items & Customers Breakdown
+    const dispatchedItems = await query(
+      `SELECT 
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        COALESCE(q.delivery_address, q.site_location, 'Site Location') as site_location,
+        COALESCE(q.delivery_challan_number, 'DC-2026-' || LPAD(q.id::TEXT, 4, '0')) as challan_number,
+        COALESCE(q.dispatched_at, q.updated_at) as dispatched_at,
+        q.dispatch_status,
+        qi.id as item_id,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        qi.last_invoice_number,
+        COALESCE(qi.dispatched_quantity, 0) as dispatched_quantity,
+        COALESCE(qi.quantity_boxes, qi.quantity_sqft, 1) as ordered_quantity,
+        COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0) as rate,
+        ROUND((COALESCE(qi.dispatched_quantity, 0) * COALESCE(qi.rate_per_box, qi.rate_per_sqft, 0))::numeric, 2) as delivered_item_value
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      WHERE COALESCE(qi.dispatched_quantity, 0) > 0
+        AND LOWER(q.status) IN ('closed', 'approved')
+        ${userRoleFilter}
+        AND ${qDateFilter}
+      ORDER BY q.id DESC, qi.id ASC`
+    );
+
+    // 5. Detailed Local Purchases Breakdown
+    const localPurchases = await query(
+      `SELECT 
+        lp.id as local_purchase_id,
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        COALESCE(q.delivery_address, q.site_location, 'Site Location') as site_location,
+        qi.id as item_id,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(lp.vendor_name, 'Local Dealer') as vendor_name,
+        lp.vendor_contact,
+        COALESCE(lp.required_quantity, qi.quantity_boxes, qi.quantity_sqft, 1) as quantity,
+        COALESCE(NULLIF(lp.actual_purchase_rate, 0), qi.rate_per_box, qi.rate_per_sqft, 0) as actual_rate,
+        ROUND((COALESCE(lp.required_quantity, qi.quantity_boxes, qi.quantity_sqft, 1) * COALESCE(NULLIF(lp.actual_purchase_rate, 0), qi.rate_per_box, qi.rate_per_sqft, 0))::numeric, 2) as total_spend,
+        COALESCE(lp.purchase_status, qi.procurement_status, 'PENDING') as purchase_status,
+        lp.invoice_number,
+        COALESCE(lp.completed_date, qi.procurement_updated_at) as completed_date,
+        lp.payment_checked
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
+      WHERE (qi.dispatch_status = 'Need to Arrange from Local' OR qi.procurement_category = 'local' OR lp.id IS NOT NULL)
+        AND LOWER(q.status) IN ('closed', 'approved')
+        ${userRoleFilter}
+        AND ${lpDateFilter}
+      ORDER BY q.id DESC, qi.id ASC`
+    );
+
+    // 6. Detailed Factory Orders Breakdown
+    const factoryOrders = await query(
+      `SELECT 
+        fo.id as factory_order_id,
+        q.id as quotation_id,
+        q.quotation_number,
+        q.customer_name,
+        q.customer_phone,
+        COALESCE(q.delivery_address, q.site_location, 'Site Location') as site_location,
+        qi.id as item_id,
+        qi.description,
+        qi.brand,
+        qi.size,
+        qi.product_type,
+        COALESCE(fo.factory_name, qi.brand, 'Morbi Plant') as factory_name,
+        COALESCE(fo.total_pallets, qi.quantity_boxes, qi.quantity_sqft, 1) as boxes_quantity,
+        fo.lr_number,
+        fo.transporter_name,
+        fo.truck_number,
+        COALESCE(fo.freight_cost, 0) as freight_cost,
+        COALESCE(fo.status, 'ORDERED') as status,
+        fo.order_date,
+        fo.unloaded_date
+      FROM quotation_items qi
+      JOIN quotations q ON q.id = qi.quotation_id
+      LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
+      WHERE (qi.dispatch_status = 'Factory Order' OR qi.procurement_category = 'factory' OR fo.id IS NOT NULL)
+        AND LOWER(q.status) IN ('closed', 'approved')
+        ${userRoleFilter}
+        AND ${foDateFilter}
+      ORDER BY q.id DESC, qi.id ASC`
+    );
+
     const reportPayload = {
       range: normRange,
       dispatch: {
@@ -5369,6 +5465,9 @@ dispatchRouter.get('/reports', async (req: Request, res: Response) => {
         total_freight_cost: parseFloat(factorySummary[0]?.total_freight_cost || '0'),
         factory_unloaded: parseInt(factorySummary[0]?.factory_unloaded || '0', 10),
       },
+      dispatched_items: dispatchedItems,
+      local_purchases: localPurchases,
+      factory_orders: factoryOrders,
     };
 
     res.json({
