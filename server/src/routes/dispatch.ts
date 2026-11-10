@@ -2918,6 +2918,73 @@ async function executeInvoiceReconciliation({
     throw err;
   }
 
+  // DUPLICATE INVOICE PREVENTION:
+  // Reject upload if invoice number already exists on this quote or another quote
+  const cleanInvNum = (invoiceNumber || '').trim().replace(/^#/, '').trim();
+  if (!existingInvoiceId && cleanInvNum && cleanInvNum.length > 0 && cleanInvNum.toUpperCase() !== 'UNKNOWN') {
+    // 1. Check if invoice number already uploaded in dispatch_invoices
+    const existingInvoices = await query(
+      `SELECT di.id, di.quotation_id, di.invoice_number, q.quotation_number
+       FROM dispatch_invoices di
+       JOIN quotations q ON q.id = di.quotation_id
+       WHERE REPLACE(LOWER(TRIM(di.invoice_number)), '#', '') = LOWER(TRIM($1))`,
+      [cleanInvNum]
+    );
+
+    // 2. Check if invoice number already recorded in discrete dispatch_shipments
+    const existingShipments = await query(
+      `SELECT ds.id, ds.quotation_id, ds.invoice_number, ds.shipment_number, q.quotation_number
+       FROM dispatch_shipments ds
+       JOIN quotations q ON q.id = ds.quotation_id
+       WHERE REPLACE(LOWER(TRIM(ds.invoice_number)), '#', '') = LOWER(TRIM($1))`,
+      [cleanInvNum]
+    );
+
+    const sameQuoteShipment = existingShipments.find((s: any) => s.quotation_id === quotationId);
+    const sameQuoteInvoice = existingInvoices.find((i: any) => i.quotation_id === quotationId);
+
+    if (sameQuoteShipment || sameQuoteInvoice) {
+      const err: any = new Error(
+        `🚫 Tax Invoice #${cleanInvNum} has already been uploaded and verified for this quotation. Duplicate invoices cannot be uploaded. Please upload a new Tax Invoice PDF for the remaining items.`
+      );
+      err.code = 'INVOICE_ALREADY_EXISTS';
+      err.reason = 'INVOICE_ALREADY_EXISTS';
+      err.invoiceNumber = cleanInvNum;
+      throw err;
+    }
+
+    const otherQuoteShipment = existingShipments.find((s: any) => s.quotation_id !== quotationId);
+    const otherQuoteInvoice = existingInvoices.find((i: any) => i.quotation_id !== quotationId);
+    const otherMatch = otherQuoteShipment || otherQuoteInvoice;
+
+    if (otherMatch) {
+      const err: any = new Error(
+        `🚫 Tax Invoice #${cleanInvNum} has already been registered on quotation ${otherMatch.quotation_number}. Please check and upload a new Tax Invoice PDF.`
+      );
+      err.code = 'INVOICE_ALREADY_LINKED';
+      err.reason = 'INVOICE_ALREADY_LINKED';
+      err.invoiceNumber = cleanInvNum;
+      err.linkedQuotationNumber = otherMatch.quotation_number;
+      throw err;
+    }
+  }
+
+  if (existingInvoiceId) {
+    const shipped = await query(
+      `SELECT id, shipment_number FROM dispatch_shipments WHERE dispatch_invoice_id = $1`,
+      [existingInvoiceId]
+    );
+    if (shipped.length > 0) {
+      const err: any = new Error(
+        `🚫 Tax Invoice #${cleanInvNum || invoiceNumber} has already been reconciled and applied in ${shipped[0].shipment_number}. It cannot be re-scanned.`
+      );
+      err.code = 'INVOICE_ALREADY_DISPATCHED';
+      err.reason = 'INVOICE_ALREADY_DISPATCHED';
+      err.invoiceNumber = cleanInvNum || invoiceNumber;
+      throw err;
+    }
+  }
+
   const extractedItems = (parsedInvoice.items || []).map((it: any, idx: number) => ({
     id: `inv_${idx}`,
     index: idx,
@@ -3210,6 +3277,18 @@ dispatchRouter.post('/:quotationId/upload-invoice', uploadInvoice.single('invoic
       });
       return;
     }
+    if (error.code === 'INVOICE_ALREADY_EXISTS' || error.code === 'INVOICE_ALREADY_LINKED' || error.code === 'INVOICE_ALREADY_DISPATCHED') {
+      res.status(400).json({
+        success: false,
+        code: error.code,
+        reason: error.code,
+        error: error.message,
+        message: error.message,
+        invoiceNumber: error.invoiceNumber,
+        linkedQuotationNumber: error.linkedQuotationNumber,
+      });
+      return;
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -3310,6 +3389,16 @@ dispatchRouter.get('/:quotationId/invoices', async (req: Request, res: Response)
     );
     res.json({ success: true, count: invoices.length, invoices });
   } catch (error: any) {
+    if (error.code === 'INVOICE_ALREADY_DISPATCHED') {
+      res.status(400).json({
+        success: false,
+        code: error.code,
+        reason: error.code,
+        error: error.message,
+        message: error.message,
+      });
+      return;
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -3324,6 +3413,18 @@ dispatchRouter.delete('/invoices/:invoiceId', async (req: Request, res: Response
       return;
     }
     const inv = rows[0];
+
+    const cleanInv = (inv.invoice_number || '').trim().replace(/^#/, '');
+    const shipped = await query(
+      `SELECT id, shipment_number FROM dispatch_shipments WHERE quotation_id = $1 AND (dispatch_invoice_id = $2 OR REPLACE(LOWER(TRIM(invoice_number)), '#', '') = LOWER(TRIM($3)))`,
+      [inv.quotation_id, invoiceId, cleanInv]
+    );
+    if (shipped.length > 0) {
+      res.status(400).json({
+        error: `🚫 Cannot remove Tax Invoice #${inv.invoice_number} because it is linked to recorded ${shipped[0].shipment_number}.`,
+      });
+      return;
+    }
 
     if (inv.file_url) {
       const localPath = path.resolve(process.cwd(), inv.file_url.replace(/^\//, ''));
@@ -3647,6 +3748,21 @@ const handleApplyInvoiceDispatch = async (req: Request, res: Response) => {
     }
 
     const targetInvoice = invoice_id ? invRows.find((i: any) => i.id === invoice_id) || invRows[0] : invRows[0];
+
+    // Double-check: has this invoice already been applied in a shipment?
+    const cleanTargetInv = (targetInvoice.invoice_number || '').trim().replace(/^#/, '');
+    const alreadyShipped = await query(
+      `SELECT id, shipment_number FROM dispatch_shipments WHERE quotation_id = $1 AND (dispatch_invoice_id = $2 OR REPLACE(LOWER(TRIM(invoice_number)), '#', '') = LOWER(TRIM($3)))`,
+      [quotationId, targetInvoice.id, cleanTargetInv]
+    );
+    if (alreadyShipped.length > 0 && !supervisor_override) {
+      res.status(400).json({
+        success: false,
+        code: 'INVOICE_ALREADY_DISPATCHED',
+        error: `🚫 Tax Invoice #${targetInvoice.invoice_number} has already been applied in ${alreadyShipped[0].shipment_number}. Duplicate dispatch cannot be recorded.`,
+      });
+      return;
+    }
 
     // Fetch quotation details and verified payments
     const quoteRows = await query(

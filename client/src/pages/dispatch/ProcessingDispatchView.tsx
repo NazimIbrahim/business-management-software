@@ -174,6 +174,11 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   // Tax Invoice Upload & Reconciliation States
   const [uploadingQuoteId, setUploadingQuoteId] = useState<number | null>(null);
   const [mismatchErrors, setMismatchErrors] = useState<Record<number, string>>({});
+  const [duplicateInvoiceModal, setDuplicateInvoiceModal] = useState<{
+    isOpen: boolean;
+    invoiceNumber: string;
+    message: string;
+  } | null>(null);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewPdfBlobUrl, setPreviewPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -629,8 +634,26 @@ export const ProcessingDispatchView: React.FC<Props> = ({
             ...prev,
             [quotationId]: data.message || '⚠️ Data Mismatch: Customer phone/GSTIN does not match this quotation. Please verify and retry.',
           }));
+        } else if (
+          data.code === 'INVOICE_ALREADY_EXISTS' ||
+          data.code === 'INVOICE_ALREADY_LINKED' ||
+          data.code === 'INVOICE_ALREADY_DISPATCHED' ||
+          data.reason === 'INVOICE_ALREADY_EXISTS' ||
+          data.reason === 'INVOICE_ALREADY_LINKED' ||
+          data.reason === 'INVOICE_ALREADY_DISPATCHED'
+        ) {
+          const errMsg = data.message || data.error || 'Duplicate Tax Invoice detected.';
+          setMismatchErrors((prev) => ({
+            ...prev,
+            [quotationId]: errMsg,
+          }));
+          setDuplicateInvoiceModal({
+            isOpen: true,
+            invoiceNumber: data.invoiceNumber || '',
+            message: errMsg,
+          });
         } else {
-          alert(data.error || 'Failed to upload Tax Invoice PDF');
+          alert(data.error || data.message || 'Failed to upload Tax Invoice PDF');
         }
         return;
       }
@@ -1580,67 +1603,95 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       )}
 
       {/* 3. Auto-Reconciliation Confirmation Drawer / Modal */}
-      {reconcileDrawer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
-            {/* Header */}
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-700">
-                  <ShieldCheck size={20} />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">
-                    Tax Invoice Verified: #{reconcileDrawer.reconciliation.invoice_number}
-                  </h3>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Quotation Ref: <span className="font-bold text-slate-800">{reconcileDrawer.quote.quotation_number}</span> | Customer:{' '}
-                    <span className="font-bold text-slate-800">{reconcileDrawer.quote.customer_name}</span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setReconcileDrawer(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
+      {reconcileDrawer && (() => {
+        const quote = reconcileDrawer.quote;
+        const currentInvNum = String(reconcileDrawer.invoice?.invoice_number || reconcileDrawer.reconciliation?.invoice_number || '').trim().replace(/^#/, '').toLowerCase();
+        const shipments = quote.shipments || [];
+        const alreadyDispatchedShipment = shipments.find((s: any) => {
+          const shipInvNum = String(s.invoice_number || '').trim().replace(/^#/, '').toLowerCase();
+          return (
+            (s.dispatch_invoice_id && s.dispatch_invoice_id === reconcileDrawer.invoice.id) ||
+            (currentInvNum && shipInvNum && currentInvNum === shipInvNum)
+          );
+        });
+        const isAlreadyShipped = Boolean(alreadyDispatchedShipment);
 
-            {/* Body */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 text-xs scrollbar-thin">
-              {/* Customer Match Success Banner */}
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+              {/* Header */}
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
                 <div className="flex items-center space-x-2">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-700">
+                    <ShieldCheck size={20} />
+                  </div>
                   <div>
-                    <div className="font-bold">Customer Identity Verified</div>
-                    <div className="text-[11px] text-emerald-800">
-                      Phone / GSTIN matched the quotation record.
+                    <h3 className="font-extrabold text-slate-900 text-sm">
+                      Tax Invoice Verified: #{reconcileDrawer.reconciliation.invoice_number}
+                    </h3>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      Quotation Ref: <span className="font-bold text-slate-800">{reconcileDrawer.quote.quotation_number}</span> | Customer:{' '}
+                      <span className="font-bold text-slate-800">{reconcileDrawer.quote.customer_name}</span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2 shrink-0">
-                  {reconcileDrawer.invoice.file_url && (
-                    <button
-                      onClick={() => setPreviewPdfUrl(getInvoicePdfUrl(reconcileDrawer.invoice))}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
-                    >
-                      <Eye size={12} />
-                      <span>View PDF</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleRescanInvoice(reconcileDrawer.quote.id)}
-                    disabled={isRescanning}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg btn-emerald font-bold text-[11px] cursor-pointer shadow-2xs transition-all disabled:opacity-60"
-                    title="Re-extract line items and re-reconcile with Tax Invoice"
-                  >
-                    <RefreshCw size={12} className={`w-3 h-3 shrink-0 ${isRescanning ? 'animate-spin' : ''}`} />
-                    <span>{isRescanning ? 'Scanning...' : 'Re-scan Invoice'}</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => setReconcileDrawer(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
               </div>
+
+              {/* Body */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 text-xs scrollbar-thin">
+                {/* Already Shipped Banner */}
+                {isAlreadyShipped && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center space-x-2.5">
+                    <ShieldCheck size={18} className="text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="font-bold text-xs">
+                        ✅ Tax Invoice #{reconcileDrawer.reconciliation.invoice_number} Already Dispatched
+                      </div>
+                      <div className="text-[11px] text-emerald-800">
+                        This invoice was fulfilled and recorded under <span className="font-bold">{alreadyDispatchedShipment?.shipment_number || 'Shipment'}</span> ({alreadyDispatchedShipment?.challan_number || 'Challan'}). This record is archived and locked.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Customer Match Success Banner */}
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Customer Identity Verified</div>
+                      <div className="text-[11px] text-emerald-800">
+                        Phone / GSTIN matched the quotation record.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    {reconcileDrawer.invoice.file_url && (
+                      <button
+                        onClick={() => setPreviewPdfUrl(getInvoicePdfUrl(reconcileDrawer.invoice))}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] cursor-pointer hover:bg-emerald-100"
+                      >
+                        <Eye size={12} />
+                        <span>View PDF</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleRescanInvoice(reconcileDrawer.quote.id)}
+                      disabled={isRescanning || isAlreadyShipped}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg btn-emerald font-bold text-[11px] cursor-pointer shadow-2xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={isAlreadyShipped ? "Already recorded in shipment; cannot re-scan" : "Re-extract line items and re-reconcile with Tax Invoice"}
+                    >
+                      <RefreshCw size={12} className={`w-3 h-3 shrink-0 ${isRescanning ? 'animate-spin' : ''}`} />
+                      <span>{isRescanning ? 'Scanning...' : 'Re-scan Invoice'}</span>
+                    </button>
+                  </div>
+                </div>
 
               {/* Matched Line Items Table */}
               <div>
@@ -1963,6 +2014,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
               {/* Financial Payment Safety Gate in Invoice Modal */}
               {(() => {
+                if (isAlreadyShipped) return null;
                 const quote = reconcileDrawer.quote;
                 const grossTotal = parseFloat(String(quote.gross_total || 0));
                 const netTotal = parseFloat(String(quote.net_total || 0));
@@ -2055,6 +2107,15 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                 Close Without Applying
               </button>
               {(() => {
+                if (isAlreadyShipped) {
+                  return (
+                    <div className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-300 shadow-2xs">
+                      <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                      <span>Dispatched & Recorded in {alreadyDispatchedShipment?.shipment_number || 'Shipment'}</span>
+                    </div>
+                  );
+                }
+
                 const quote = reconcileDrawer.quote;
                 const grossTotal = parseFloat(String(quote.gross_total || 0));
                 const netTotal = parseFloat(String(quote.net_total || 0));
@@ -2128,6 +2189,47 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   </button>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* 3b. Duplicate Tax Invoice Alert Modal */}
+      {duplicateInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-rose-200 shadow-2xl flex flex-col space-y-4 animate-fadeIn">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-2xl bg-rose-100 text-rose-700 shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  🚫 Duplicate Tax Invoice
+                </h3>
+                <p className="text-xs text-rose-700 font-semibold mt-1">
+                  Tax Invoice #{duplicateInvoiceModal.invoiceNumber} already exists
+                </p>
+              </div>
+              <button
+                onClick={() => setDuplicateInvoiceModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-xs text-rose-900 leading-relaxed font-medium">
+              {duplicateInvoiceModal.message}
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setDuplicateInvoiceModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-sm cursor-pointer"
+              >
+                Understood
+              </button>
             </div>
           </div>
         </div>
