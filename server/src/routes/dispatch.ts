@@ -11,6 +11,7 @@ import { recordAuditLog } from '../utils/audit';
 import { broadcast } from '../ws';
 import { parseTaxInvoiceWithCoordinates } from '../utils/pdfTableParser';
 import { matchInvoiceItemToQuotationItems, normalizeCeramicName, isItemMatch, ItemMatchEvaluation } from '../utils/fuzzyItemMatcher';
+import { generateDeliveryChallanPdf } from '../utils/challanGenerator';
 
 export const dispatchRouter = Router();
 
@@ -4176,7 +4177,8 @@ dispatchRouter.get('/challan/:id/pdf', async (req: Request, res: Response) => {
               dr.driver_name,
               dr.driver_phone,
               COALESCE(dr.completed_date, q.dispatched_at, CURRENT_TIMESTAMP) as dispatch_time,
-              COALESCE(dr.dispatched_by_name, q.dispatched_by_name, 'Warehouse Dispatcher') as dispatched_by_name
+              COALESCE(dr.dispatched_by_name, q.dispatched_by_name, 'Warehouse Dispatcher') as dispatched_by_name,
+              (SELECT invoice_number FROM dispatch_invoices WHERE quotation_id = q.id ORDER BY id DESC LIMIT 1) as last_invoice_number
        FROM quotations q
        LEFT JOIN (
          SELECT DISTINCT ON (quotation_id) *
@@ -4205,91 +4207,16 @@ dispatchRouter.get('/challan/:id/pdf', async (req: Request, res: Response) => {
     const compRows = await query('SELECT * FROM company_settings LIMIT 1');
     const comp = compRows[0] || { company_name: 'AMA CERAMICS PVT LTD', address_line1: 'Whitefield, Bengaluru', phone: '+91 96637 73871', gstin: '29ABCDE1234F1Z5' };
 
-    const doc = new PDFDocument({ margin: 36, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Challan_${q.challan_number}.pdf"`);
-    doc.pipe(res);
 
-    // Header bar
-    doc.rect(36, 36, 523, 60).fill('#1E293B');
-    doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF').text(comp.company_name.toUpperCase(), 50, 48);
-    doc.fontSize(8.5).font('Helvetica').fillColor('#94A3B8').text(comp.tagline || 'Commercial Quotation & Dispatch Management', 50, 68);
-    doc.fontSize(8.5).fillColor('#E2E8F0').text(`GSTIN: ${comp.gstin || '-'} | Phone: ${comp.phone || '-'}`, 50, 80);
-
-    // Title banner
-    doc.rect(36, 104, 523, 24).fill('#E2E8F0');
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#0F172A').text('OFFICIAL DELIVERY CHALLAN / GOODS DISPATCH NOTE', 50, 110, { align: 'center', width: 495 });
-
-    // Meta box
-    doc.rect(36, 136, 523, 75).stroke('#CBD5E1');
-    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#334155');
-    doc.text(`Challan No: ${q.challan_number}`, 46, 144);
-    doc.text(`Quotation Ref: ${q.quotation_number}`, 46, 158);
-    doc.text(`Dispatch Date: ${new Date(q.dispatch_time).toLocaleDateString('en-IN')}`, 46, 172);
-    doc.text(`Vehicle No: ${q.vehicle_no || 'Standard Commercial'}`, 46, 186);
-
-    doc.text(`Customer: ${q.customer_name}`, 310, 144);
-    doc.text(`Contact: ${q.customer_phone || '-'}`, 310, 158);
-    doc.text(`Driver / Phone: ${q.driver_name || '-'} (${q.driver_phone || '-'})`, 310, 172);
-    doc.text(`Delivery Site: ${(q.delivery_site || '').substring(0, 35)}`, 310, 186);
-
-    // Table Header
-    let y = 222;
-    doc.rect(36, y, 523, 20).fill('#3B82F6');
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
-    doc.text('Sl.', 44, y + 6, { width: 25, align: 'center' });
-    doc.text('Item Description', 74, y + 6, { width: 200 });
-    doc.text('Brand / Size', 278, y + 6, { width: 95 });
-    doc.text('Ordered Qty', 377, y + 6, { width: 60, align: 'right' });
-    doc.text('Dispatched Qty', 441, y + 6, { width: 60, align: 'right' });
-    doc.text('Status', 505, y + 6, { width: 50, align: 'center' });
-
-    y += 20;
-    let totalDeliveredBoxes = 0;
-
-    itemRows.forEach((it: any, idx: number) => {
-      const rowH = 18;
-      doc.rect(36, y, 523, rowH).stroke('#E2E8F0');
-      doc.fontSize(7.5).font('Helvetica').fillColor('#1E293B');
-
-      const ord = parseFloat(it.quantity_boxes || it.quantity_sqft || 1);
-      const disp = parseFloat(it.dispatched_quantity || ord);
-      totalDeliveredBoxes += disp;
-
-      doc.text(String(idx + 1), 44, y + 5, { width: 25, align: 'center' });
-      doc.text(it.description || '-', 74, y + 5, { width: 200, ellipsis: true });
-      doc.text(`${it.brand || '-'} / ${it.size || '-'}`, 278, y + 5, { width: 95, ellipsis: true });
-      doc.text(`${ord.toFixed(0)} ${it.product_type || 'boxes'}`, 377, y + 5, { width: 60, align: 'right' });
-      doc.text(`${disp.toFixed(0)} ${it.product_type || 'boxes'}`, 441, y + 5, { width: 60, align: 'right' });
-      doc.text(it.dispatch_status || 'Ready', 505, y + 5, { width: 50, align: 'center' });
-
-      y += rowH;
+    const doc = generateDeliveryChallanPdf({
+      company: comp,
+      quotation: q,
+      items: itemRows,
     });
 
-    // Summary row
-    doc.rect(36, y, 523, 20).fill('#F1F5F9');
-    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0F172A');
-    doc.text('TOTAL DISPATCHED UNITS:', 250, y + 6);
-    doc.text(`${totalDeliveredBoxes.toFixed(0)} Boxes / Units`, 441, y + 6, { width: 60, align: 'right' });
-    y += 40;
-
-    // Terms & Signatures
-    doc.fontSize(7.5).font('Helvetica').fillColor('#64748B');
-    doc.text('Declaration: Received the above-listed materials in good order and condition with verified quantities.', 36, y);
-    y += 45;
-
-    // Signature boxes
-    doc.rect(50, y, 180, 50).stroke('#CBD5E1');
-    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#475569').text('DISPATCHED BY (GODOWN SUPERVISOR)', 60, y + 8);
-    doc.font('Helvetica').text(`Name: ${q.dispatched_by_name}`, 60, y + 26);
-    doc.text('Signature & Stamp: _______________', 60, y + 38);
-
-    doc.rect(330, y, 180, 50).stroke('#CBD5E1');
-    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#475569').text('RECEIVED BY (CUSTOMER / SITE AGENT)', 340, y + 8);
-    doc.font('Helvetica').text(`Customer: ${q.customer_name}`, 340, y + 26);
-    doc.text('Signature & Date: _________________', 340, y + 38);
-
-    doc.end();
+    doc.pipe(res);
   } catch (error: any) {
     res.status(500).send('Error generating Delivery Challan: ' + error.message);
   }
