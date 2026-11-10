@@ -296,13 +296,16 @@ export function generateDeliveryChallanPdf(data: ChallanPdfData): PDFKit.PDFDocu
     .text(q.dispatched_by_name || 'Godown Warehouse Team', rightColX + 62, curY + 48, { width: colW - 72, ellipsis: true });
 
   if (q.last_invoice_number) {
+    const invRefFormatted = String(q.last_invoice_number).startsWith('#')
+      ? String(q.last_invoice_number)
+      : `#${q.last_invoice_number}`;
     doc
       .font('Helvetica')
       .fillColor(textMuted)
       .text('Billed Inv Ref:', rightColX + 10, curY + 60)
       .font('Helvetica-Bold')
       .fillColor(emeraldDark)
-      .text(`#${q.last_invoice_number}`, rightColX + 72, curY + 60);
+      .text(invRefFormatted, rightColX + 72, curY + 60);
   }
 
   // 3. Items Table Header
@@ -407,13 +410,12 @@ export function generateDeliveryChallanPdf(data: ChallanPdfData): PDFKit.PDFDocu
       .fillColor(textDark)
       .text(it.description || 'Tile Product', colDescX + 4, curY + 5, { width: colDescW - 8, ellipsis: true });
 
-    const specsSubtitle = [it.size, it.item_code].filter(Boolean).join(' • ');
-    if (specsSubtitle) {
+    if (it.item_code) {
       doc
         .fontSize(6.5)
         .font('Helvetica')
         .fillColor(textMuted)
-        .text(specsSubtitle, colDescX + 4, curY + 15, { width: colDescW - 8, ellipsis: true });
+        .text(`Code: ${it.item_code}`, colDescX + 4, curY + 15, { width: colDescW - 8, ellipsis: true });
     }
 
     // Brand / Specs
@@ -710,7 +712,8 @@ export function generateDeliveryChallanPdf(data: ChallanPdfData): PDFKit.PDFDocu
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    const footerY = 806;
+    doc.page.margins.bottom = 5;
+    const footerY = 794;
     doc
       .moveTo(leftX, footerY)
       .lineTo(rightX, footerY)
@@ -721,13 +724,18 @@ export function generateDeliveryChallanPdf(data: ChallanPdfData): PDFKit.PDFDocu
       .fontSize(6)
       .font('Helvetica')
       .fillColor(textLight)
-      .text('Official Computer-Generated Delivery Challan • AMA Ceramics Pvt Ltd • Valid without physical endorsement if digitally reconciled', leftX, footerY + 5);
+      .text(
+        'Official Computer-Generated Delivery Challan • AMA Ceramics Pvt Ltd • Valid without physical endorsement if digitally reconciled',
+        leftX,
+        footerY + 5,
+        { width: pageWidth - 70, lineBreak: false }
+      );
 
     doc
       .fontSize(6)
       .font('Helvetica-Bold')
       .fillColor(brandSteel)
-      .text(`Page ${i + 1} of ${range.count}`, rightX - 60, footerY + 5, { align: 'right', width: 60 });
+      .text(`Page ${i + 1} of ${range.count}`, rightX - 60, footerY + 5, { align: 'right', width: 60, lineBreak: false });
   }
 
   doc.end();
