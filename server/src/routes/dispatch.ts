@@ -5848,6 +5848,12 @@ dispatchRouter.post('/credit-notes/apply', async (req: Request, res: Response) =
 
         const newFulfillmentStatus = newDispatched <= 0 ? 'PENDING' : 'PARTIALLY_DISPATCHED';
         const pendingNote = `[REPLACEMENT INBOUND] CN #${credit_note_number} deducted ${returnQty} box(es). Pending re-dispatch: ${newPending} box(es). Sourcing: ${sourcingStatus}`;
+        const dispatchStatusVal =
+          sourcingStatus === 'LOCAL_ARRANGE'
+            ? 'Need to Arrange from Local'
+            : sourcingStatus === 'FACTORY_ORDER'
+            ? 'Factory Order'
+            : 'Ready Stock';
 
         await client.query(
           `UPDATE quotation_items
@@ -5855,15 +5861,15 @@ dispatchRouter.post('/credit-notes/apply', async (req: Request, res: Response) =
                pending_quantity = $2,
                fulfillment_status = $3,
                pending_sourcing_status = $4,
-               dispatch_status = CASE WHEN $4 = 'LOCAL_ARRANGE' THEN 'Need to Arrange from Local' WHEN $4 = 'FACTORY_ORDER' THEN 'Factory Order' ELSE 'Ready Stock' END,
-               pending_notes = CASE WHEN pending_notes IS NULL OR pending_notes = '' THEN $5 ELSE pending_notes || E'\n' || $5 END,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = $6`,
+               dispatch_status = $5,
+               pending_notes = CASE WHEN pending_notes IS NULL OR pending_notes = '' THEN $6::text ELSE pending_notes || E'\n' || $6::text END
+           WHERE id = $7`,
           [
             newDispatched,
             newPending,
             newFulfillmentStatus,
             sourcingStatus,
+            dispatchStatusVal,
             pendingNote,
             qiId,
           ]
@@ -5881,7 +5887,7 @@ dispatchRouter.post('/credit-notes/apply', async (req: Request, res: Response) =
       await client.query(
         `UPDATE quotations
          SET dispatch_status = 'PARTIALLY_DISPATCHED',
-             dispatch_notes = CASE WHEN dispatch_notes IS NULL OR dispatch_notes = '' THEN $1 ELSE dispatch_notes || E'\n' || $1 END,
+             dispatch_notes = CASE WHEN dispatch_notes IS NULL OR dispatch_notes = '' THEN $1::text ELSE dispatch_notes || E'\n' || $1::text END,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [reopenNote, quotationId]
