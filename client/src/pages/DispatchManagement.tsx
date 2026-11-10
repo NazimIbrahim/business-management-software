@@ -433,6 +433,8 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         [
           'dispatch:updated',
           'dispatch:partial_applied',
+          'dispatch:pending_status_updated',
+          'dispatch:shipment_created',
           'item_status:changed',
           'payment:recorded',
           'DISPATCH_ITEM_CHANGED',
@@ -448,6 +450,9 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         if (currentView === 'local-tracker') loadLocalTracker();
         if (currentView === 'factory-tracker') loadFactoryTracker();
         if (currentView === 'payment-tracking') loadPaymentTracking();
+        if (currentView === 'local-history') loadLocalHistory();
+        if (currentView === 'factory-history') loadFactoryHistory();
+        if (currentView === 'reports') loadReports('this_month');
         if (selectedQuotationId && event.payload?.quotation_id === selectedQuotationId) {
           loadQuotationDetail(selectedQuotationId);
         }

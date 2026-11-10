@@ -67,6 +67,9 @@ export interface ProcessingItem {
   last_invoice_id?: number;
   dispatch_status: string;
   procurement_status?: string;
+  procurement_category?: string;
+  pending_sourcing_status?: string;
+  pending_notes?: string;
   expected_dispatch_date?: string;
   item_image?: string;
   total_amount?: number;
@@ -91,6 +94,8 @@ export interface ProcessingQuotation {
   dispatch_status: string;
   manager_approval_note?: string;
   dispatched_total_value?: number;
+  remaining_total_value?: number;
+  shipments?: any[];
   expected_dispatch_date?: string;
   scheduled_dispatch_date?: string;
   dispatch_notes?: string;
@@ -270,6 +275,66 @@ export const ProcessingDispatchView: React.FC<Props> = ({
   const [reviewApprovalQuote, setReviewApprovalQuote] = useState<ProcessingQuotation | null>(null);
   const [reviewApprovalActionNote, setReviewApprovalActionNote] = useState('');
   const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
+
+  // Granular Remaining Availability & Target Date State
+  const [pendingStatusOverrides, setPendingStatusOverrides] = useState<
+    Record<number, { status?: string; date?: string; isSaving?: boolean }>
+  >({});
+
+  const handleUpdatePendingStatus = async (
+    itemId: number,
+    newStatus?: string,
+    newDate?: string,
+    notes?: string
+  ) => {
+    const current = pendingStatusOverrides[itemId] || {};
+    const updatedStatus = newStatus !== undefined ? newStatus : current.status;
+    const updatedDate = newDate !== undefined ? newDate : current.date;
+
+    setPendingStatusOverrides((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        status: updatedStatus,
+        date: updatedDate,
+        isSaving: true,
+      },
+    }));
+
+    try {
+      const res = await fetchApi<any>(`/api/dispatch/items/${itemId}/pending-status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          pending_sourcing_status: updatedStatus,
+          expected_dispatch_date: updatedDate || null,
+          pending_notes: notes,
+        }),
+      });
+
+      if (res && res.success) {
+        setPendingStatusOverrides((prev) => ({
+          ...prev,
+          [itemId]: {
+            ...prev[itemId],
+            status: res.item?.pending_sourcing_status || updatedStatus,
+            date: res.item?.expected_dispatch_date ? res.item.expected_dispatch_date.split('T')[0] : updatedDate,
+            isSaving: false,
+          },
+        }));
+        onRefresh();
+      } else {
+        throw new Error(res?.error || 'Failed to update pending sourcing status');
+      }
+    } catch (err: any) {
+      console.error('Error updating pending status:', err);
+      alert(`Error updating sourcing status: ${err.message || 'Network error'}`);
+      setPendingStatusOverrides((prev) => {
+        const copy = { ...prev };
+        delete copy[itemId];
+        return copy;
+      });
+    }
+  };
 
   // Helper to open reconciliation drawer with guaranteed extractedItems and auto-match fallback
   const openReconciliationDrawer = (
@@ -1018,7 +1083,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                       : 'bg-rose-50/90 border-rose-200 text-rose-950'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
                     <div className="flex items-center space-x-1.5 font-medium">
                       <CreditCard
                         size={13}
@@ -1032,14 +1097,34 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
                     <span className="text-slate-300">|</span>
 
+                    <div className="flex items-center space-x-1.5 font-medium">
+                      <Truck size={13} className="text-emerald-600" />
+                      <span className="text-slate-600">Dispatched Value:</span>
+                      <span className="font-bold font-mono text-emerald-900">
+                        {formatCurrency(d.dispatched_total_value || 0)}
+                      </span>
+                    </div>
+
+                    <span className="text-slate-300">|</span>
+
+                    <div className="flex items-center space-x-1.5 font-medium">
+                      <Clock size={13} className="text-amber-600" />
+                      <span className="text-slate-600">Remaining Value:</span>
+                      <span className="font-bold font-mono text-amber-900">
+                        {formatCurrency(d.remaining_total_value || 0)}
+                      </span>
+                    </div>
+
+                    <span className="text-slate-300">|</span>
+
                     <div className="flex items-center space-x-1.5">
                       <Package size={13} className="text-slate-500" />
-                      <span className="text-slate-600">Committed Immediate Value:</span>
+                      <span className="text-slate-600">Committed Value:</span>
                       <span className="font-bold font-mono text-slate-900">
                         {formatCurrency(d.committed_immediate_value || 0)}
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
-                        (Dispatched: {formatCurrency(d.dispatched_total_value || 0)} + Ready: {formatCurrency(d.ready_stock_total_value || 0)} + Local:{' '}
+                        (Ready: {formatCurrency(d.ready_stock_total_value || 0)} + Local:{' '}
                         {formatCurrency(d.local_purchase_total_value || 0)})
                       </span>
                     </div>
@@ -1098,7 +1183,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                           <th className="py-2 px-2.5 w-10 text-center">#</th>
                           <th className="py-2 px-2.5">Item Description & Specs</th>
                           <th className="py-2 px-2.5">Room / Area</th>
-                          <th className="py-2 px-2.5 text-center">Sourcing Status</th>
+                          <th className="py-2 px-2.5 min-w-[190px]">Remaining Sourcing & Target Date</th>
                           <th className="py-2 px-2.5 min-w-[220px]">Quantity Reconciliation (Quoted | Dispatched | Pending)</th>
                           <th className="py-2 px-2.5 text-center">Fulfillment Status</th>
                           <th className="py-2 px-2.5 text-right w-44">Dispatch Action</th>
@@ -1115,6 +1200,25 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                           const isPartiallyDispatched = it.fulfillment_status === 'PARTIALLY_DISPATCHED' || (dispatched > 0 && dispatched < ordered);
                           const isReady = it.dispatch_status === 'Ready Stock';
                           const isOverage = dispatched > ordered;
+
+                          // Granular pending status & target date overrides
+                          const override = pendingStatusOverrides[it.id];
+                          const rawStatus = override?.status !== undefined ? override.status : (it.pending_sourcing_status || 'READY_STOCK');
+                          const currentStatus =
+                            rawStatus === 'Need to Arrange from Local' || rawStatus === 'LOCAL_PURCHASE'
+                              ? 'LOCAL_ARRANGE'
+                              : rawStatus === 'Factory Order'
+                              ? 'FACTORY_ORDER'
+                              : rawStatus === 'Ready Stock'
+                              ? 'READY_STOCK'
+                              : rawStatus;
+                          const currentDate =
+                            override?.date !== undefined
+                              ? override.date
+                              : it.expected_dispatch_date
+                              ? it.expected_dispatch_date.split('T')[0]
+                              : '';
+                          const isSavingStatus = Boolean(override?.isSaving);
 
                           return (
                             <tr key={it.id} className="hover:bg-slate-50/50">
@@ -1134,22 +1238,60 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                               <td className="py-2.5 px-2.5 text-slate-600 font-medium text-[11px]">
                                 {it.area_name || 'General Area'}
                               </td>
-                              <td className="py-2.5 px-2.5 text-center">
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    isFullyDispatched
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : isReady
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : it.dispatch_status === 'Need to Arrange from Local'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : it.dispatch_status === 'Factory Order'
-                                      ? 'bg-indigo-100 text-indigo-800'
-                                      : 'bg-slate-100 text-slate-700'
-                                  }`}
-                                >
-                                  {it.dispatch_status}
-                                </span>
+                              <td className="py-2.5 px-2.5">
+                                {pending === 0 || isFullyDispatched ? (
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                      <Check size={11} className="text-emerald-700" />
+                                      <span>Completed (100%)</span>
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1.5 min-w-[170px]">
+                                    <div className="flex items-center space-x-1.5">
+                                      <select
+                                        value={currentStatus}
+                                        disabled={!canEdit || isSavingStatus}
+                                        onChange={(e) =>
+                                          handleUpdatePendingStatus(it.id, e.target.value, currentDate)
+                                        }
+                                        className={`text-[11px] font-bold py-1 px-2 rounded-lg border shadow-2xs focus:outline-hidden focus:ring-1 transition-all cursor-pointer ${
+                                          currentStatus === 'READY_STOCK'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-900 focus:ring-blue-400'
+                                            : currentStatus === 'LOCAL_ARRANGE'
+                                            ? 'bg-amber-50 border-amber-300 text-amber-900 focus:ring-amber-400'
+                                            : currentStatus === 'FACTORY_ORDER'
+                                            ? 'bg-indigo-50 border-indigo-300 text-indigo-900 focus:ring-indigo-400'
+                                            : 'bg-slate-50 border-slate-300 text-slate-800 focus:ring-slate-400'
+                                        }`}
+                                        title="Assign sourcing channel for remaining pending boxes"
+                                      >
+                                        <option value="READY_STOCK">🏢 Ready Stock (Godown)</option>
+                                        <option value="LOCAL_ARRANGE">🛍️ Local Arrange (Dealer)</option>
+                                        <option value="FACTORY_ORDER">🏭 Factory Order (Morbi)</option>
+                                        <option value="AWAITING_STOCK">⏳ Awaiting Stock</option>
+                                      </select>
+                                      {isSavingStatus && (
+                                        <RefreshCw size={11} className="animate-spin text-slate-400 shrink-0" />
+                                      )}
+                                    </div>
+
+                                    {/* Expected Dispatch / Availability Date */}
+                                    <div className="flex items-center space-x-1 text-[10px] text-slate-500">
+                                      <Calendar size={11} className="shrink-0 text-slate-400" />
+                                      <input
+                                        type="date"
+                                        value={currentDate}
+                                        disabled={!canEdit || isSavingStatus}
+                                        onChange={(e) =>
+                                          handleUpdatePendingStatus(it.id, currentStatus, e.target.value)
+                                        }
+                                        className="py-0.5 px-1.5 rounded border border-slate-200 text-[10px] font-mono text-slate-700 bg-white shadow-2xs focus:outline-hidden focus:ring-1 focus:ring-slate-300 cursor-pointer"
+                                        title="Expected dispatch or arrival date for pending quantity"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Split Badges: Quoted | Dispatched | Pending */}

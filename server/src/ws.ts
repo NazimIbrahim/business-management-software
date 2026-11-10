@@ -26,6 +26,8 @@ export interface WsEvent {
     | 'dispatch:partial_applied'
     | 'dispatch:invoice_removed'
     | 'dispatch:updated'
+    | 'dispatch:pending_status_updated'
+    | 'dispatch:shipment_created'
     | 'item_status:changed'
     | 'payment:recorded'
     | 'target:updated'
