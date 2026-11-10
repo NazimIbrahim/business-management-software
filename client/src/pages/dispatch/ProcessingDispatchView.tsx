@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   Truck,
   Package,
@@ -770,16 +771,21 @@ export const ProcessingDispatchView: React.FC<Props> = ({
     setSafetyModalItem(null);
   };
 
-  const filtered = dispatches.filter((d) => {
-    const term = search.toLowerCase();
-    return (
-      d.quotation_number?.toLowerCase().includes(term) ||
-      d.customer_name?.toLowerCase().includes(term) ||
-      d.customer_phone?.includes(term) ||
-      d.site_location?.toLowerCase().includes(term) ||
-      d.vehicle_no?.toLowerCase().includes(term)
-    );
-  });
+  const debouncedSearch = useDebounce(search, 300);
+
+  const filtered = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    if (!term) return dispatches;
+    return dispatches.filter((d) => {
+      return (
+        d.quotation_number?.toLowerCase().includes(term) ||
+        d.customer_name?.toLowerCase().includes(term) ||
+        d.customer_phone?.includes(term) ||
+        d.site_location?.toLowerCase().includes(term) ||
+        d.vehicle_no?.toLowerCase().includes(term)
+      );
+    });
+  }, [dispatches, debouncedSearch]);
 
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
@@ -1085,8 +1091,8 @@ export const ProcessingDispatchView: React.FC<Props> = ({
 
                 {/* Expanded Line Items Table */}
                 {isExpanded && (
-                  <div className="p-3 overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
+                  <div className="p-3 overflow-x-auto scrollbar-thin">
+                    <table className="w-full min-w-[950px] text-left border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                           <th className="py-2 px-2.5 w-10 text-center">#</th>
@@ -1226,14 +1232,14 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                                 ) : canEdit ? (
                                   <button
                                     onClick={() => handleInitiatePartial(d, it)}
-                                    className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs cursor-pointer transition-colors ${
+                                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-2xs cursor-pointer transition-colors shrink-0 whitespace-nowrap ${
                                       hasInvoice
-                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                        ? 'btn-emerald text-white'
                                         : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
                                     }`}
                                     title={hasInvoice ? 'Record Partial / Full Dispatch' : 'Tax Invoice required before dispatch'}
                                   >
-                                    <Truck size={12} />
+                                    <Truck size={13} className="w-3.5 h-3.5 shrink-0" />
                                     <span>Record Dispatch</span>
                                   </button>
                                 ) : (
@@ -1358,7 +1364,7 @@ export const ProcessingDispatchView: React.FC<Props> = ({
       {/* 3. Auto-Reconciliation Confirmation Drawer / Modal */}
       {reconcileDrawer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
             {/* Header */}
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
@@ -1409,10 +1415,10 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                   <button
                     onClick={() => handleRescanInvoice(reconcileDrawer.quote.id)}
                     disabled={isRescanning}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer shadow-2xs transition-all disabled:opacity-60"
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg btn-emerald font-bold text-[11px] cursor-pointer shadow-2xs transition-all disabled:opacity-60"
                     title="Re-extract line items and re-reconcile with Tax Invoice"
                   >
-                    <RefreshCw size={12} className={isRescanning ? 'animate-spin' : ''} />
+                    <RefreshCw size={12} className={`w-3 h-3 shrink-0 ${isRescanning ? 'animate-spin' : ''}`} />
                     <span>{isRescanning ? 'Scanning...' : 'Re-scan Invoice'}</span>
                   </button>
                 </div>
@@ -1428,8 +1434,8 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                     💡 Invoice Qty is editable (recalculates live)
                   </span>
                 </div>
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
+                <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto scrollbar-thin">
+                  <table className="w-full min-w-[650px] text-left text-xs">
                     <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
                       <tr>
                         <th className="py-2 px-3">Description</th>
@@ -1859,9 +1865,9 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                       <button
                         onClick={() => handleRequestManagementApproval(quote.id, deficit, sliceDispatchValue)}
                         disabled={isCommittingReconcile}
-                        className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                        className="btn btn-amber btn-sm px-4 py-1.5 font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
                       >
-                        <AlertTriangle size={13} />
+                        <AlertTriangle size={14} className="w-3.5 h-3.5 shrink-0" />
                         <span>{isCommittingReconcile ? 'Submitting...' : 'Submit for Management Approval'}</span>
                       </button>
                     );
@@ -1879,9 +1885,9 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                         )
                       }
                       disabled={isCommittingReconcile || !managementPaymentOverride || !managementOverrideNote.trim()}
-                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                      className="btn btn-danger btn-sm px-4 py-1.5 font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
                     >
-                      <ShieldCheck size={13} />
+                      <ShieldCheck size={14} className="w-3.5 h-3.5 shrink-0" />
                       <span>{isCommittingReconcile ? 'Authorizing...' : 'Authorize & Apply Dispatch (Management Override)'}</span>
                     </button>
                   );
@@ -1897,9 +1903,9 @@ export const ProcessingDispatchView: React.FC<Props> = ({
                       )
                     }
                     disabled={isCommittingReconcile}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                    className="btn btn-emerald btn-sm px-4 py-1.5 font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
                   >
-                    <Check size={13} />
+                    <Check size={14} className="w-3.5 h-3.5 shrink-0" />
                     <span>{isCommittingReconcile ? 'Applying...' : 'Apply Reconciled Dispatch'}</span>
                   </button>
                 );

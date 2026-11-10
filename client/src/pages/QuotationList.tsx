@@ -517,10 +517,10 @@ export const QuotationList: React.FC<Props> = ({
 
       {/* Quotations Table */}
       <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-[#E0E1DD] bg-[#F8F9FA]/80 text-[#415A77] font-semibold text-[11px] uppercase tracking-wider">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[1050px] text-left text-xs border-collapse">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-[#E0E1DD] bg-slate-50/95 backdrop-blur-xs text-[#415A77] font-semibold text-[11px] uppercase tracking-wider shadow-2xs">
                 <th className="py-3 px-3.5 w-36 whitespace-nowrap text-left font-mono">Quotation Ref</th>
                 <th className="py-3 px-3 w-28 whitespace-nowrap text-left">Date</th>
                 <th className="py-3 px-3.5 min-w-[170px] text-left">Customer</th>

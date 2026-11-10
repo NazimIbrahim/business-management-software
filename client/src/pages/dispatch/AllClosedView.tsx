@@ -178,7 +178,7 @@ export const AllClosedView: React.FC<Props> = ({
             No closed quotations waiting in the FIFO dispatch queue.
           </div>
         ) : (
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[1000px] text-left border-collapse text-xs">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs text-[11px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200 z-10 shadow-2xs">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12">FIFO #</th>
@@ -188,7 +188,7 @@ export const AllClosedView: React.FC<Props> = ({
                 <th className="py-2.5 px-3">Payment Status</th>
                 <th className="py-2.5 px-3">Material Status</th>
                 <th className="py-2.5 px-3">Closed Date</th>
-                <th className="py-2.5 px-3 text-right">Action</th>
+                <th className="py-2.5 px-3 text-right w-40 min-w-[150px]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -299,12 +299,12 @@ export const AllClosedView: React.FC<Props> = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-3 px-3 text-right w-40 min-w-[150px]">
                         <button
                           onClick={() => onInitiateDispatch(q)}
-                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all hover:shadow-md"
+                          className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-1.5 rounded-xl btn-indigo text-white font-bold text-xs shadow-xs cursor-pointer transition-all hover:shadow-md shrink-0 whitespace-nowrap"
                         >
-                          <Truck size={13} />
+                          <Truck size={14} className="w-3.5 h-3.5 shrink-0" />
                           <span>Initiate / Review</span>
                         </button>
                       </td>

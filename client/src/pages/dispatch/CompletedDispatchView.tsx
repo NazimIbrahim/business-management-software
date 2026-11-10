@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   CheckCircle2,
   Printer,
@@ -173,31 +174,41 @@ export const CompletedDispatchView: React.FC<Props> = ({
     }));
   };
 
-  const filtered = completedList.filter((c) => {
-    const term = search.toLowerCase();
-    const matchInvoices = (c.invoices || []).some((inv) =>
-      inv.invoice_number?.toLowerCase().includes(term)
-    );
-    const matchHistory = (c.dispatch_history || []).some(
-      (h) =>
-        h.item_description?.toLowerCase().includes(term) ||
-        h.invoice_number?.toLowerCase().includes(term)
-    );
+  const debouncedSearch = useDebounce(search, 300);
 
-    return (
-      c.quotation_number?.toLowerCase().includes(term) ||
-      c.challan_number?.toLowerCase().includes(term) ||
-      c.customer_name?.toLowerCase().includes(term) ||
-      c.customer_phone?.includes(term) ||
-      c.vehicle_no?.toLowerCase().includes(term) ||
-      c.driver_name?.toLowerCase().includes(term) ||
-      matchInvoices ||
-      matchHistory
-    );
-  });
+  const filtered = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    if (!term) return completedList;
+    return completedList.filter((c) => {
+      const matchInvoices = (c.invoices || []).some((inv) =>
+        inv.invoice_number?.toLowerCase().includes(term)
+      );
+      const matchHistory = (c.dispatch_history || []).some(
+        (h) =>
+          h.item_description?.toLowerCase().includes(term) ||
+          h.invoice_number?.toLowerCase().includes(term)
+      );
 
-  const totalDeliveredValue = filtered.reduce((acc, c) => acc + parseFloat(String(c.net_total || 0)), 0);
-  const totalBoxes = filtered.reduce((acc, c) => acc + parseFloat(String(c.total_boxes || 0)), 0);
+      return (
+        c.quotation_number?.toLowerCase().includes(term) ||
+        c.challan_number?.toLowerCase().includes(term) ||
+        c.customer_name?.toLowerCase().includes(term) ||
+        c.customer_phone?.includes(term) ||
+        c.vehicle_no?.toLowerCase().includes(term) ||
+        c.driver_name?.toLowerCase().includes(term) ||
+        matchInvoices ||
+        matchHistory
+      );
+    });
+  }, [completedList, debouncedSearch]);
+
+  const totalDeliveredValue = useMemo(() => {
+    return filtered.reduce((acc, c) => acc + parseFloat(String(c.net_total || 0)), 0);
+  }, [filtered]);
+
+  const totalBoxes = useMemo(() => {
+    return filtered.reduce((acc, c) => acc + parseFloat(String(c.total_boxes || 0)), 0);
+  }, [filtered]);
 
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
@@ -277,7 +288,7 @@ export const CompletedDispatchView: React.FC<Props> = ({
           </div>
         ) : (
           <div className="flex-1 min-h-0 w-full overflow-x-auto overflow-y-auto scrollbar-thin">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full min-w-[1000px] text-left border-collapse text-xs">
               <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-xs">
                 <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                   <th className="py-2.5 px-3 w-10 text-center"></th>

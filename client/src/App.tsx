@@ -343,10 +343,10 @@ const AppContent: React.FC = () => {
           isOpen={isMobileMenuOpen}
           onClose={() => setIsMobileMenuOpen(false)}
         />
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-transparent">
+        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-transparent">
           <div
             key={activeTab + (selectedQuotationId ? `-${selectedQuotationId}` : '') + (isEditingQuotation ? '-edit' : '')}
-            className={`flex-1 flex flex-col min-w-0 ${activeTab === 'dispatch' || activeTab.startsWith('dispatch-') ? 'overflow-hidden h-full' : 'overflow-y-auto overflow-x-hidden'} bg-transparent animate-page-enter`}
+            className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-transparent animate-page-enter"
           >
             {renderMainContent()}
           </div>

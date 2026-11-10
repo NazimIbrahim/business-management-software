@@ -345,8 +345,8 @@ export const CustomerManagement: React.FC<Props> = ({ onSelectQuotation }) => {
                     No quotations found for this customer.
                   </div>
                 ) : (
-                  <div className="border border-gray-200 rounded-md overflow-hidden">
-                    <table className="w-full text-left text-xs">
+                  <div className="border border-gray-200 rounded-md overflow-hidden overflow-x-auto scrollbar-thin">
+                    <table className="w-full min-w-[700px] text-left text-xs">
                       <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200 text-[11px]">
                         <tr>
                           <th className="py-2 px-3">Quotation Ref</th>

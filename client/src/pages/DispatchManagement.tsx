@@ -1310,8 +1310,8 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                   </div>
 
                   {/* Items Table */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-                    <table className="w-full text-left text-xs">
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs overflow-x-auto scrollbar-thin">
+                    <table className="w-full min-w-[650px] text-left text-xs">
                       <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
                         <tr>
                           <th className="py-2.5 px-3">#</th>
@@ -1461,9 +1461,9 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
                         type="button"
                         onClick={handleSaveQuotationItemsDispatch}
                         disabled={savingDispatch}
-                        className="btn btn-primary btn-sm text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                        className="btn btn-emerald btn-sm text-xs font-bold text-white border-none shadow-xs flex items-center space-x-1.5 cursor-pointer"
                       >
-                        <Save size={14} className={savingDispatch ? 'animate-spin' : ''} />
+                        <Save size={14} className={`w-3.5 h-3.5 shrink-0 ${savingDispatch ? 'animate-spin' : ''}`} />
                         <span>{savingDispatch ? 'Saving Changes...' : 'Save Dispatch Sourcing'}</span>
                       </button>
                     )}
@@ -1583,8 +1583,9 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
               <button
                 type="button"
                 onClick={shortfallConfirm.onConfirm}
-                className="btn btn-sm w-full sm:w-auto bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/20 cursor-pointer"
+                className="btn btn-amber btn-sm w-full sm:w-auto font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
               >
+                <AlertTriangle size={14} className="w-3.5 h-3.5 shrink-0" />
                 <span>Proceed Anyway ({shortfallConfirm.actionBadgeText})</span>
               </button>
             </div>

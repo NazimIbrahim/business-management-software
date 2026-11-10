@@ -121,7 +121,7 @@ export const PdfPreviewModal: React.FC<Props> = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="bg-white rounded-lg border border-[#CBD5E1] shadow-2xl flex flex-col overflow-hidden w-[92vw] h-[92vh] max-w-6xl modal-dialog"
+        className="bg-white rounded-xl border border-[#CBD5E1] shadow-2xl flex flex-col overflow-hidden w-[94vw] h-[88vh] max-h-[88vh] max-w-6xl modal-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Bar */}

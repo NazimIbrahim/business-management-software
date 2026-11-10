@@ -29,6 +29,7 @@ import {
   User,
 } from 'lucide-react';
 import { PdfPreviewModal } from '../components/PdfPreviewModal';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface CustomerSearchResult {
   id: number;
@@ -246,15 +247,9 @@ export const PaymentManagement: React.FC = () => {
 
   const selectedQuotation = customerQuotations.find((q) => q.id === selectedQuotationId);
 
-  // File Handling for Proofs
-  const handleProofFile = (file: File) => {
+  // File Handling for Proofs (with Canvas-based pre-compression)
+  const handleProofFile = async (file: File) => {
     setProofError(null);
-
-    // Validate size (max 5 MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setProofError('File exceeds 5MB limit. Please upload a compressed screenshot or PDF.');
-      return;
-    }
 
     // Validate mime type
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
@@ -263,9 +258,25 @@ export const PaymentManagement: React.FC = () => {
       return;
     }
 
-    setProofFile(file);
+    // Auto-compress image before memory/storage buffering
+    let processedFile = file;
     if (file.type.startsWith('image/')) {
-      const preview = URL.createObjectURL(file);
+      try {
+        processedFile = await compressImageFile(file, { maxDimension: 1600, quality: 0.80 });
+      } catch (e) {
+        console.warn('Image pre-compression skipped:', e);
+      }
+    }
+
+    // Validate size (max 5 MB)
+    if (processedFile.size > 5 * 1024 * 1024) {
+      setProofError('File exceeds 5MB limit. Please upload a compressed screenshot or PDF.');
+      return;
+    }
+
+    setProofFile(processedFile);
+    if (processedFile.type.startsWith('image/')) {
+      const preview = URL.createObjectURL(processedFile);
       setProofPreviewUrl(preview);
     } else {
       setProofPreviewUrl('pdf');
@@ -733,7 +744,7 @@ export const PaymentManagement: React.FC = () => {
       {modalOpen && (
         <div className="modal-overlay" onClick={() => setModalOpen(false)}>
           <div
-            className="card shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden bg-white"
+            className="card shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col border border-slate-200 overflow-hidden bg-white"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -756,7 +767,7 @@ export const PaymentManagement: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 space-y-4 overflow-y-auto text-xs flex-1">
+            <div className="p-5 space-y-4 overflow-y-auto text-xs flex-1 min-h-0 scrollbar-thin">
               {error && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-start space-x-2">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -1182,7 +1193,7 @@ export const PaymentManagement: React.FC = () => {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+                <div className="flex justify-end space-x-2 p-3.5 border-t border-slate-200 bg-slate-50 shrink-0 sticky bottom-0">
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"

@@ -445,8 +445,8 @@ export const ProductManagement: React.FC = () => {
           </div>
 
           {/* Desktop View: Full Spreadsheet Table */}
-          <div className="quotation-desktop-table overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="quotation-desktop-table overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[700px] text-left text-xs">
               <thead>
                 <tr className="border-b border-[#E0E1DD] text-[#415A77] bg-[#F8F9FA]/60 font-semibold text-[11px]">
                   <th className="py-2.5 px-3">Size / Specification</th>
