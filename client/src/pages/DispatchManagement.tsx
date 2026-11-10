@@ -351,14 +351,20 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
   }, [fetchApi]);
 
   const loadReports = useCallback(
-    async (range = 'month', fromDate?: string, toDate?: string) => {
+    async (range = 'this_month', fromDate?: string, toDate?: string) => {
       try {
         setReportsLoading(true);
         const p = new URLSearchParams({ range });
-        if (fromDate) p.append('fromDate', fromDate);
-        if (toDate) p.append('toDate', toDate);
+        if (fromDate) {
+          p.append('fromDate', fromDate);
+          p.append('from_date', fromDate);
+        }
+        if (toDate) {
+          p.append('toDate', toDate);
+          p.append('to_date', toDate);
+        }
         const res = await fetchApi<any>(`/api/dispatch/reports?${p.toString()}`);
-        setReportsData(res?.reports || null);
+        setReportsData(res?.reports || res || null);
       } catch (err: any) {
         console.warn('Failed to load reports:', err);
       } finally {
@@ -400,7 +406,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         loadFactoryHistory();
         break;
       case 'reports':
-        loadReports('month');
+        loadReports('this_month');
         break;
       default:
         loadAllClosed();
@@ -813,7 +819,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
         loadFactoryHistory();
         break;
       case 'reports':
-        loadReports('month');
+        loadReports('this_month');
         break;
     }
   };
@@ -946,7 +952,7 @@ export const DispatchManagement: React.FC<DispatchManagementProps> = ({ initialV
             reportData={reportsData}
             loading={reportsLoading}
             onFilterChange={(range, fromDate, toDate) => loadReports(range, fromDate, toDate)}
-            onRefresh={() => loadReports('month')}
+            onRefresh={() => loadReports('this_month')}
           />
         );
       default:

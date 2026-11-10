@@ -4258,64 +4258,126 @@ dispatchRouter.get('/factory-history', async (req: Request, res: Response) => {
 // 11. REPORTS (Aggregated analytics across date ranges)
 dispatchRouter.get('/reports', async (req: Request, res: Response) => {
   try {
-    const { range = 'this_month', from_date, to_date } = req.query;
+    const { range = 'this_month', from_date, to_date, fromDate, toDate } = req.query;
 
-    let dateCondition = "q.updated_at >= CURRENT_DATE - INTERVAL '30 days'";
-    if (range === 'today') {
-      dateCondition = 'q.updated_at::date = CURRENT_DATE';
-    } else if (range === 'this_week') {
-      dateCondition = "q.updated_at >= DATE_TRUNC('week', CURRENT_DATE)";
-    } else if (range === 'this_month') {
-      dateCondition = "q.updated_at >= DATE_TRUNC('month', CURRENT_DATE)";
-    } else if (range === 'custom' && from_date && to_date) {
-      dateCondition = `q.updated_at::date BETWEEN '${from_date}' AND '${to_date}'`;
+    const normRange = (range === 'month' || range === 'this_month')
+      ? 'this_month'
+      : (range === 'week' || range === 'this_week')
+      ? 'this_week'
+      : range;
+
+    const fDate = (from_date || fromDate) as string;
+    const tDate = (to_date || toDate) as string;
+
+    let qDateFilter = "COALESCE(q.dispatched_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('month', CURRENT_DATE)";
+    let lpDateFilter = "COALESCE(lp.completed_date, lp.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('month', CURRENT_DATE)";
+    let foDateFilter = "COALESCE(fo.unloaded_date, fo.order_date, fo.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('month', CURRENT_DATE)";
+
+    if (normRange === 'today') {
+      qDateFilter = "COALESCE(q.dispatched_at, q.updated_at, q.quotation_date, q.created_at)::date = CURRENT_DATE";
+      lpDateFilter = "COALESCE(lp.completed_date, lp.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at)::date = CURRENT_DATE";
+      foDateFilter = "COALESCE(fo.unloaded_date, fo.order_date, fo.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at)::date = CURRENT_DATE";
+    } else if (normRange === 'this_week') {
+      qDateFilter = "COALESCE(q.dispatched_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('week', CURRENT_DATE)";
+      lpDateFilter = "COALESCE(lp.completed_date, lp.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('week', CURRENT_DATE)";
+      foDateFilter = "COALESCE(fo.unloaded_date, fo.order_date, fo.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at) >= DATE_TRUNC('week', CURRENT_DATE)";
+    } else if (normRange === 'custom' && fDate && tDate) {
+      qDateFilter = `COALESCE(q.dispatched_at, q.updated_at, q.quotation_date, q.created_at)::date BETWEEN '${fDate}' AND '${tDate}'`;
+      lpDateFilter = `COALESCE(lp.completed_date, lp.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at)::date BETWEEN '${fDate}' AND '${tDate}'`;
+      foDateFilter = `COALESCE(fo.unloaded_date, fo.order_date, fo.updated_at, qi.procurement_updated_at, q.updated_at, q.quotation_date, q.created_at)::date BETWEEN '${fDate}' AND '${tDate}'`;
+    } else if (normRange === 'all') {
+      qDateFilter = "1=1";
+      lpDateFilter = "1=1";
+      foDateFilter = "1=1";
     }
 
-    // 1. Dispatch summary
+    // Role-based scoping for salespersons
+    const isSalesperson = req.user && req.user.role === 'salesperson';
+    const userRoleFilter = isSalesperson
+      ? `AND (q.sales_person_id = ${req.user!.id} OR q.assisted_sales_person_id = ${req.user!.id})`
+      : '';
+
+    // 1. Dispatch summary with isolated quotation totals
     const dispSummary = await query(
-      `SELECT 
-        COUNT(CASE WHEN q.dispatch_status = 'Dispatched' THEN 1 END) as completed_orders,
-        COUNT(CASE WHEN q.dispatch_status != 'Dispatched' THEN 1 END) as pending_orders,
-        SUM(CASE WHEN q.dispatch_status = 'Dispatched' THEN q.net_total ELSE 0 END) as delivered_value,
-        SUM(CASE WHEN q.dispatch_status != 'Dispatched' THEN q.net_total ELSE 0 END) as pending_backlog_value,
-        COALESCE(SUM(qi.dispatched_quantity), 0) as total_boxes_delivered
-      FROM quotations q
-      LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-      WHERE LOWER(q.status) IN ('closed', 'approved') AND ${dateCondition}`
+      `WITH filtered_quotes AS (
+        SELECT q.id, q.dispatch_status, q.net_total
+        FROM quotations q
+        WHERE LOWER(q.status) IN ('closed', 'approved') 
+          ${userRoleFilter}
+          AND ${qDateFilter}
+      )
+      SELECT 
+        COUNT(CASE WHEN fq.dispatch_status IN ('Dispatched', 'COMPLETED') THEN 1 END) as completed_orders,
+        COUNT(CASE WHEN fq.dispatch_status NOT IN ('Dispatched', 'COMPLETED') OR fq.dispatch_status IS NULL THEN 1 END) as pending_orders,
+        COALESCE(SUM(CASE WHEN fq.dispatch_status IN ('Dispatched', 'COMPLETED') THEN fq.net_total ELSE 0 END), 0) as delivered_value,
+        COALESCE(SUM(CASE WHEN fq.dispatch_status NOT IN ('Dispatched', 'COMPLETED') OR fq.dispatch_status IS NULL THEN fq.net_total ELSE 0 END), 0) as pending_backlog_value,
+        COALESCE((
+          SELECT SUM(qi.dispatched_quantity)
+          FROM quotation_items qi
+          JOIN filtered_quotes fq2 ON fq2.id = qi.quotation_id
+        ), 0) as total_boxes_delivered
+      FROM filtered_quotes fq`
     );
 
     // 2. Local purchase summary
     const localSummary = await query(
       `SELECT 
         COUNT(*) as total_local_items,
-        SUM(COALESCE(qi.total_amount, 0)) as total_local_quoted_spend,
-        SUM(COALESCE(lp.actual_purchase_rate, qi.rate_per_box, 0) * COALESCE(qi.quantity_boxes, 1)) as total_actual_spend,
-        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' OR lp.purchase_status = 'ARRIVED_AT_GODOWN' THEN 1 END) as items_arrived
+        COALESCE(SUM(COALESCE(qi.total_amount, 0)), 0) as total_local_quoted_spend,
+        COALESCE(SUM(COALESCE(NULLIF(lp.actual_purchase_rate, 0), qi.rate_per_box, qi.rate_per_sqft, 0) * COALESCE(lp.required_quantity, qi.quantity_boxes, qi.quantity_sqft, 1)), 0) as total_actual_spend,
+        COUNT(CASE WHEN lp.purchase_status = 'ARRIVED_AT_GODOWN' OR qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched') THEN 1 END) as items_arrived
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN local_purchases lp ON lp.quotation_item_id = qi.id
-      WHERE (qi.dispatch_status = 'Need to Arrange from Local' OR qi.procurement_category = 'local' OR lp.id IS NOT NULL) AND ${dateCondition}`
+      WHERE (qi.dispatch_status = 'Need to Arrange from Local' OR qi.procurement_category = 'local' OR lp.id IS NOT NULL)
+        AND LOWER(q.status) IN ('closed', 'approved')
+        ${userRoleFilter}
+        AND ${lpDateFilter}`
     );
 
     // 3. Factory orders summary
     const factorySummary = await query(
       `SELECT 
         COUNT(*) as total_factory_items,
-        SUM(COALESCE(qi.quantity_boxes, qi.quantity_sqft, 0)) as total_factory_volume,
-        SUM(COALESCE(fo.freight_cost, 0)) as total_freight_cost,
-        COUNT(CASE WHEN qi.procurement_status = 'Reached to Godown' OR fo.status = 'UNLOADED' THEN 1 END) as factory_unloaded
+        COALESCE(SUM(COALESCE(qi.quantity_boxes, qi.quantity_sqft, 0)), 0) as total_factory_volume,
+        COALESCE(SUM(COALESCE(fo.freight_cost, 0)), 0) as total_freight_cost,
+        COUNT(CASE WHEN fo.status = 'UNLOADED' OR fo.unloaded_date IS NOT NULL OR qi.procurement_status = 'Reached to Godown' OR qi.dispatch_status IN ('Ready Stock', 'Dispatched') THEN 1 END) as factory_unloaded
       FROM quotation_items qi
       JOIN quotations q ON q.id = qi.quotation_id
       LEFT JOIN factory_orders fo ON fo.quotation_item_id = qi.id
-      WHERE (qi.dispatch_status = 'Factory Order' OR qi.procurement_category = 'factory' OR fo.id IS NOT NULL) AND ${dateCondition}`
+      WHERE (qi.dispatch_status = 'Factory Order' OR qi.procurement_category = 'factory' OR fo.id IS NOT NULL)
+        AND LOWER(q.status) IN ('closed', 'approved')
+        ${userRoleFilter}
+        AND ${foDateFilter}`
     );
+
+    const reportPayload = {
+      range: normRange,
+      dispatch: {
+        completed_orders: parseInt(dispSummary[0]?.completed_orders || '0', 10),
+        pending_orders: parseInt(dispSummary[0]?.pending_orders || '0', 10),
+        delivered_value: parseFloat(dispSummary[0]?.delivered_value || '0'),
+        pending_backlog_value: parseFloat(dispSummary[0]?.pending_backlog_value || '0'),
+        total_boxes_delivered: parseFloat(dispSummary[0]?.total_boxes_delivered || '0'),
+      },
+      local: {
+        total_local_items: parseInt(localSummary[0]?.total_local_items || '0', 10),
+        total_local_quoted_spend: parseFloat(localSummary[0]?.total_local_quoted_spend || '0'),
+        total_actual_spend: parseFloat(localSummary[0]?.total_actual_spend || '0'),
+        items_arrived: parseInt(localSummary[0]?.items_arrived || '0', 10),
+      },
+      factory: {
+        total_factory_items: parseInt(factorySummary[0]?.total_factory_items || '0', 10),
+        total_factory_volume: parseFloat(factorySummary[0]?.total_factory_volume || '0'),
+        total_freight_cost: parseFloat(factorySummary[0]?.total_freight_cost || '0'),
+        factory_unloaded: parseInt(factorySummary[0]?.factory_unloaded || '0', 10),
+      },
+    };
 
     res.json({
       success: true,
-      range,
-      dispatch: dispSummary[0] || {},
-      local: localSummary[0] || {},
-      factory: factorySummary[0] || {},
+      ...reportPayload,
+      reports: reportPayload,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
