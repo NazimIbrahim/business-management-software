@@ -24,8 +24,6 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { BackupRestorePage } from './pages/BackupRestorePage';
 import { AdminPanelPage } from './pages/AdminPanelPage';
 import { DispatchManagement } from './pages/DispatchManagement';
-import { GodownCoordinatorDashboard } from './pages/godown/GodownCoordinatorDashboard';
-import { VendorPortalLayout } from './pages/vendor/VendorPortalLayout';
 
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -50,14 +48,11 @@ const AppContent: React.FC = () => {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  // Redirect upon login: dispatch team goes directly to Local Purchase, godown coordinator to godown operations, others to dashboard
+  // Redirect upon login: dispatch team goes directly to Local Purchase, others to dashboard
   useEffect(() => {
     if (user) {
-      const r = (user.role || '').toLowerCase();
-      if (r === 'dispatch' || r === 'dispatch_team') {
+      if (user.role === 'dispatch' || user.role === 'dispatch_team') {
         setActiveTab('dispatch-local');
-      } else if (r === 'godown_coordinator') {
-        setActiveTab('godown-operations');
       } else {
         setActiveTab('dashboard');
       }
@@ -187,20 +182,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Dedicated role portals: external local vendor and godown coordinator
-  if (user?.role?.toLowerCase() === 'local_vendor') {
-    return <VendorPortalLayout />;
-  }
-  if (user?.role?.toLowerCase() === 'godown_coordinator') {
-    return <GodownCoordinatorDashboard />;
-  }
-
   const renderMainContent = () => {
-    // If Godown Operations is selected from Sidebar
-    if (activeTab === 'godown-operations') {
-      return <GodownCoordinatorDashboard />;
-    }
-
     // Restrict dispatch team exclusively to dispatch views
     const isDispatch = user?.role === 'dispatch' || user?.role === 'dispatch_team';
     if (isDispatch) {

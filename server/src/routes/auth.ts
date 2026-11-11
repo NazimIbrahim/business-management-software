@@ -77,7 +77,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     let rows: any[];
     try {
       rows = await query(
-        `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active, u.vendor_id,
+        `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                 COALESCE(r.permissions, '{}'::jsonb) as permissions
          FROM users u
          LEFT JOIN roles r ON r.name = u.role
@@ -90,7 +90,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
         await ensureRolesSchema().catch(() => {});
         try {
           rows = await query(
-            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active, u.vendor_id,
+            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                     COALESCE(r.permissions, '{}'::jsonb) as permissions
              FROM users u
              LEFT JOIN roles r ON r.name = u.role
@@ -100,7 +100,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
           );
         } catch {
           rows = await query(
-            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active, u.vendor_id,
+            `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.sales_category, u.email, u.phone, u.is_active,
                     '{}'::jsonb as permissions
              FROM users u
              WHERE LOWER(u.username) = LOWER($1) OR (u.email IS NOT NULL AND LOWER(u.email) = LOWER($1))
@@ -136,7 +136,6 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       sales_category: user.sales_category || (['admin', 'manager'].includes(user.role) ? 'MANAGEMENT' : 'RETAIL'),
       email: user.email,
       phone: user.phone,
-      vendor_id: user.vendor_id || undefined,
     };
 
     const token = jwt.sign(payload, config.jwtSecret, { expiresIn: '7d' });
@@ -162,7 +161,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 authRouter.get('/me', authenticateToken, async (req: Request, res: Response) => {
   try {
     const rows = await query(
-      `SELECT id, username, full_name, role, email, phone, monthly_target, is_active, vendor_id
+      `SELECT id, username, full_name, role, email, phone, monthly_target, is_active
        FROM users WHERE id = $1`,
       [req.user!.id]
     );

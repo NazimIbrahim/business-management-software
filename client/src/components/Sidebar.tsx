@@ -38,7 +38,6 @@ export type NavTab =
   | 'dispatch-processing'
   | 'dispatch-completed'
   | 'dispatch-damage-replacement'
-  | 'godown-operations'
   | 'dispatch-schedule'
   | 'dispatch-local-tracker'
   | 'dispatch-factory-tracker'
@@ -176,11 +175,6 @@ export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = fal
       id: 'dispatch-damage-replacement' as NavTab,
       label: 'Damage / Credit Note',
       icon: RotateCcw,
-    },
-    {
-      id: 'godown-operations' as NavTab,
-      label: 'Godown Confirmations Log',
-      icon: PackageCheck,
     },
     {
       id: 'dispatch-schedule' as NavTab,
