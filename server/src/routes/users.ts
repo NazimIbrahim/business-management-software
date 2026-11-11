@@ -17,26 +17,27 @@ usersRouter.get('/', async (req: Request, res: Response) => {
     const { role, sales_category, for_quotation } = req.query;
     const isSalesperson = req.user?.role?.toLowerCase() === 'salesperson';
 
-    let sql = `SELECT id, username, full_name, role, sales_category, email, phone, monthly_target, is_active, created_at, updated_at
-               FROM users`;
+    let sql = `SELECT u.id, u.username, u.full_name, u.role, u.sales_category, u.email, u.phone, u.monthly_target, u.is_active, u.vendor_id, v.name as vendor_name, u.created_at, u.updated_at
+               FROM users u
+               LEFT JOIN vendors v ON v.id = u.vendor_id`;
     const params: any[] = [];
     let idx = 1;
 
     // Salespersons can only view their own user record in user listings unless explicitly requesting quotation assignment list
     if (isSalesperson && for_quotation !== 'true') {
-      sql += ` WHERE id = $${idx++}`;
+      sql += ` WHERE u.id = $${idx++}`;
       params.push(req.user!.id);
     } else if (role) {
-      sql += ` WHERE role = $${idx++}`;
+      sql += ` WHERE u.role = $${idx++}`;
       params.push(role);
     }
 
     if (sales_category) {
-      sql += params.length ? ` AND sales_category = $${idx++}` : ` WHERE sales_category = $${idx++}`;
+      sql += params.length ? ` AND u.sales_category = $${idx++}` : ` WHERE u.sales_category = $${idx++}`;
       params.push(sales_category);
     }
 
-    sql += ' ORDER BY full_name ASC';
+    sql += ' ORDER BY u.full_name ASC';
     const rows = await query(sql, params);
     res.json({ users: rows });
   } catch (error: any) {
@@ -59,7 +60,7 @@ usersRouter.get('/sales-team', async (req: Request, res: Response) => {
 // Create new user (Admin or Manager)
 usersRouter.post('/', requireRole(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
-    const { username, password, full_name, role = 'salesperson', sales_category = 'RETAIL', email, phone, monthly_target } = req.body;
+    const { username, password, full_name, role = 'salesperson', sales_category = 'RETAIL', email, phone, monthly_target, vendor_id } = req.body;
 
     if (!username || !password || !full_name) {
       res.status(400).json({ error: 'Username, password, and full name are required' });
@@ -73,10 +74,10 @@ usersRouter.post('/', requireRole(['admin', 'manager']), async (req: Request, re
     const hash = await bcrypt.hash(password, salt);
 
     const rows = await query(
-      `INSERT INTO users (username, password_hash, full_name, role, sales_category, email, phone, monthly_target)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, username, full_name, role, sales_category, email, phone, monthly_target, is_active, created_at`,
-      [username.trim(), hash, full_name.trim(), role, finalCategory, email, phone, monthly_target || 0]
+      `INSERT INTO users (username, password_hash, full_name, role, sales_category, email, phone, monthly_target, vendor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, username, full_name, role, sales_category, email, phone, monthly_target, vendor_id, is_active, created_at`,
+      [username.trim(), hash, full_name.trim(), role, finalCategory, email, phone, monthly_target || 0, vendor_id || null]
     );
 
     await recordAuditLog({
@@ -103,7 +104,7 @@ usersRouter.post('/', requireRole(['admin', 'manager']), async (req: Request, re
 usersRouter.put('/:id', requireRole(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id as string, 10);
-    const { username, full_name, role, sales_category, email, phone, monthly_target, is_active, password } = req.body;
+    const { username, full_name, role, sales_category, email, phone, monthly_target, is_active, password, vendor_id } = req.body;
 
     let updateFields: string[] = [];
     let params: any[] = [];
@@ -148,6 +149,10 @@ usersRouter.put('/:id', requireRole(['admin', 'manager']), async (req: Request, 
     if (is_active !== undefined && req.user!.role === 'admin') {
       updateFields.push(`is_active = $${idx++}`);
       params.push(is_active);
+    }
+    if (vendor_id !== undefined && req.user!.role === 'admin') {
+      updateFields.push(`vendor_id = $${idx++}`);
+      params.push(vendor_id || null);
     }
     if (password && req.user!.role === 'admin') {
       const salt = await bcrypt.genSalt(10);

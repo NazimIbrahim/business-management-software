@@ -311,6 +311,33 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                       </>
                     )}
                   </button>
+
+                  {/* Quick Role Fillers for Testing */}
+                  <div className="pt-2 flex items-center justify-center gap-1.5 text-[10px] text-slate-500">
+                    <span>Fill Test Account:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsername('godown');
+                        setPassword('godown123');
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold cursor-pointer"
+                      title="Godown Coordinator (godown / godown123)"
+                    >
+                      Godown
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsername('vendor_balaji');
+                        setPassword('vendor123');
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold cursor-pointer"
+                      title="Local Vendor (vendor_balaji / vendor123)"
+                    >
+                      Vendor
+                    </button>
+                  </div>
                 </form>
 
                 {/* Badge Bottom Security Line */}

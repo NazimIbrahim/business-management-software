@@ -538,6 +538,93 @@ export async function ensureDispatchSchema(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_credit_note_items_cn_id ON credit_note_items(credit_note_id);
         CREATE INDEX IF NOT EXISTS idx_credit_note_items_item_id ON credit_note_items(quotation_item_id);
+
+        -- Local Vendors
+        CREATE TABLE IF NOT EXISTS vendors (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(180) NOT NULL UNIQUE,
+          contact_person VARCHAR(120),
+          phone VARCHAR(50),
+          email VARCHAR(120),
+          gstin VARCHAR(50),
+          address TEXT,
+          stock_sheet_url TEXT,
+          stock_file_url TEXT,
+          stock_file_name VARCHAR(255),
+          stock_last_updated TIMESTAMPTZ,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Godown Physical Verification Confirmations
+        CREATE TABLE IF NOT EXISTS godown_confirmations (
+          id SERIAL PRIMARY KEY,
+          quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+          quotation_item_id INTEGER NOT NULL REFERENCES quotation_items(id) ON DELETE CASCADE,
+          local_purchase_id INTEGER REFERENCES local_purchases(id) ON DELETE CASCADE,
+          confirmation_type VARCHAR(50) NOT NULL,
+          expected_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+          verified_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+          unit VARCHAR(50) DEFAULT 'BOX',
+          rack_location VARCHAR(100),
+          batch_number VARCHAR(100),
+          vehicle_no VARCHAR(50),
+          driver_name VARCHAR(120),
+          driver_phone VARCHAR(50),
+          has_discrepancy BOOLEAN DEFAULT false,
+          notes TEXT,
+          confirmed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          confirmed_by_name VARCHAR(120),
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_godown_conf_qid ON godown_confirmations(quotation_id);
+        CREATE INDEX IF NOT EXISTS idx_godown_conf_qiid ON godown_confirmations(quotation_item_id);
+        CREATE INDEX IF NOT EXISTS idx_godown_conf_type ON godown_confirmations(confirmation_type);
+
+        -- Vendor Purchase Orders
+        CREATE TABLE IF NOT EXISTS vendor_purchase_orders (
+          id SERIAL PRIMARY KEY,
+          local_purchase_id INTEGER REFERENCES local_purchases(id) ON DELETE CASCADE,
+          quotation_id INTEGER REFERENCES quotations(id) ON DELETE CASCADE,
+          quotation_item_id INTEGER REFERENCES quotation_items(id) ON DELETE CASCADE,
+          vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+          po_number VARCHAR(100),
+          status VARCHAR(50) NOT NULL DEFAULT 'INQUIRY_SENT',
+          item_description VARCHAR(255) NOT NULL,
+          requested_quantity NUMERIC(12, 2) NOT NULL DEFAULT 0,
+          unit VARCHAR(50) DEFAULT 'BOX',
+          quoted_rate NUMERIC(12, 2) DEFAULT 0,
+          pi_number VARCHAR(100),
+          pi_amount NUMERIC(12, 2) DEFAULT 0,
+          pi_file_url TEXT,
+          pi_uploaded_at TIMESTAMPTZ,
+          payment_utr VARCHAR(100),
+          payment_amount NUMERIC(12, 2) DEFAULT 0,
+          payment_proof_url TEXT,
+          payment_recorded_at TIMESTAMPTZ,
+          tax_invoice_number VARCHAR(100),
+          tax_invoice_amount NUMERIC(12, 2) DEFAULT 0,
+          tax_invoice_file_url TEXT,
+          tax_invoice_uploaded_at TIMESTAMPTZ,
+          vendor_notes TEXT,
+          internal_notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_vpo_vendor_id ON vendor_purchase_orders(vendor_id);
+        CREATE INDEX IF NOT EXISTS idx_vpo_local_purchase_id ON vendor_purchase_orders(local_purchase_id);
+        CREATE INDEX IF NOT EXISTS idx_vpo_status ON vendor_purchase_orders(status);
+
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL;
+        ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS godown_cleared BOOLEAN DEFAULT false;
+        ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS godown_verified_qty NUMERIC(12, 2) DEFAULT 0;
+        ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS godown_rack_location VARCHAR(100);
+        ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL;
+        ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+        ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS payment_utr VARCHAR(100);
+        ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS godown_verified BOOLEAN DEFAULT false;
+        ALTER TABLE local_purchases ADD COLUMN IF NOT EXISTS godown_verified_at TIMESTAMPTZ;
       END $$;
     `);
 

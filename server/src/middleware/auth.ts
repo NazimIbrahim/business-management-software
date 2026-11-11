@@ -6,10 +6,11 @@ export interface AuthUser {
   id: number;
   username: string;
   full_name: string;
-  role: 'admin' | 'manager' | 'salesperson' | 'accounts' | 'dispatch' | 'dispatch_team' | string;
+  role: 'admin' | 'manager' | 'salesperson' | 'accounts' | 'dispatch' | 'dispatch_team' | 'godown_coordinator' | 'local_vendor' | string;
   sales_category?: 'RETAIL' | 'PROJECT' | 'MANAGEMENT' | 'COMPANY' | string;
   email?: string;
   phone?: string;
+  vendor_id?: number;
 }
 
 declare global {

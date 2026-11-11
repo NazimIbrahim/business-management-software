@@ -25,6 +25,8 @@ import { backupRouter } from './routes/backup';
 import { sanitaryCatalogRouter } from './routes/sanitaryCatalog';
 import { rolesRouter, ensureRolesSchema } from './routes/roles';
 import { dispatchRouter, ensureDispatchSchema } from './routes/dispatch';
+import { godownRouter } from './routes/godown';
+import { vendorRouter } from './routes/vendorPortal';
 
 const app = express();
 const server = http.createServer(app);
@@ -56,7 +58,7 @@ app.get('/api/health', async (req: Request, res: Response) => {
   res.json({
     status: conn.ok ? 'ok' : 'degraded',
     server: 'AMA Ceramics Quotation Central Server',
-    version: '2.4.76',
+    version: '2.4.77',
     dbConnected: conn.ok,
     dbError: conn.ok ? null : (conn.error || getLastDbError() || 'Unknown database connection error'),
     hasDatabaseUrl: Boolean(config.db.connectionString),
@@ -81,8 +83,10 @@ app.use('/api/audit-logs', auditRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/dispatch', dispatchRouter);
+app.use('/api/godown', godownRouter);
+app.use('/api/vendor', vendorRouter);
 
-// Static serving for uploaded tax invoices & payment proofs
+// Static serving for uploaded tax invoices, vendor files & payment proofs
 const invoicesDir = path.resolve(process.cwd(), 'uploads/invoices');
 if (!fs.existsSync(invoicesDir)) {
   fs.mkdirSync(invoicesDir, { recursive: true });
@@ -94,6 +98,24 @@ if (!fs.existsSync(paymentProofsDir)) {
   fs.mkdirSync(paymentProofsDir, { recursive: true });
 }
 app.use('/uploads/payment-proofs', express.static(paymentProofsDir));
+
+const vendorStockDir = path.resolve(process.cwd(), 'uploads/vendor-stock');
+if (!fs.existsSync(vendorStockDir)) {
+  fs.mkdirSync(vendorStockDir, { recursive: true });
+}
+app.use('/uploads/vendor-stock', express.static(vendorStockDir));
+
+const vendorPiDir = path.resolve(process.cwd(), 'uploads/vendor-pi');
+if (!fs.existsSync(vendorPiDir)) {
+  fs.mkdirSync(vendorPiDir, { recursive: true });
+}
+app.use('/uploads/vendor-pi', express.static(vendorPiDir));
+
+const vendorInvoicesDir = path.resolve(process.cwd(), 'uploads/vendor-invoices');
+if (!fs.existsSync(vendorInvoicesDir)) {
+  fs.mkdirSync(vendorInvoicesDir, { recursive: true });
+}
+app.use('/uploads/vendor-invoices', express.static(vendorInvoicesDir));
 
 // Static frontend serving (turns central server into an instant web portal for any browser on LAN/web)
 const clientDistCandidates = [
@@ -689,7 +711,7 @@ server.listen(config.port, '0.0.0.0', async () => {
     try {
       const res = await fetch(cloudHealthUrl, {
         method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.60' },
+        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.77' },
       });
       if (res.ok) {
         logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');
