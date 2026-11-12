@@ -1,0 +1,13 @@
+{
+  "name": "business-management-software",
+  "version": "2.4.78",
+  "description": "Business Management Software - Central Server & Client",
+  "main": "server.js",
+  "scripts": {
+    "build": "npm --prefix server install --include=dev && npm --prefix server run build",
+    "start": "node server/dist/server.js"
+  },
+  "dependencies": {
+    "typescript": "^5.6.3"
+  }
+}

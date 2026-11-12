@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && node -e \"const fs=require('fs'); fs.mkdirSync('dist/db', {recursive:true}); fs.copyFileSync('src/db/schema.sql', 'dist/db/schema.sql');\"",
+    "build": "tsc && node -e \"const fs=require('fs'); fs.mkdirSync('dist/db', {recursive:true}); fs.copyFileSync('src/db/schema.sql', 'dist/db/schema.sql'); fs.writeFileSync('dist/index.js', 'require(\\'./server.js\\');\\n'); fs.writeFileSync('dist/app.js', 'require(\\'./server.js\\');\\n');\"",
     "start": "node dist/server.js",
     "db:init": "tsx src/db/init.ts",
     "db:seed": "tsx src/db/seed.ts"

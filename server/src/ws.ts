@@ -40,6 +40,11 @@ export interface WsEvent {
 export function initWebSocketServer(server: HttpServer): WebSocketServer {
   wss = new WebSocketServer({ server, path: '/ws' });
 
+  wss.on('error', (err) => {
+    console.error('[WSS ERROR]', err);
+    logger.error('WebSocket server error:', err);
+  });
+
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress;
     connectedClients.add(ws);

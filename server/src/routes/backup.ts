@@ -12,8 +12,12 @@ export const backupRouter = Router();
 backupRouter.use(authenticateToken);
 backupRouter.use(requireRole(['admin']));
 
-if (!fs.existsSync(config.backupDir)) {
-  fs.mkdirSync(config.backupDir, { recursive: true });
+try {
+  if (!fs.existsSync(config.backupDir)) {
+    fs.mkdirSync(config.backupDir, { recursive: true });
+  }
+} catch (err: any) {
+  console.warn('[BACKUP] Backup directory init warning:', err?.message || err);
 }
 
 // 1. List backups

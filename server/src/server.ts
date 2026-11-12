@@ -1,3 +1,11 @@
+// Global Crash Protectors - Guarantee logs are visible and process does not silently exit
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL UNCAUGHT EXCEPTION]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL UNHANDLED REJECTION]', reason);
+});
+
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -28,6 +36,11 @@ import { dispatchRouter, ensureDispatchSchema } from './routes/dispatch';
 
 const app = express();
 const server = http.createServer(app);
+
+server.on('error', (err: any) => {
+  console.error('[HTTP SERVER ERROR]', err);
+  logger.error('HTTP server error:', err);
+});
 
 console.log(`[BOOT] AMA Ceramics Backend initializing on Node ${process.version}...`);
 console.log(`[BOOT] Target Port: ${config.port} (PORT env: ${process.env.PORT || 'default 4000'})`);
@@ -86,17 +99,25 @@ app.use('/api/backup', backupRouter);
 app.use('/api/dispatch', dispatchRouter);
 
 // Static serving for uploaded tax invoices & payment proofs
-const invoicesDir = path.resolve(process.cwd(), 'uploads/invoices');
-if (!fs.existsSync(invoicesDir)) {
-  fs.mkdirSync(invoicesDir, { recursive: true });
+try {
+  const invoicesDir = path.resolve(process.cwd(), 'uploads/invoices');
+  if (!fs.existsSync(invoicesDir)) {
+    fs.mkdirSync(invoicesDir, { recursive: true });
+  }
+  app.use('/uploads/invoices', express.static(invoicesDir));
+} catch (err: any) {
+  console.warn('[BOOT] Invoices dir notice:', err.message);
 }
-app.use('/uploads/invoices', express.static(invoicesDir));
 
-const paymentProofsDir = path.resolve(process.cwd(), 'uploads/payment-proofs');
-if (!fs.existsSync(paymentProofsDir)) {
-  fs.mkdirSync(paymentProofsDir, { recursive: true });
+try {
+  const paymentProofsDir = path.resolve(process.cwd(), 'uploads/payment-proofs');
+  if (!fs.existsSync(paymentProofsDir)) {
+    fs.mkdirSync(paymentProofsDir, { recursive: true });
+  }
+  app.use('/uploads/payment-proofs', express.static(paymentProofsDir));
+} catch (err: any) {
+  console.warn('[BOOT] Payment proofs dir notice:', err.message);
 }
-app.use('/uploads/payment-proofs', express.static(paymentProofsDir));
 
 // Static frontend serving (turns central server into an instant web portal for any browser on LAN/web)
 const clientDistCandidates = [
