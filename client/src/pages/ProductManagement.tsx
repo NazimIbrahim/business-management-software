@@ -4,7 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { TileBrand, BrandSizeCoverage, ProductType } from '../types';
 import { Layers, Plus, Tag, RefreshCw, X, Edit2, Trash2 } from 'lucide-react';
 
-export const ProductManagement: React.FC = () => {
+interface Props {
+  initialOpenModal?: boolean;
+}
+
+export const ProductManagement: React.FC<Props> = ({ initialOpenModal }) => {
   const { fetchApi } = useServer();
   const { user } = useAuth();
 
@@ -65,6 +69,12 @@ export const ProductManagement: React.FC = () => {
     setBrandDesc('');
     setBrandModal(true);
   };
+
+  useEffect(() => {
+    if (initialOpenModal) {
+      handleOpenCreateBrand();
+    }
+  }, [initialOpenModal]);
 
   // Open Edit Brand
   const handleOpenEditBrand = (b: TileBrand, e: React.MouseEvent) => {

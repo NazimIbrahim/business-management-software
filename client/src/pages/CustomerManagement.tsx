@@ -6,9 +6,10 @@ import { Search, Plus, Edit, UserCheck, Phone, MapPin, RefreshCw, X, FileText, C
 
 interface Props {
   onSelectQuotation?: (id: number) => void;
+  initialOpenAddModal?: boolean;
 }
 
-export const CustomerManagement: React.FC<Props> = ({ onSelectQuotation }) => {
+export const CustomerManagement: React.FC<Props> = ({ onSelectQuotation, initialOpenAddModal }) => {
   const { fetchApi, subscribeToEvents } = useServer();
   const { user } = useAuth();
   const isSalesperson = user?.role?.toLowerCase() === 'salesperson';
@@ -80,6 +81,12 @@ export const CustomerManagement: React.FC<Props> = ({ onSelectQuotation }) => {
     setNotes('');
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (initialOpenAddModal) {
+      openAddModal();
+    }
+  }, [initialOpenAddModal]);
 
   const openEditModal = (c: Customer) => {
     setEditingCustomer(c);
