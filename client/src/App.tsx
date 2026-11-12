@@ -5,7 +5,6 @@ import { Header } from './components/Header';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { ServerSetupModal } from './components/ServerSetupModal';
 import { QuotationTypeModal } from './components/QuotationTypeModal';
-import { ModuleComingSoon } from './components/ModuleComingSoon';
 
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -37,12 +36,6 @@ const AppContent: React.FC = () => {
   const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [loadingSlow, setLoadingSlow] = useState<boolean>(false);
-
-  // Quick Action Triggers
-  const [quickCustomerAdd, setQuickCustomerAdd] = useState<boolean>(false);
-  const [quickPaymentAdd, setQuickPaymentAdd] = useState<boolean>(false);
-  const [quickProductAdd, setQuickProductAdd] = useState<boolean>(false);
-  const [quickActionModule, setQuickActionModule] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading) {
@@ -170,11 +163,6 @@ const AppContent: React.FC = () => {
 
   const handleNavTabChange = (tab: NavTab) => {
     setIsMobileMenuOpen(false);
-    setQuickActionModule(null);
-    setQuickCustomerAdd(false);
-    setQuickPaymentAdd(false);
-    setQuickProductAdd(false);
-
     if (tab === 'quotation-create-tiles') {
       setSelectedQuotationId(null);
       setQuotationType('tiles');
@@ -190,37 +178,6 @@ const AppContent: React.FC = () => {
       if (tab !== 'quotations') {
         setSelectedQuotationId(null);
       }
-      setActiveTab(tab);
-    }
-  };
-
-  // Quick Action [+] Handler
-  const handleQuickAction = (tab: NavTab) => {
-    setIsMobileMenuOpen(false);
-    if (tab === 'quotations') {
-      handleCreateQuotation();
-    } else if (tab === 'customers') {
-      setSelectedQuotationId(null);
-      setIsEditingQuotation(false);
-      setActiveTab('customers');
-      setQuickCustomerAdd(true);
-      setTimeout(() => setQuickCustomerAdd(false), 800);
-    } else if (tab === 'payments') {
-      setSelectedQuotationId(null);
-      setIsEditingQuotation(false);
-      setActiveTab('payments');
-      setQuickPaymentAdd(true);
-      setTimeout(() => setQuickPaymentAdd(false), 800);
-    } else if (tab === 'products') {
-      setSelectedQuotationId(null);
-      setIsEditingQuotation(false);
-      setActiveTab('products');
-      setQuickProductAdd(true);
-      setTimeout(() => setQuickProductAdd(false), 800);
-    } else {
-      setSelectedQuotationId(null);
-      setIsEditingQuotation(false);
-      setQuickActionModule(tab);
       setActiveTab(tab);
     }
   };
@@ -345,18 +302,13 @@ const AppContent: React.FC = () => {
           />
         );
       case 'customers':
-        return (
-          <CustomerManagement
-            onSelectQuotation={handleSelectQuotation}
-            initialOpenAddModal={quickCustomerAdd}
-          />
-        );
+        return <CustomerManagement onSelectQuotation={handleSelectQuotation} />;
       case 'products':
-        return <ProductManagement initialOpenModal={quickProductAdd} />;
+        return <ProductManagement />;
       case 'sanitary-catalog':
         return <SanitaryCatalogManagement />;
       case 'payments':
-        return <PaymentManagement initialOpenModal={quickPaymentAdd} />;
+        return <PaymentManagement />;
       case 'targets':
         return <TargetsManagement />;
       case 'reports':
@@ -369,380 +321,6 @@ const AppContent: React.FC = () => {
         return <AuditLogsPage />;
       case 'backup':
         return <BackupRestorePage />;
-
-      // New CRM Modules
-      case 'crm-pipeline':
-        return (
-          <ModuleComingSoon
-            title="Sales Pipeline"
-            category="CRM"
-            description="Visual drag-and-drop pipeline for inquiries, quotation stages, win/loss rates, and deal velocity."
-            isQuickAction={quickActionModule === 'crm-pipeline'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'crm-projects':
-        return (
-          <ModuleComingSoon
-            title="Projects & Sites"
-            category="CRM"
-            description="Multi-site commercial and architectural supply projects tracker with architect and builder mapping."
-            isQuickAction={quickActionModule === 'crm-projects'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'crm-inquiries':
-        return (
-          <ModuleComingSoon
-            title="Customer Inquiries"
-            category="CRM"
-            description="Inbound inquiry triage, showroom walk-ins, phone leads, and automated salesperson assignment."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Items Modules
-      case 'items-services':
-        return (
-          <ModuleComingSoon
-            title="Services & Installation"
-            category="Items"
-            description="Tile cutting, polishing, beveling, transport, and site installation charges management."
-            isQuickAction={quickActionModule === 'items-services'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'items-price-lists':
-        return (
-          <ModuleComingSoon
-            title="Price Lists & Tiering"
-            category="Items"
-            description="Custom dealer, architect, and contractor pricing tiers with volume discount matrices."
-            isQuickAction={quickActionModule === 'items-price-lists'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'items-kits':
-        return (
-          <ModuleComingSoon
-            title="Kits & Assemblies"
-            category="Items"
-            description="Pre-bundled bathroom sets, adhesive + tile packages, and curated designer suites."
-            isQuickAction={quickActionModule === 'items-kits'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'items-import-export':
-        return (
-          <ModuleComingSoon
-            title="Catalog Import & Export"
-            category="Items"
-            description="Bulk Excel and CSV import/export for brand prices, coverage metrics, and sanitary master catalogs."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Inventory Modules
-      case 'inventory-manual-entry':
-        return (
-          <ModuleComingSoon
-            title="Manual Stock Entry"
-            category="Inventory"
-            description="Godown physical count verification, quick item-level barcode entry, and batch logging."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-bulk-update':
-        return (
-          <ModuleComingSoon
-            title="Bulk Stock Update"
-            category="Inventory"
-            description="Spreadsheet-style bulk adjustment of godown quantities, rack locations, and lot numbers."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-opening-stock':
-        return (
-          <ModuleComingSoon
-            title="Opening Stock Register"
-            category="Inventory"
-            description="Financial year opening stock initialization, godown balance audit, and valuation logs."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-transfers':
-        return (
-          <ModuleComingSoon
-            title="Stock Transfers"
-            category="Inventory"
-            description="Inter-warehouse and godown-to-showroom stock movement notes with transit tracking."
-            isQuickAction={quickActionModule === 'inventory-transfers'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-adjustments':
-        return (
-          <ModuleComingSoon
-            title="Stock Adjustments"
-            category="Inventory"
-            description="Stock write-offs, variance reconciliations, breakage adjustments, and auditor approvals."
-            isQuickAction={quickActionModule === 'inventory-adjustments'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-assemble-kits':
-        return (
-          <ModuleComingSoon
-            title="Assemble Kits"
-            category="Inventory"
-            description="Bundle components into packaged kits, deduct raw item inventory, and increment finished kits."
-            isQuickAction={quickActionModule === 'inventory-assemble-kits'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-reserved':
-        return (
-          <ModuleComingSoon
-            title="Reserved Stock"
-            category="Inventory"
-            description="Stock allocated to confirmed client quotations awaiting dispatch clearance or client site readiness."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'inventory-loading-alerts':
-        return (
-          <ModuleComingSoon
-            title="Loading Alerts & Logistics"
-            category="Inventory"
-            description="Real-time alerts for overdue dispatches, vehicle bay occupancy, and gate-pass clearance."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Sales Modules
-      case 'sales-cart':
-        return (
-          <ModuleComingSoon
-            title="Showroom Sales Cart"
-            category="Sales"
-            description="Fast retail point-of-sale cart for instant walk-in billing and cash counter slips."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'sales-orders':
-        return (
-          <ModuleComingSoon
-            title="Sales Orders"
-            category="Sales"
-            description="Confirmed sales order booking from accepted quotations with advance payment hold."
-            isQuickAction={quickActionModule === 'sales-orders'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'sales-proforma':
-        return (
-          <ModuleComingSoon
-            title="Proforma Invoices"
-            category="Sales"
-            description="Formal proforma invoices for bank loans, LC verification, and advance payment requests."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'sales-delivery-orders':
-        return (
-          <ModuleComingSoon
-            title="Delivery Orders"
-            category="Sales"
-            description="Formal godown delivery orders specifying loading sequence, transporter, and receiver sign-off."
-            isQuickAction={quickActionModule === 'sales-delivery-orders'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'sales-invoices':
-        return (
-          <ModuleComingSoon
-            title="Tax Invoices"
-            category="Sales"
-            description="GST-compliant final commercial tax invoices with QR code and automated tally sync."
-            isQuickAction={quickActionModule === 'sales-invoices'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'sales-eway-bills':
-        return (
-          <ModuleComingSoon
-            title="e-Way Bills"
-            category="Sales"
-            description="Automated GST portal e-Way Bill generation, Part-B transporter vehicle update, and validity tracking."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Purchases Modules
-      case 'purchases-landed-cost':
-        return (
-          <ModuleComingSoon
-            title="Landed Cost Calculator"
-            category="Purchases"
-            description="Compute exact unit cost after adding factory freight, insurance, unloader labor, and GST input credit."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Dealer Network Modules
-      case 'dealers-list':
-        return (
-          <ModuleComingSoon
-            title="Dealer Network"
-            category="Dealer Network"
-            description="Authorized dealer registry, credit limit monitoring, overdue aging, and sub-dealer mapping."
-            isQuickAction={quickActionModule === 'dealers-list'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'dealers-find':
-        return (
-          <ModuleComingSoon
-            title="Find New Dealers"
-            category="Dealer Network"
-            description="District and taluka territory mapping to identify prospective tile and sanitary retail partners."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'dealers-panel':
-        return (
-          <ModuleComingSoon
-            title="Display Panel Management"
-            category="Dealer Network"
-            description="Showroom display stands, sliding tile panels, and sanitary display boards installed at dealer locations."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'dealers-expenses':
-        return (
-          <ModuleComingSoon
-            title="Sample & Promo Expenses"
-            category="Dealer Network"
-            description="Free tile sample distribution, architect folders, and dealer promotional expense claims."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'dealers-whatsapp':
-        return (
-          <ModuleComingSoon
-            title="WhatsApp Chatbot"
-            category="Dealer Network"
-            description="Automated WhatsApp messaging for price lists, dispatch dispatch status, and PDF payment receipts."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Marketing & Documents Modules
-      case 'marketing-documents':
-        return (
-          <ModuleComingSoon
-            title="Documents & Media"
-            category="Marketing & Documents"
-            description="Brand brochures, high-resolution tile lookbooks, test certificates, and warranty cards."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'marketing-mail':
-        return (
-          <ModuleComingSoon
-            title="Direct Mail & Dispatch"
-            category="Marketing & Documents"
-            description="Automated email statements, quotation follow-up sequences, and new arrival newsletters."
-            isQuickAction={quickActionModule === 'marketing-mail'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // New Accounting Modules
-      case 'accounting-bank-cash':
-        return (
-          <ModuleComingSoon
-            title="Bank & Cash Accounts"
-            category="Accounting"
-            description="Current account reconciliations, cash drawer deposits, and POS card terminal settlement records."
-            isQuickAction={quickActionModule === 'accounting-bank-cash'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'accounting-tds':
-        return (
-          <ModuleComingSoon
-            title="TDS Compliance & Ledger"
-            category="Accounting"
-            description="Section 194Q contractor and buyer TDS calculations, monthly summaries, and certificate tracking."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'accounting-cheques':
-        return (
-          <ModuleComingSoon
-            title="Cheque Clearance Register"
-            category="Accounting"
-            description="Post-dated cheques (PDC) vault, bank deposit slips, bounce tracking, and clearance status."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-      case 'accounting-recurring':
-        return (
-          <ModuleComingSoon
-            title="Recurring Transactions"
-            category="Accounting"
-            description="Showroom rent, electricity, recurring maintenance, and automated expense schedules."
-            isQuickAction={quickActionModule === 'accounting-recurring'}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
-      // Help
-      case 'help':
-        return (
-          <ModuleComingSoon
-            title="Help & Documentation"
-            category="Support & Training"
-            description="Staff user guides, video walkthroughs, system shortcuts, and technical support desk."
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onNavigateToModule={handleNavTabChange}
-          />
-        );
-
       default:
         return (
           <Dashboard
@@ -767,7 +345,6 @@ const AppContent: React.FC = () => {
           setActiveTab={handleNavTabChange}
           isOpen={isMobileMenuOpen}
           onClose={() => setIsMobileMenuOpen(false)}
-          onQuickAction={handleQuickAction}
         />
         <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-transparent">
           <div

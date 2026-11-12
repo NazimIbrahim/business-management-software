@@ -514,11 +514,11 @@ th, td {
 
 /* Liquid Glass Dark Sidebar */
 .glass-sidebar {
-  background: linear-gradient(180deg, rgba(13, 27, 42, 0.95) 0%, rgba(27, 38, 59, 0.92) 100%);
+  background: linear-gradient(180deg, rgba(13, 27, 42, 0.90) 0%, rgba(27, 38, 59, 0.88) 100%) !important;
   backdrop-filter: blur(24px) saturate(190%);
   -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 6px 0 28px rgba(13, 27, 42, 0.22), inset -1px 0 0 rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 6px 0 28px rgba(13, 27, 42, 0.22), inset -1px 0 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Liquid Glass Table Hover */
@@ -2181,7 +2181,7 @@ table tbody tr:hover {
    ========================================================================== */
 .desktop-sidebar {
   display: none !important;
-  width: 16.5rem !important;
+  width: 14rem !important;
 }
 
 .mobile-hamburger-btn {

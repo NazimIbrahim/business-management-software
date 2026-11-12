@@ -1,31 +1,24 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import {
-  LucideIcon,
   LayoutDashboard,
-  Handshake,
-  LayoutGrid,
-  Boxes,
-  Warehouse,
-  IndianRupee,
-  ShoppingCart,
-  Share2,
-  Megaphone,
-  Calculator,
+  FileText,
+  PlusCircle,
+  Users,
+  Layers,
+  CreditCard,
+  Target,
   BarChart3,
-  Settings,
-  LifeBuoy,
-  Plus,
+  Building,
+  ShieldCheck,
+  Database,
+  Cpu,
+  UserCheck,
+  Grid,
+  Bath,
   ChevronDown,
   ChevronRight,
-  Search,
-  X,
-  Archive,
-  FolderArchive,
-  LogOut,
-  Users,
-  FileText,
   Truck,
   Package,
   PackageCheck,
@@ -34,21 +27,10 @@ import {
   Calendar,
   History,
   RotateCcw,
-  Cpu,
-  ShieldCheck,
-  Building,
-  Database,
-  Layers,
-  Bath,
-  Target,
-  UserCheck,
-  CreditCard,
-  PlusCircle,
-  Grid,
+  X,
 } from 'lucide-react';
 
 export type NavTab =
-  // Existing legacy tabs
   | 'dashboard'
   | 'quotations'
   | 'dispatch'
@@ -78,128 +60,57 @@ export type NavTab =
   | 'admin-panel'
   | 'company'
   | 'audit'
-  | 'backup'
-  // New ERP Navigation Routes
-  | 'crm-pipeline'
-  | 'crm-projects'
-  | 'crm-inquiries'
-  | 'items-services'
-  | 'items-price-lists'
-  | 'items-kits'
-  | 'items-import-export'
-  | 'inventory-manual-entry'
-  | 'inventory-bulk-update'
-  | 'inventory-opening-stock'
-  | 'inventory-transfers'
-  | 'inventory-adjustments'
-  | 'inventory-assemble-kits'
-  | 'inventory-item-history'
-  | 'inventory-reserved'
-  | 'inventory-incoming'
-  | 'inventory-unloading-tally'
-  | 'inventory-loading-alerts'
-  | 'sales-cart'
-  | 'sales-orders'
-  | 'sales-proforma'
-  | 'sales-delivery-orders'
-  | 'sales-delivery-challans'
-  | 'sales-invoices'
-  | 'sales-payment-reminders'
-  | 'sales-eway-bills'
-  | 'purchases-landed-cost'
-  | 'dealers-list'
-  | 'dealers-find'
-  | 'dealers-panel'
-  | 'dealers-expenses'
-  | 'dealers-whatsapp'
-  | 'marketing-catalog'
-  | 'marketing-documents'
-  | 'marketing-mail'
-  | 'accounting-bank-cash'
-  | 'accounting-tds'
-  | 'accounting-cheques'
-  | 'accounting-recurring'
-  | 'help';
+  | 'backup';
 
 interface Props {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   isOpen?: boolean;
   onClose?: () => void;
-  onQuickAction?: (tab: NavTab) => void;
 }
 
-interface NavSubItemDef {
-  id: NavTab;
-  label: string;
-  hasAdd?: boolean;
-  badge?: number | string;
-  badgeColor?: string;
-  roles?: string[]; // Allowed roles (if omitted, accessible by all allowed by parent)
-}
-
-interface NavCategoryDef {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  isDirectLink?: boolean;
-  directTab?: NavTab;
-  items?: NavSubItemDef[];
-  roles?: string[]; // Allowed roles
-}
-
-export const Sidebar: React.FC<Props> = ({
-  activeTab,
-  setActiveTab,
-  isOpen = false,
-  onClose,
-  onQuickAction,
-}) => {
-  const { user, logout } = useAuth();
+export const Sidebar: React.FC<Props> = ({ activeTab, setActiveTab, isOpen = false, onClose }) => {
+  const { user } = useAuth();
   const { company, fetchApi, subscribeToEvents } = useServer();
-
-  // Search input state
-  const [searchTerm, setSearchTerm] = useState<string>('');
-
-  // Accordion open/close map for New Menu categories
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    crm: false,
-    items: false,
-    inventory: false,
-    sales: true, // Default open sales for workflow
-    purchases: false,
-    dealers: false,
-    marketing: false,
-    accounting: false,
-  });
-
-  // Old Menu collapsed/expanded state
-  const [oldMenuExpanded, setOldMenuExpanded] = useState<boolean>(false);
   const [newQuotationExpanded, setNewQuotationExpanded] = useState<boolean>(true);
-  const [dispatchSubmenuExpanded, setDispatchSubmenuExpanded] = useState<boolean>(true);
-
-  // Dispatch Live WebSocket Statistics
   const [dispatchChangesCount, setDispatchChangesCount] = useState<number>(0);
   const [localActiveCount, setLocalActiveCount] = useState<number>(0);
   const [factoryActiveCount, setFactoryActiveCount] = useState<number>(0);
   const [closedCount, setClosedCount] = useState<number>(0);
   const [overdueCount, setOverdueCount] = useState<number>(0);
+  const [dispatchSubmenuExpanded, setDispatchSubmenuExpanded] = useState<boolean>(true);
 
   if (!user) return null;
 
-  // Role helpers
-  const userRole = (user.role || '').toLowerCase();
-  const isAdmin = userRole === 'admin';
-  const isManager = userRole === 'manager';
-  const isSalesperson = userRole === 'salesperson';
-  const isDispatch = userRole === 'dispatch' || userRole === 'dispatch_team';
-  const isAccounts = userRole === 'accounts' || userRole === 'accountant';
+  const companyInitials = (company?.company_name || 'AMA')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase() || 'AMA';
+
+  const handleNavSelect = (tab: NavTab) => {
+    setActiveTab(tab);
+    if (onClose) onClose();
+  };
+
+  const isAdmin = user.role === 'admin';
+  const isManager = user.role === 'manager';
+  const isSalesperson = user.role === 'salesperson';
+  const isDispatch = user.role === 'dispatch' || user.role === 'dispatch_team';
+  const isAccounts = user.role === 'accounts' || user.role === 'accountant';
   const canAudit = isAdmin || isManager;
   const canDispatch = isAdmin || isManager || isDispatch || isSalesperson || isAccounts;
   const canSeeItemChangesNotice = isAdmin || isManager || isDispatch || isAccounts;
   const isViewOnly = !isDispatch && !isAdmin;
 
-  // Load Dispatch Stats
+  useEffect(() => {
+    if (activeTab.startsWith('dispatch')) {
+      setDispatchSubmenuExpanded(true);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     if (!canDispatch) return;
     const loadStats = async () => {
@@ -224,208 +135,29 @@ export const Sidebar: React.FC<Props> = ({
     return () => unsubscribe();
   }, [canDispatch]);
 
-  // Handle navigation selection
-  const handleNavSelect = (tab: NavTab) => {
-    setActiveTab(tab);
-    if (onClose) onClose();
-  };
+  const isTileCreateActive = activeTab === 'quotation-create' || activeTab === 'quotation-create-tiles';
+  const isSanitaryCreateActive = activeTab === 'quotation-create-sanitary';
+  const isAnyCreateActive = isTileCreateActive || isSanitaryCreateActive;
 
-  // Handle [+] Quick Action
-  const handleQuickAction = (e: React.MouseEvent, tab: NavTab) => {
-    e.stopPropagation();
-    if (onQuickAction) {
-      onQuickAction(tab);
-    } else {
-      setActiveTab(tab);
-    }
-    if (onClose) onClose();
-  };
+  const analyticsNav = [
+    { id: 'targets' as NavTab, label: 'Sales Targets', icon: Target },
+    { id: 'reports' as NavTab, label: 'Reports & Export', icon: BarChart3 },
+  ];
 
-  // Toggle category
-  const toggleCategory = (catId: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [catId]: !prev[catId],
-    }));
-  };
+  const adminNav = [
+    ...(isAdmin ? [{ id: 'admin-panel' as NavTab, label: 'Admin Panel', icon: ShieldCheck }] : []),
+    ...(isAdmin ? [{ id: 'company' as NavTab, label: 'Company Settings', icon: Building }] : []),
+    ...(canAudit ? [{ id: 'audit' as NavTab, label: 'Audit Trail', icon: Layers }] : []),
+    ...(isAdmin ? [{ id: 'backup' as NavTab, label: 'Database Backup', icon: Database }] : []),
+  ];
 
-  // Define All New ERP Categories & Sub-items
-  const newMenuCategories: NavCategoryDef[] = useMemo(() => {
-    return [
-      {
-        id: 'dashboard',
-        label: 'Dashboard',
-        icon: Grid,
-        isDirectLink: true,
-        directTab: 'dashboard',
-      },
-      {
-        id: 'crm',
-        label: 'CRM',
-        icon: Handshake,
-        items: [
-          { id: 'crm-pipeline', label: 'Pipeline', hasAdd: true },
-          { id: 'crm-projects', label: 'Projects', hasAdd: true },
-          { id: 'crm-inquiries', label: 'Inquiries' },
-        ],
-      },
-      {
-        id: 'items',
-        label: 'Items',
-        icon: LayoutGrid,
-        items: [
-          { id: 'products', label: 'Items', hasAdd: true },
-          { id: 'items-services', label: 'Services', hasAdd: true },
-          { id: 'items-price-lists', label: 'Price Lists', hasAdd: true },
-          { id: 'items-kits', label: 'Kits', hasAdd: true },
-          { id: 'items-import-export', label: 'Import & Export' },
-        ],
-      },
-      {
-        id: 'inventory',
-        label: 'Inventory',
-        icon: Warehouse,
-        items: [
-          { id: 'inventory-manual-entry', label: 'Manual Stock Entry' },
-          { id: 'inventory-bulk-update', label: 'Bulk Stock Update' },
-          { id: 'inventory-opening-stock', label: 'Opening Stock' },
-          { id: 'inventory-transfers', label: 'Stock Transfers', hasAdd: true },
-          { id: 'inventory-adjustments', label: 'Stock Adjustments', hasAdd: true },
-          { id: 'inventory-assemble-kits', label: 'Assemble Kits', hasAdd: true },
-          { id: 'dispatch-local-history', label: 'Item History' },
-          { id: 'inventory-reserved', label: 'Reserved Stock' },
-          { id: 'dispatch-factory-tracker', label: 'Incoming Stock', badge: factoryActiveCount > 0 ? factoryActiveCount : undefined },
-          { id: 'dispatch-local-tracker', label: 'Unloading Tally', badge: localActiveCount > 0 ? localActiveCount : undefined },
-          { id: 'dispatch-damage-replacement', label: 'Damaged Goods' },
-          { id: 'inventory-loading-alerts', label: 'Loading Alerts', badge: overdueCount > 0 ? overdueCount : undefined },
-        ],
-      },
-      {
-        id: 'sales',
-        label: 'Sales',
-        icon: IndianRupee,
-        items: [
-          { id: 'customers', label: 'Customers', hasAdd: true },
-          { id: 'quotations', label: 'Quotations', hasAdd: true },
-          { id: 'sales-cart', label: 'Cart' },
-          { id: 'sales-orders', label: 'Sales Orders', hasAdd: true },
-          { id: 'sales-proforma', label: 'Proforma Invoices' },
-          { id: 'sales-delivery-orders', label: 'Delivery Orders', hasAdd: true },
-          { id: 'dispatch-schedule', label: 'Delivery Challans' },
-          { id: 'sales-invoices', label: 'Invoices', hasAdd: true },
-          { id: 'payments', label: 'Payments Received', hasAdd: true },
-          { id: 'dispatch-payment-tracking', label: 'Payment Reminders' },
-          { id: 'dispatch-damage-replacement', label: 'Credit Notes', hasAdd: true },
-          { id: 'sales-eway-bills', label: 'e-Way Bills' },
-        ],
-      },
-      {
-        id: 'purchases',
-        label: 'Purchases',
-        icon: ShoppingCart,
-        items: [
-          { id: 'purchases-landed-cost', label: 'Landed Cost Calculator' },
-        ],
-      },
-      {
-        id: 'dealers',
-        label: 'Dealer Network',
-        icon: Share2,
-        items: [
-          { id: 'dealers-list', label: 'Dealers', hasAdd: true },
-          { id: 'dealers-find', label: 'Find New Dealers' },
-          { id: 'dealers-panel', label: 'Panel Management' },
-          { id: 'dealers-expenses', label: 'Sample & Promo Expenses' },
-          { id: 'dealers-whatsapp', label: 'WhatsApp Chatbot' },
-        ],
-      },
-      {
-        id: 'marketing',
-        label: 'Marketing & Documents',
-        icon: Megaphone,
-        items: [
-          { id: 'sanitary-catalog', label: 'Product Catalog' },
-          { id: 'marketing-documents', label: 'Documents' },
-          { id: 'marketing-mail', label: 'Mail', hasAdd: true },
-        ],
-      },
-      {
-        id: 'accounting',
-        label: 'Accounting',
-        icon: Calculator,
-        items: [
-          { id: 'accounting-bank-cash', label: 'Bank & Cash Accounts', hasAdd: true },
-          { id: 'accounting-tds', label: 'TDS' },
-          { id: 'accounting-cheques', label: 'Cheques' },
-          { id: 'accounting-recurring', label: 'Recurring Transactions', hasAdd: true },
-        ],
-      },
-      {
-        id: 'reports',
-        label: 'Reports',
-        icon: BarChart3,
-        isDirectLink: true,
-        directTab: 'reports',
-      },
-      {
-        id: 'settings',
-        label: 'Settings',
-        icon: Settings,
-        isDirectLink: true,
-        directTab: 'company',
-      },
-      {
-        id: 'help',
-        label: 'Help',
-        icon: LifeBuoy,
-        isDirectLink: true,
-        directTab: 'help',
-      },
-    ];
-  }, [localActiveCount, factoryActiveCount, overdueCount]);
-
-  // Legacy Tabs list for auto-expanding Old Menu
-  const oldMenuTabIds = useMemo(() => {
-    return [
-      'quotations',
-      'quotation-create',
-      'quotation-create-tiles',
-      'quotation-create-sanitary',
-      'dispatch',
-      'dispatch-all-closed',
-      'dispatch-processing',
-      'dispatch-completed',
-      'dispatch-damage-replacement',
-      'dispatch-schedule',
-      'dispatch-local-tracker',
-      'dispatch-factory-tracker',
-      'dispatch-payment-tracking',
-      'dispatch-local-history',
-      'dispatch-factory-history',
-      'dispatch-reports',
-      'dispatch-local',
-      'dispatch-factory',
-      'salespersons',
-      'customers',
-      'products',
-      'sanitary-catalog',
-      'payments',
-      'targets',
-      'admin-panel',
-      'company',
-      'audit',
-      'backup',
-    ];
-  }, []);
-
-  // Dispatch items configuration for Old Menu
   const dispatchNavItems = [
     {
       id: 'dispatch-all-closed' as NavTab,
       label: 'All Closed Quotations',
       icon: CheckCircle2,
       badge: closedCount > 0 ? closedCount : undefined,
-      badgeColor: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30',
+      badgeColor: 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/30',
     },
     {
       id: 'dispatch-processing' as NavTab,
@@ -487,629 +219,372 @@ export const Sidebar: React.FC<Props> = ({
     },
   ];
 
-  // Auto-expand category or Old Menu when activeTab changes
-  useEffect(() => {
-    // If activeTab is within oldMenuTabIds, ensure Old Menu is open
-    if (oldMenuTabIds.includes(activeTab) || activeTab.startsWith('dispatch')) {
-      // Auto-expand Old Menu
-      setOldMenuExpanded(true);
-    }
-
-    // Auto-expand corresponding New Menu category if matched
-    newMenuCategories.forEach((cat) => {
-      if (cat.items?.some((sub) => sub.id === activeTab)) {
-        setExpandedCategories((prev) => ({ ...prev, [cat.id]: true }));
-      }
-    });
-
-    if (activeTab.startsWith('dispatch')) {
-      setDispatchSubmenuExpanded(true);
-    }
-  }, [activeTab, oldMenuTabIds, newMenuCategories]);
-
-  // Real-time Search Filtering
-  const cleanSearch = searchTerm.trim().toLowerCase();
-
-  const filteredCategories = useMemo(() => {
-    if (!cleanSearch) return newMenuCategories;
-
-    return newMenuCategories
-      .map((cat) => {
-        const catMatch = cat.label.toLowerCase().includes(cleanSearch);
-        if (cat.isDirectLink) {
-          return catMatch ? cat : null;
-        }
-
-        const matchedSubItems = cat.items?.filter((sub) =>
-          sub.label.toLowerCase().includes(cleanSearch)
-        );
-
-        if (catMatch || (matchedSubItems && matchedSubItems.length > 0)) {
-          return {
-            ...cat,
-            items: matchedSubItems && matchedSubItems.length > 0 ? matchedSubItems : cat.items,
-          };
-        }
-        return null;
-      })
-      .filter(Boolean) as NavCategoryDef[];
-  }, [newMenuCategories, cleanSearch]);
-
-  const hasAnyMatches = filteredCategories.length > 0 || (cleanSearch ? 'old menu'.includes(cleanSearch) : true);
-
-  // Render New Navigation List
-  const renderNewMenu = () => {
-    if (filteredCategories.length === 0 && cleanSearch) {
-      return (
-        <div className="py-6 px-3 text-center">
-          <p className="text-xs text-slate-500 dark:text-slate-400">No menu items matching "{searchTerm}"</p>
-          <button
-            onClick={() => setSearchTerm('')}
-            className="mt-2 text-[11px] font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
-          >
-            Clear Search
-          </button>
+  const renderNavBody = () => (
+    <div className="p-3 overflow-y-auto space-y-4 flex-1">
+      {/* Operations Section */}
+      <div>
+        <div className="px-3 mb-1.5">
+          <span className="sidebar-heading">Operations</span>
         </div>
-      );
-    }
-
-    return (
-      <div className="space-y-0.5">
-        {filteredCategories.map((cat) => {
-          const Icon = cat.icon;
-          const isDirect = cat.isDirectLink;
-          const directTab = cat.directTab || (cat.id as NavTab);
-          const isDirectActive = isDirect && activeTab === directTab;
-
-          // If direct link (Dashboard, Reports, Settings, Help)
-          if (isDirect) {
-            return (
+        <div className="space-y-1">
+          {isDispatch ? (
+            /* Dedicated Dispatch Team Navigation with all 10 views */
+            <div className="space-y-1">
+              {dispatchNavItems.map((item) => {
+                const Icon = item.icon;
+                const isItemActive =
+                  activeTab === item.id ||
+                  (item.id === 'dispatch-local-tracker' && activeTab === 'dispatch-local') ||
+                  (item.id === 'dispatch-factory-tracker' && activeTab === 'dispatch-factory') ||
+                  (item.id === 'dispatch-all-closed' && activeTab === 'dispatch');
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavSelect(item.id)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs cursor-pointer text-left transition-colors ${
+                      isItemActive ? 'sidebar-nav-active font-bold text-white' : 'sidebar-nav-item'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Icon size={15} className={isItemActive ? 'text-teal-300' : 'nav-icon'} />
+                      <span className="tracking-wide truncate">{item.label}</span>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${item.badgeColor || 'bg-slate-700 text-slate-200'}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              {/* Dashboard */}
               <button
-                key={cat.id}
-                onClick={() => handleNavSelect(directTab)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer text-left ${
-                  isDirectActive
-                    ? 'bg-teal-700 text-white font-semibold shadow-xs'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800/70'
+                onClick={() => handleNavSelect('dashboard')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'dashboard' ? 'sidebar-nav-active' : 'sidebar-nav-item'
                 }`}
               >
-                <div className="flex items-center space-x-2.5 min-w-0">
-                  <Icon
-                    size={16}
-                    className={isDirectActive ? 'text-teal-200 shrink-0' : 'text-slate-500 dark:text-slate-400 shrink-0'}
-                  />
-                  <span className="truncate font-medium">{cat.label}</span>
-                </div>
-              </button>
-            );
-          }
-
-          // Collapsible Category
-          const isExpanded = cleanSearch ? true : !!expandedCategories[cat.id];
-          const hasActiveChild = cat.items?.some((sub) => sub.id === activeTab);
-
-          return (
-            <div key={cat.id} className="pt-0.5">
-              {/* Category Header Button */}
-              <button
-                onClick={() => toggleCategory(cat.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer text-left ${
-                  hasActiveChild && !isExpanded
-                    ? 'bg-teal-700/10 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200 font-semibold'
-                    : isExpanded
-                    ? 'bg-stone-100/80 dark:bg-slate-800/60 text-slate-900 dark:text-white font-semibold'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5 min-w-0">
-                  <Icon
-                    size={16}
-                    className={
-                      hasActiveChild
-                        ? 'text-teal-600 dark:text-teal-400 shrink-0'
-                        : 'text-slate-500 dark:text-slate-400 shrink-0'
-                    }
-                  />
-                  <span className="truncate">{cat.label}</span>
-                </div>
-                <div className="flex items-center space-x-1 shrink-0 ml-1">
-                  {isExpanded ? (
-                    <ChevronDown size={14} className="text-slate-400 dark:text-slate-500" />
-                  ) : (
-                    <ChevronRight size={14} className="text-slate-400 dark:text-slate-500" />
-                  )}
+                <div className="flex items-center space-x-2.5">
+                  <LayoutDashboard size={16} className="nav-icon" />
+                  <span className="tracking-wide">Dashboard</span>
                 </div>
               </button>
 
-              {/* Sub-Items with 1px Vertical Indent Guide Line */}
-              {isExpanded && cat.items && (
-                <div className="mt-0.5 ml-5 pl-4 border-l border-slate-200 dark:border-slate-700/80 space-y-0.5">
-                  {cat.items.map((sub) => {
-                    const isSubActive = activeTab === sub.id;
-                    return (
-                      <div
-                        key={sub.id}
-                        className={`group flex items-center justify-between rounded-lg transition-colors ${
-                          isSubActive
-                            ? 'bg-teal-700 text-white font-semibold shadow-xs'
-                            : 'hover:bg-stone-100 dark:hover:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <button
-                          onClick={() => handleNavSelect(sub.id)}
-                          className="flex-1 flex items-center justify-between px-2.5 py-1.5 text-xs text-left cursor-pointer min-w-0"
-                        >
-                          <span className="truncate">{sub.label}</span>
-                          {sub.badge !== undefined && (
-                            <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded-full shrink-0 ml-1.5 font-bold ${
-                                sub.badgeColor || 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
-                              }`}
-                            >
-                              {sub.badge}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* Quick-Create [+] Button */}
-                        {sub.hasAdd && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleQuickAction(e, sub.id)}
-                            title={`Quick create ${sub.label}`}
-                            className={`p-1 mr-1 rounded-md transition-all cursor-pointer ${
-                              isSubActive
-                                ? 'text-teal-100 hover:bg-white/20 hover:text-white'
-                                : 'text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/50'
-                            }`}
-                          >
-                            <Plus size={13} strokeWidth={2.5} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+              {/* Quotations List */}
+              <button
+                onClick={() => handleNavSelect('quotations')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                  activeTab === 'quotations' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <FileText size={16} className="nav-icon" />
+                  <span className="tracking-wide">Quotations</span>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+              </button>
 
-  // Render "Old Menu" Archive Group
-  const renderOldMenuArchive = () => {
-    const isLegacyActive = oldMenuTabIds.includes(activeTab);
-    const isTileCreateActive = activeTab === 'quotation-create' || activeTab === 'quotation-create-tiles';
-    const isSanitaryCreateActive = activeTab === 'quotation-create-sanitary';
-    const isAnyCreateActive = isTileCreateActive || isSanitaryCreateActive;
-
-    return (
-      <div className="pt-2">
-        {/* Subtle Horizontal Divider */}
-        <div className="relative py-2">
-          <div className="absolute inset-0 flex items-center" aria-hidden="true">
-            <div className="w-full border-t border-slate-200 dark:border-slate-800" />
-          </div>
-          <div className="relative flex justify-start">
-            <span className="pr-2 bg-white dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Legacy Navigation
-            </span>
-          </div>
-        </div>
-
-        {/* Collapsible "Old Menu" Parent Button */}
-        <div className="pt-0.5">
-          <button
-            onClick={() => setOldMenuExpanded((prev) => !prev)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer text-left ${
-              isLegacyActive
-                ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 border border-amber-300/40 dark:border-amber-700/40 font-semibold'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70 border border-transparent'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5 min-w-0">
-              <FolderArchive size={16} className={isLegacyActive ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'} />
-              <div className="min-w-0">
-                <span className="truncate font-bold">Old Menu</span>
-                <span className="ml-1.5 text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  Archive
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1 shrink-0 ml-1">
-              {oldMenuExpanded ? (
-                <ChevronDown size={14} className="text-slate-400" />
-              ) : (
-                <ChevronRight size={14} className="text-slate-400" />
-              )}
-            </div>
-          </button>
-
-          {/* Submenu containing all legacy navigation views */}
-          {oldMenuExpanded && (
-            <div className="mt-1 ml-3.5 pl-3 border-l-2 border-amber-300/40 dark:border-amber-700/40 space-y-3 py-1">
-              {/* Operations Section */}
-              <div>
-                <div className="px-2 mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Operations
-                  </span>
-                </div>
-                <div className="space-y-0.5">
-                  {/* Dashboard in Old Menu */}
+              {/* Dispatch Management Expandable Group */}
+              {canDispatch && (
+                <div className="pt-0.5 pb-0.5">
                   <button
-                    onClick={() => handleNavSelect('dashboard')}
-                    className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                      activeTab === 'dashboard'
-                        ? 'bg-teal-700 text-white font-semibold'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
+                    onClick={() => {
+                      setDispatchSubmenuExpanded((prev) => !prev);
+                      if (!dispatchSubmenuExpanded && !activeTab.startsWith('dispatch')) {
+                        handleNavSelect('dispatch-all-closed');
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                      activeTab.startsWith('dispatch') ? 'sidebar-nav-active font-semibold' : 'sidebar-nav-item'
                     }`}
                   >
-                    <LayoutDashboard size={14} />
-                    <span className="truncate">Dashboard</span>
-                  </button>
-
-                  {/* Quotations List */}
-                  <button
-                    onClick={() => handleNavSelect('quotations')}
-                    className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                      activeTab === 'quotations'
-                        ? 'bg-teal-700 text-white font-semibold'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                    }`}
-                  >
-                    <FileText size={14} />
-                    <span className="truncate">Quotations</span>
-                  </button>
-
-                  {/* New Quotation Expandable Group */}
-                  {!isDispatch && (
-                    <div className="py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setNewQuotationExpanded((prev) => !prev)}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          isAnyCreateActive
-                            ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 font-semibold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <PlusCircle size={14} className="text-amber-600 dark:text-amber-400" />
-                          <span className="truncate font-semibold">New Quotation</span>
-                        </div>
-                        {newQuotationExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      </button>
-
-                      {newQuotationExpanded && (
-                        <div className="mt-0.5 ml-3 pl-2.5 border-l border-slate-200 dark:border-slate-700 space-y-0.5">
-                          <button
-                            onClick={() => handleNavSelect('quotation-create-tiles')}
-                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer text-left ${
-                              isTileCreateActive
-                                ? 'bg-teal-700 text-white font-semibold'
-                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            <span>Tile Quotation</span>
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 font-mono">
-                              Sqft
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => handleNavSelect('quotation-create-sanitary')}
-                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer text-left ${
-                              isSanitaryCreateActive
-                                ? 'bg-teal-700 text-white font-semibold'
-                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            <span>Sanitary Quotation</span>
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-teal-500/15 text-teal-700 dark:text-teal-300 font-mono">
-                              Nos
-                            </span>
-                          </button>
-                        </div>
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Truck size={16} className={activeTab.startsWith('dispatch') ? 'text-teal-300' : 'nav-icon'} />
+                      <span className="tracking-wide font-semibold truncate">Dispatch Management</span>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0 ml-1.5">
+                      {canSeeItemChangesNotice && dispatchChangesCount > 0 ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-extrabold shadow-xs">
+                          {dispatchChangesCount}
+                        </span>
+                      ) : isViewOnly ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20">
+                          View
+                        </span>
+                      ) : null}
+                      {dispatchSubmenuExpanded ? (
+                        <ChevronDown size={14} className="text-white/60" />
+                      ) : (
+                        <ChevronRight size={14} className="text-white/60" />
                       )}
                     </div>
-                  )}
+                  </button>
 
-                  {/* Dispatch Management Expandable Group */}
-                  {canDispatch && (
-                    <div className="py-0.5">
-                      <button
-                        onClick={() => setDispatchSubmenuExpanded((prev) => !prev)}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          activeTab.startsWith('dispatch')
-                            ? 'bg-teal-700 text-white font-semibold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Truck size={14} className={activeTab.startsWith('dispatch') ? 'text-teal-200' : 'text-slate-500'} />
-                          <span className="truncate font-semibold">Dispatch Hub</span>
-                        </div>
-                        <div className="flex items-center space-x-1 shrink-0 ml-1">
-                          {canSeeItemChangesNotice && dispatchChangesCount > 0 && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-extrabold">
-                              {dispatchChangesCount}
-                            </span>
-                          )}
-                          {dispatchSubmenuExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        </div>
-                      </button>
-
-                      {dispatchSubmenuExpanded && (
-                        <div className="mt-0.5 ml-3 pl-2.5 border-l border-slate-200 dark:border-slate-700 space-y-0.5">
-                          {dispatchNavItems.map((item) => {
-                            const Icon = item.icon;
-                            const isItemActive =
-                              activeTab === item.id ||
-                              (item.id === 'dispatch-local-tracker' && activeTab === 'dispatch-local') ||
-                              (item.id === 'dispatch-factory-tracker' && activeTab === 'dispatch-factory') ||
-                              (item.id === 'dispatch-all-closed' && activeTab === 'dispatch');
-
-                            return (
-                              <button
-                                key={item.id}
-                                onClick={() => handleNavSelect(item.id)}
-                                className={`w-full flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer text-left ${
-                                  isItemActive
-                                    ? 'bg-teal-700 text-white font-semibold'
-                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                              >
-                                <div className="flex items-center space-x-1.5 min-w-0">
-                                  <Icon size={12} className={isItemActive ? 'text-teal-200' : 'text-slate-400'} />
-                                  <span className="truncate">{item.label}</span>
-                                </div>
-                                {item.badge !== undefined && (
-                                  <span className={`text-[9px] px-1.5 py-0.2 rounded-full shrink-0 ml-1 font-bold ${item.badgeColor || 'bg-slate-200 text-slate-800'}`}>
-                                    {item.badge}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                  {/* Sub-items featuring exactly the 10 distinct views */}
+                  {dispatchSubmenuExpanded && (
+                    <div className="mt-1 pl-2 space-y-0.5 border-l-2 border-white/10 ml-3.5">
+                      {dispatchNavItems.map((item) => {
+                        const Icon = item.icon;
+                        const isItemActive =
+                          activeTab === item.id ||
+                          (item.id === 'dispatch-local-tracker' && activeTab === 'dispatch-local') ||
+                          (item.id === 'dispatch-factory-tracker' && activeTab === 'dispatch-factory') ||
+                          (item.id === 'dispatch-all-closed' && activeTab === 'dispatch');
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => handleNavSelect(item.id)}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] cursor-pointer text-left transition-colors ${
+                              isItemActive
+                                ? 'sidebar-nav-active font-semibold shadow-xs text-teal-300'
+                                : 'sidebar-nav-item text-[#E0E1DD]/90 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Icon size={13} className={isItemActive ? 'text-teal-300' : 'text-[#E0E1DD]/60'} />
+                              <span className="truncate">{item.label}</span>
+                            </div>
+                            {item.badge !== undefined && (
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded-full shrink-0 ml-1 ${item.badgeColor || 'bg-slate-700 text-slate-200'}`}>
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
-
-                  {/* Salesperson Dashboard */}
-                  {!isDispatch && (
-                    <button
-                      onClick={() => handleNavSelect('salespersons')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'salespersons'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <UserCheck size={14} />
-                      <span className="truncate">Salesperson Dashboard</span>
-                    </button>
-                  )}
-
-                  {/* Customers */}
-                  {!isDispatch && (
-                    <button
-                      onClick={() => handleNavSelect('customers')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'customers'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <Users size={14} />
-                      <span className="truncate">Customers</span>
-                    </button>
-                  )}
-
-                  {/* Tile Catalog */}
-                  {!isDispatch && (
-                    <button
-                      onClick={() => handleNavSelect('products')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'products'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <Layers size={14} />
-                      <span className="truncate">Tile Catalog</span>
-                    </button>
-                  )}
-
-                  {/* Sanitary Catalog */}
-                  {!isDispatch && (
-                    <button
-                      onClick={() => handleNavSelect('sanitary-catalog')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'sanitary-catalog'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <Bath size={14} />
-                      <span className="truncate">Sanitary Catalog</span>
-                    </button>
-                  )}
-
-                  {/* Payments & Receipts */}
-                  {!isDispatch && (
-                    <button
-                      onClick={() => handleNavSelect('payments')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'payments'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <CreditCard size={14} />
-                      <span className="truncate">Payments & Receipts</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Performance Section */}
-              {!isDispatch && (
-                <div>
-                  <div className="px-2 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                      Performance
-                    </span>
-                  </div>
-                  <div className="space-y-0.5">
-                    <button
-                      onClick={() => handleNavSelect('targets')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'targets'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <Target size={14} />
-                      <span className="truncate">Sales Targets</span>
-                    </button>
-                    <button
-                      onClick={() => handleNavSelect('reports')}
-                      className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                        activeTab === 'reports'
-                          ? 'bg-teal-700 text-white font-semibold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                      }`}
-                    >
-                      <BarChart3 size={14} />
-                      <span className="truncate">Reports & Export</span>
-                    </button>
-                  </div>
                 </div>
               )}
-
-              {/* System Admin Section */}
-              {(isAdmin || canAudit) && (
-                <div>
-                  <div className="px-2 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                      System Admin
-                    </span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleNavSelect('admin-panel')}
-                        className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          activeTab === 'admin-panel'
-                            ? 'bg-teal-700 text-white font-semibold'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <ShieldCheck size={14} />
-                        <span className="truncate">Admin Panel</span>
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleNavSelect('company')}
-                        className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          activeTab === 'company'
-                            ? 'bg-teal-700 text-white font-semibold'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <Building size={14} />
-                        <span className="truncate">Company Settings</span>
-                      </button>
-                    )}
-                    {canAudit && (
-                      <button
-                        onClick={() => handleNavSelect('audit')}
-                        className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          activeTab === 'audit'
-                            ? 'bg-teal-700 text-white font-semibold'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <Layers size={14} />
-                        <span className="truncate">Audit Trail</span>
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleNavSelect('backup')}
-                        className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                          activeTab === 'backup'
-                            ? 'bg-teal-700 text-white font-semibold'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
-                        }`}
-                      >
-                        <Database size={14} />
-                        <span className="truncate">Database Backup</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            </>
           )}
-        </div>
-      </div>
-    );
-  };
 
-  // Render Inner Content of Sidebar
-  const renderSidebarContent = () => (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Pinned Top Search Bar */}
-      <div className="px-3 pt-3 pb-2 shrink-0 border-b border-slate-100 dark:border-slate-800/80">
-        <div className="relative flex items-center">
-          <Search size={14} className="absolute left-3 text-slate-400 dark:text-slate-500 pointer-events-none" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search products, dealers..."
-            className="w-full pl-8 pr-7 py-1.5 text-xs rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700/60 focus:outline-none focus:ring-1 focus:ring-teal-500 transition-all"
-          />
-          {searchTerm && (
+          {/* Salesperson Dashboard */}
+          {!isDispatch && (
             <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer"
+              onClick={() => handleNavSelect('salespersons')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'salespersons' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
             >
-              <X size={12} />
+              <div className="flex items-center space-x-2.5">
+                <UserCheck size={16} className="nav-icon" />
+                <span className="tracking-wide">Salesperson Dashboard</span>
+              </div>
+            </button>
+          )}
+
+          {/* New Quotation Expandable Group */}
+          {!isDispatch && (
+            <div className="pt-1 pb-1">
+            <button
+              type="button"
+              onClick={() => setNewQuotationExpanded((prev) => !prev)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer text-left transition-all ${
+                isAnyCreateActive
+                  ? 'bg-[#1B263B]/90 text-white border border-[#415A77]/60 shadow-sm'
+                  : 'sidebar-nav-action'
+              }`}
+              title="Create New Quotation"
+            >
+              <div className="flex items-center space-x-2">
+                <PlusCircle size={15} className="text-amber-400" />
+                <span className="font-semibold tracking-wide text-white">New Quotation</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                {newQuotationExpanded ? (
+                  <ChevronDown size={14} className="text-[#778DA9]" />
+                ) : (
+                  <ChevronRight size={14} className="text-[#778DA9]" />
+                )}
+              </div>
+            </button>
+
+            {/* Sub-options for Tile and Sanitary */}
+            {newQuotationExpanded && (
+              <div className="mt-1 pl-2.5 space-y-1 border-l-2 border-white/10 ml-3.5 animate-dropdown-open">
+                {/* Tile Quotation Option */}
+                <button
+                  onClick={() => handleNavSelect('quotation-create-tiles')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] cursor-pointer text-left transition-all ${
+                    isTileCreateActive
+                      ? 'sidebar-nav-active font-semibold shadow-xs'
+                      : 'sidebar-nav-item text-[#E0E1DD]/90 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Grid size={14} className={isTileCreateActive ? 'text-blue-300' : 'text-blue-400/80'} />
+                    <span>Tile Quotation</span>
+                  </div>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono border border-blue-400/20">
+                    Sqft
+                  </span>
+                </button>
+
+                {/* Sanitary Quotation Option */}
+                <button
+                  onClick={() => handleNavSelect('quotation-create-sanitary')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] cursor-pointer text-left transition-all ${
+                    isSanitaryCreateActive
+                      ? 'sidebar-nav-active font-semibold shadow-xs'
+                      : 'sidebar-nav-item text-[#E0E1DD]/90 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Bath size={14} className={isSanitaryCreateActive ? 'text-teal-300' : 'text-teal-400/80'} />
+                    <span>Sanitary Quotation</span>
+                  </div>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
+                    Nos
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* Customers */}
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('customers')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'customers' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Users size={16} className="nav-icon" />
+                <span className="tracking-wide">Customers</span>
+              </div>
+            </button>
+          )}
+
+          {/* Tile Catalog */}
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('products')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'products' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Layers size={16} className="nav-icon" />
+                <span className="tracking-wide">Tile Catalog</span>
+              </div>
+            </button>
+          )}
+
+          {/* Sanitary Catalog */}
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('sanitary-catalog')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'sanitary-catalog' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Bath size={16} className={activeTab === 'sanitary-catalog' ? 'text-teal-300' : 'nav-icon'} />
+                <span className="tracking-wide">Sanitary Catalog</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono border border-teal-400/20">
+                PDF
+              </span>
+            </button>
+          )}
+
+          {/* Payments & Receipts */}
+          {!isDispatch && (
+            <button
+              onClick={() => handleNavSelect('payments')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                activeTab === 'payments' ? 'sidebar-nav-active' : 'sidebar-nav-item'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <CreditCard size={16} className="nav-icon" />
+                <span className="tracking-wide">Payments & Receipts</span>
+              </div>
             </button>
           )}
         </div>
       </div>
 
-      {/* Internally Scrolling Navigation Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-2.5 py-2 space-y-1 scrollbar-thin">
-        {renderNewMenu()}
-        {renderOldMenuArchive()}
-      </div>
-
-      {/* Pinned Footer Section: Full-Width Log Out & Memory Mode */}
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/90 shrink-0 space-y-2">
-        <button
-          onClick={logout}
-          title="Sign out of system"
-          className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-400 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold shadow-2xs transition-all cursor-pointer group"
-        >
-          <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-          <span>Log out</span>
-        </button>
-
-        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-0.5 px-0.5">
-          <div className="flex items-center space-x-1">
-            <Cpu size={11} className="text-emerald-500" />
-            <span className="font-medium">RAM Opt.</span>
+      {/* Performance Section */}
+      {!isDispatch && (
+        <div>
+          <div className="px-3 mb-1.5">
+            <span className="sidebar-heading">Performance</span>
           </div>
-          <span className="font-mono text-slate-600 dark:text-slate-400 font-medium">Build v2.4.78</span>
+          <div className="space-y-1">
+            {analyticsNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavSelect(item.id)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                    isActive ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Icon size={16} className="nav-icon" />
+                    <span className="tracking-wide">{item.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
+      )}
+
+      {/* System Admin Section */}
+      {adminNav.length > 0 && (
+        <div>
+          <div className="px-3 mb-1.5">
+            <span className="sidebar-heading">System Admin</span>
+          </div>
+          <div className="space-y-1">
+            {adminNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavSelect(item.id)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer text-left ${
+                    isActive ? 'sidebar-nav-active' : 'sidebar-nav-item'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Icon size={16} className="nav-icon" />
+                    <span className="tracking-wide">{item.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderFooter = () => (
+    <div className="p-3 border-t border-white/10 bg-[#09131F]/80 backdrop-blur-md text-[11px] text-[#778DA9] space-y-1.5 shrink-0">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-1.5">
+          <Cpu size={12} className="text-emerald-400" />
+          <span className="text-[#E0E1DD]/90 font-medium">Memory Mode</span>
+        </div>
+        <span className="font-semibold text-emerald-300 font-mono text-[10px] bg-emerald-500/15 border border-emerald-400/30 px-2 py-0.5 rounded-full shadow-xs">
+          4GB RAM Opt.
+        </span>
+      </div>
+      <div className="flex justify-between items-center text-[#778DA9] text-[10px] pt-0.5">
+        <span>App Build:</span>
+        <span className="font-mono text-[#E0E1DD]/80">v2.4.63</span>
       </div>
     </div>
   );
@@ -1125,47 +600,50 @@ export const Sidebar: React.FC<Props> = ({
 
       {/* Mobile Slide-in Drawer */}
       <aside
-        className={`mobile-drawer-aside select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-xl ${
+        className={`mobile-drawer-aside glass-sidebar select-none text-[#E0E1DD] ${
           isOpen ? 'drawer-open' : ''
         }`}
       >
         {/* Mobile Drawer Header */}
-        <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              M
-            </div>
-            <div className="text-xs font-bold text-slate-900 dark:text-white tracking-tight">
-              Menu
+        <div className="p-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            {company?.logo_base64 ? (
+              <img
+                src={company.logo_base64}
+                alt={company.company_name || 'Logo'}
+                className="h-7 max-w-[100px] w-auto rounded-lg object-contain bg-white shadow-sm shrink-0"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] text-[#E0E1DD] border border-white/20 flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
+                {companyInitials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white tracking-tight truncate max-w-[170px]">
+                {company?.company_name || 'QUOTATION SYSTEM'}
+              </div>
+              <div className="text-[10px] text-[#778DA9] truncate">
+                {company?.tagline || 'Navigation Menu'}
+              </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-[#778DA9] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
             aria-label="Close navigation"
           >
             <X size={18} />
           </button>
         </div>
 
-        {renderSidebarContent()}
+        {renderNavBody()}
+        {renderFooter()}
       </aside>
 
       {/* Desktop Permanent Docked Sidebar */}
-      <aside className="desktop-sidebar select-none h-screen flex flex-col overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 z-20">
-        {/* Desktop Header */}
-        <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              M
-            </div>
-            <span className="text-xs font-bold text-slate-900 dark:text-white tracking-tight uppercase">
-              Menu
-            </span>
-          </div>
-        </div>
-
-        {renderSidebarContent()}
+      <aside className="desktop-sidebar glass-sidebar flex-col justify-between shrink-0 select-none z-10 text-[#E0E1DD]">
+        {renderNavBody()}
+        {renderFooter()}
       </aside>
     </>
   );
