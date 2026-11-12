@@ -593,10 +593,10 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
         </div>
 
-        {/* 2. Split Section: Left 5 Stats + Right Chart Box */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6 items-stretch">
+        {/* 2. Split Section: Left 5 Stats + Right Chart Box (Always Side-by-Side) */}
+        <div className="flex flex-row items-stretch gap-6 pt-6">
           {/* Left Column (Clean Vertical Stack - No Borders Around Metrics) */}
-          <div className="lg:col-span-3 flex flex-col justify-between space-y-4 pr-2">
+          <div className="w-52 sm:w-60 shrink-0 flex flex-col justify-between space-y-4 pr-2">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
                 SALES THIS FINANCIAL YEAR
@@ -661,8 +661,8 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right Column: Inner Box for The Last Twelve Months Chart (Exact Match Image 2) */}
-          <div className="lg:col-span-9 rounded-xl border border-slate-200/90 p-5 bg-white flex flex-col justify-between shadow-2xs">
+          {/* Right Column: Inner Box for The Last Twelve Months Chart (Exact Match Image 1) */}
+          <div className="flex-1 min-w-0 rounded-xl border border-slate-200/90 p-5 bg-white flex flex-col justify-between shadow-2xs">
             {/* Inner Header Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-3">
