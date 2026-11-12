@@ -470,9 +470,9 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   if (loading && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 text-slate-500 bg-[#F7F9F7]">
-        <div className="w-12 h-12 rounded-full border-2 border-slate-300 border-t-[#1E5649] animate-spin mb-4" />
-        <p className="font-serif text-lg text-slate-700">Loading Enterprise Overview...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 text-slate-500 bg-[#F4F6F8]">
+        <div className="w-12 h-12 rounded-full border-2 border-slate-300 border-t-[#1B263B] animate-spin mb-4" />
+        <p className="font-serif text-lg text-slate-800">Loading Enterprise Overview...</p>
         <p className="text-xs text-slate-400 mt-1">Aggregating telemetry from ERP registers</p>
       </div>
     );
@@ -480,14 +480,14 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   if (error && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 bg-[#F7F9F7]">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 bg-[#F4F6F8]">
         <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-md w-full text-center shadow-sm">
           <AlertCircle size={40} className="text-rose-500 mx-auto mb-3" />
           <h3 className="font-serif text-xl font-normal text-slate-800">Telemetry Connection Error</h3>
           <p className="text-xs text-slate-500 mt-2 mb-6">{error}</p>
           <button
             onClick={() => loadDashboardData()}
-            className="px-5 py-2 rounded-lg bg-[#1E5649] text-white text-xs font-semibold cursor-pointer shadow-sm hover:bg-[#164238] transition-colors"
+            className="px-5 py-2 rounded-lg bg-[#1B263B] text-white text-xs font-semibold cursor-pointer shadow-sm hover:bg-[#0D1B2A] transition-colors"
           >
             Retry Connection
           </button>
@@ -524,17 +524,17 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   return (
     <div
-      className="flex-1 min-h-0 overflow-y-auto bg-[#F7F9F7] p-4 sm:p-6 lg:p-8 space-y-6"
+      className="flex-1 min-h-0 overflow-y-auto bg-[#F4F6F8] p-4 sm:p-6 lg:p-8 space-y-6"
       style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}
     >
       {/* ─────────────────────────────────────────────────────────────
-          TOP BANNER (Exact Match from Target Image 2)
+          TOP BANNER (Exact Match Reference Style)
       ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-emerald-200/90 bg-[#F0FDF4] px-4 py-3 text-xs text-slate-700 shadow-2xs">
+      <div className="rounded-xl border border-slate-200/90 bg-[#F0FDF4] px-4 py-3 text-xs text-slate-700 shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
         <div className="font-semibold text-emerald-950 flex flex-wrap items-center justify-between gap-2">
-          <span>Enterprise System Active • Licensed to AMA Ceramics Pvt Ltd — all ERP modules unlocked.</span>
+          <span>Your free trial ends in 7 days • 19 Nov 2026 — everything stays unlocked until then.</span>
           <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-            v2.4.78 Connected
+            Enterprise Tier Active
           </span>
         </div>
         <div className="text-[11px] text-slate-500 mt-1">
@@ -546,17 +546,17 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          HERO CARD: CONTAINS HEADER + LEFT STATS + RIGHT CHART (Exact Match Image 2)
+          HERO CARD: CONTAINS HEADER + LEFT STATS + RIGHT CHART (Exact Match Image 1)
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-[0_1px_3px_rgba(15,23,42,0.03),0_4px_12px_rgba(15,23,42,0.02)]">
         {/* 1. Header Row INSIDE the White Card */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-slate-100">
           <div>
-            <div className="text-[10px] sm:text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+            <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-slate-500">
               {meta.currentDateFormatted}
             </div>
             <h1
-              className="text-2xl sm:text-3xl text-slate-800 mt-0.5 font-normal tracking-tight"
+              className="text-2xl sm:text-[26px] font-normal tracking-tight text-slate-900 mt-1"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               Good evening, {meta.user.name}
@@ -576,13 +576,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
             <button
               onClick={() => onCreateQuotation && onCreateQuotation('tiles')}
-              className="px-4 py-1.5 rounded-lg bg-[#1E5649] hover:bg-[#164238] text-white text-xs font-medium shadow-2xs cursor-pointer flex items-center gap-1.5 transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#1B263B] hover:bg-[#0D1B2A] text-white text-xs font-medium shadow-2xs cursor-pointer transition-colors"
             >
               <Plus size={13} />
               <span>New invoice</span>
             </button>
 
-            <div className="px-3 py-1 bg-white border border-slate-200/90 rounded-lg text-right shadow-2xs flex flex-col justify-center min-w-[95px]">
+            <div className="px-3.5 py-1.5 bg-white border border-slate-200/90 rounded-xl text-right shadow-2xs flex flex-col justify-center min-w-[95px]">
               <div className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-none">
                 COMPANY ID
               </div>
@@ -595,29 +595,29 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
         {/* 2. Split Section: Left 5 Stats + Right Chart Box (Always Side-by-Side) */}
         <div className="flex flex-row items-stretch gap-6 pt-6">
-          {/* Left Column (Clean Vertical Stack - No Borders Around Metrics) */}
-          <div className="w-52 sm:w-60 shrink-0 flex flex-col justify-between space-y-4 pr-2">
-            <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+          {/* Left Column (Clean Vertical Stack with Thin Divider under FY Sales) */}
+          <div className="w-56 sm:w-64 shrink-0 flex flex-col justify-between space-y-3 pr-2">
+            <div className="border-b border-slate-100 pb-3.5 mb-1">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 SALES THIS FINANCIAL YEAR
               </div>
               <div
-                className="text-4xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-3xl sm:text-4xl text-slate-900 mt-1 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.salesThisFY)}
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">
+              <div className="text-[11.5px] text-slate-400 mt-0.5">
                 {heroFinancials.invoicesCountFY} invoices
               </div>
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 BILLED THIS MONTH
               </div>
               <div
-                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-xl sm:text-2xl text-slate-900 mt-1 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.billedThisMonth)}
@@ -625,11 +625,11 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 COLLECTED THIS MONTH
               </div>
               <div
-                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-xl sm:text-2xl text-slate-900 mt-1 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.collectedThisMonth)}
@@ -637,11 +637,11 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 OWED TO YOU
               </div>
               <div
-                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-xl sm:text-2xl text-slate-900 mt-1 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.owedToYou)}
@@ -649,11 +649,11 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 STILL TO SUPPLY
               </div>
               <div
-                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-xl sm:text-2xl text-slate-900 mt-1 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.stillToSupply)}
@@ -661,8 +661,8 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right Column: Inner Box for The Last Twelve Months Chart (Exact Match Image 1) */}
-          <div className="flex-1 min-w-0 rounded-xl border border-slate-200/90 p-5 bg-white flex flex-col justify-between shadow-2xs">
+          {/* Right Column: Inner Box for The Last Twelve Months Chart (Exact Match Reference) */}
+          <div className="flex-1 min-w-0 rounded-xl border border-slate-200/90 p-5 bg-white flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)]">
             {/* Inner Header Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-3">
@@ -670,19 +670,19 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, sales: !s.sales }))}
-                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium cursor-pointer transition-colors ${
                       activeSeries.sales
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-[#1E5649]" />
+                    <span className="w-2 h-2 rounded-full bg-[#1B263B]" />
                     <span>Sales</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, purchases: !s.purchases }))}
-                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium cursor-pointer transition-colors ${
                       activeSeries.purchases
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
@@ -694,7 +694,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, received: !s.received }))}
-                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium cursor-pointer transition-colors ${
                       activeSeries.received
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
@@ -729,7 +729,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
 
                 {/* Solid Baseline running across full width */}
-                <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1E5649] pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1B263B] pointer-events-none" />
 
                 {/* 12 Months Columns */}
                 <div className="absolute inset-0 flex items-end justify-between px-2">
@@ -752,7 +752,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                             {activeSeries.sales && (
                               <div
                                 style={{ height: `${salesHeightPct}%` }}
-                                className="w-2.5 rounded-t-sm bg-[#1E5649] transition-all group-hover:bg-[#143427]"
+                                className="w-2.5 rounded-t-sm bg-[#1B263B] transition-all group-hover:bg-[#0D1B2A]"
                               />
                             )}
                             {activeSeries.received && (
@@ -763,13 +763,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                             )}
                           </div>
                         ) : idx === rolling12Months.length - 1 ? (
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#1E5649] -mb-[4px]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#1B263B] -mb-[4px]" />
                         ) : null}
 
                         {/* Month Label */}
                         <span
                           className={`text-[10px] mt-2 font-normal transition-colors select-none ${
-                            isSelected ? 'text-[#1E5649] font-bold' : 'text-slate-400 group-hover:text-slate-700'
+                            isSelected ? 'text-[#1B263B] font-bold' : 'text-slate-400 group-hover:text-slate-700'
                           }`}
                         >
                           {m.monthLabel || monthLabels12[idx]}
@@ -781,7 +781,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
                 {/* Hover Tooltip */}
                 {hoveredMonth && (
-                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs shadow-lg flex items-center gap-3 pointer-events-none">
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs shadow-lg flex items-center gap-3 pointer-events-none">
                     <span className="font-semibold text-emerald-300">{hoveredMonth.monthFull}</span>
                     <span>Sales: {formatINR(hoveredMonth.sales)}</span>
                     <span>Received: {formatINR(hoveredMonth.received)}</span>
@@ -794,213 +794,213 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. SECTION: TODAY (4-Column Strip - Exact Match Image 2)
+          2. SECTION: TODAY (4-Column Strip - Exact Match)
       ───────────────────────────────────────────────────────────── */}
       <div>
         <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
-          TODAY • {meta.currentDateShort}
+          TODAY · {meta.currentDateShort}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Boxes Sold Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-snug">
                 BOXES SOLD<br />TODAY
               </div>
               <div
-                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                className="text-[22px] sm:text-2xl font-bold tracking-tight text-slate-900 tabular-nums mt-1.5 leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {todayOperations.boxesSoldToday}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-[11.5px] text-slate-400 mt-1">
                 {formatINR(todayOperations.amountSoldToday)} on {todayOperations.invoicesTodayCount} invoices
               </div>
             </div>
-            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <FileText size={15} />
+            <div className="w-8 h-8 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <FileText size={16} strokeWidth={1.75} />
             </div>
           </div>
 
           {/* Card 2: Boxes Dispatched Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-snug">
                 BOXES DISPATCHED<br />TODAY
               </div>
               <div
-                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                className="text-[22px] sm:text-2xl font-bold tracking-tight text-slate-900 tabular-nums mt-1.5 leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {todayOperations.boxesDispatchedToday}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-[11.5px] text-slate-400 mt-1">
                 {todayOperations.challansTodayCount} challans on {todayOperations.trucksTodayCount} trucks
               </div>
             </div>
-            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Truck size={15} />
+            <div className="w-8 h-8 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Truck size={16} strokeWidth={1.75} />
             </div>
           </div>
 
           {/* Card 3: Profit Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 PROFIT TODAY
               </div>
               <div
-                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                className="text-[22px] sm:text-2xl font-bold tracking-tight text-slate-900 tabular-nums mt-1.5 leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(todayOperations.profitToday)}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-[11.5px] text-slate-400 mt-1">
                 {todayOperations.invoicesTodayCount > 0
                   ? `on ${todayOperations.invoicesTodayCount} invoices`
                   : 'no invoices yet today'}
               </div>
             </div>
-            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <TrendingUp size={15} />
+            <div className="w-8 h-8 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <TrendingUp size={16} strokeWidth={1.75} />
             </div>
           </div>
 
           {/* Card 4: Purchases Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500 leading-tight">
                 PURCHASES TODAY
               </div>
               <div
-                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                className="text-[22px] sm:text-2xl font-bold tracking-tight text-slate-900 tabular-nums mt-1.5 leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(todayOperations.purchasesToday)}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-[11.5px] text-slate-400 mt-1">
                 {todayOperations.billsRecordedToday} bills recorded
               </div>
             </div>
-            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <ShoppingCart size={15} />
+            <div className="w-8 h-8 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <ShoppingCart size={16} strokeWidth={1.75} />
             </div>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          4. SECTION: BUSINESS AT A GLANCE (6 Cards - Exact Match Image 2)
+          3. SECTION: BUSINESS AT A GLANCE (6 Cards - Exact Match)
       ───────────────────────────────────────────────────────────── */}
       <div>
         <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
           BUSINESS AT A GLANCE
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL SALES</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <TrendingUp size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">TOTAL SALES</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <TrendingUp size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {formatINR(businessAtAGlance.totalSales)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               {businessAtAGlance.totalInvoicesCount} invoices, this financial year
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PURCHASES</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <ShoppingCart size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">TOTAL PURCHASES</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <ShoppingCart size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {formatINR(businessAtAGlance.totalPurchases)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               {businessAtAGlance.totalPurchaseBills} bills, this financial year
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL RECEIVABLES</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <ArrowDownLeft size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">TOTAL RECEIVABLES</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <ArrowDownLeft size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {formatINR(businessAtAGlance.totalReceivables)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               Owed by customers
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PAYABLES</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <ArrowUpRight size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">TOTAL PAYABLES</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <ArrowUpRight size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {formatINR(businessAtAGlance.totalPayables)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               Owed to vendors
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING ORDERS</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <ClipboardList size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">PENDING ORDERS</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <ClipboardList size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {businessAtAGlance.pendingOrdersCount}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               {businessAtAGlance.pendingOrdersCount} orders not yet shipped
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING SUPPLY</span>
-              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
-                <Package size={13} />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-500">PENDING SUPPLY</span>
+              <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center">
+                <Package size={14} strokeWidth={1.75} />
               </div>
             </div>
             <div
-              className="text-xl text-slate-900 mt-2 font-normal"
+              className="text-xl font-bold tracking-tight text-slate-900 mt-2 font-normal"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
               {formatINR(businessAtAGlance.pendingSupplyAmount)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1">
               {businessAtAGlance.pendingSupplyLines} lines on 0 orders to dispatch
             </div>
           </div>
@@ -1008,13 +1008,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          5. ANALYTICS & BREAKDOWN GRID (Rows 1 & 2 - Exact Match Image 3)
+          4. ANALYTICS & BREAKDOWN GRID (Rows 1 & 2 - Exact Proportions)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Row 1 (2 Columns: Billed & Collected vs What customers owe) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Row 1: Billed & Collected (lg:col-span-8) vs What customers owe (lg:col-span-4) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Card 1: Billed and collected */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[280px]">
             <div>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
                 <div>
@@ -1025,7 +1025,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 </div>
                 <div className="flex items-center gap-3 text-xs self-start shrink-0">
                   <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-[#1E5649]" /> Billed
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#1B263B]" /> Billed
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
                     <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Collected
@@ -1048,7 +1048,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                   <div className="absolute inset-x-0 top-1/4 border-b border-dashed border-slate-100 pointer-events-none" />
                   <div className="absolute inset-x-0 top-2/4 border-b border-dashed border-slate-100 pointer-events-none" />
                   <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
-                  <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1E5649] pointer-events-none" />
+                  <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1B263B] pointer-events-none" />
 
                   <div className="absolute inset-0 flex items-end justify-between px-2">
                     {rolling12Months.map((m, idx) => {
@@ -1062,7 +1062,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                             <div className="flex items-end justify-center gap-0.5 w-full pb-0.5">
                               <div
                                 style={{ height: `${billedHeight}%` }}
-                                className="w-2 rounded-t-sm bg-[#1E5649] group-hover:bg-[#143427] transition-all"
+                                className="w-2 rounded-t-sm bg-[#1B263B] group-hover:bg-[#0D1B2A] transition-all"
                               />
                               <div
                                 style={{ height: `${recvHeight}%` }}
@@ -1083,7 +1083,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 2: What customers owe */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[280px]">
             <div>
               <div className="flex items-start justify-between">
                 <div>
@@ -1093,7 +1093,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               </div>
 
               {agingBuckets.totalUnpaidBalance === 0 ? (
-                <div className="py-14 text-center text-xs text-slate-400">
+                <div className="py-16 text-center text-xs text-slate-400">
                   Nothing outstanding. Every bill is paid.
                 </div>
               ) : (
@@ -1124,7 +1124,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-teal-600 h-2 rounded-full"
+                        className="bg-[#1B263B] h-2 rounded-full"
                         style={{
                           width: `${(agingBuckets.bucket16To30.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100}%`,
                         }}
@@ -1154,16 +1154,16 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
         </div>
 
-        {/* Row 2 (3 Columns: Top customers, Best-selling items, Sales by category) */}
+        {/* Row 2: Top customers, Best-selling items, Sales by category */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Top customers */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[200px]">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-bold text-slate-800">Top customers</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('customers')}
-                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer font-medium"
                 >
                   All customers
                 </button>
@@ -1171,7 +1171,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               <p className="text-[11px] text-slate-400">By invoiced value, this financial year</p>
 
               {data.topCustomers.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-400">
+                <div className="py-12 text-center text-xs text-slate-400">
                   Nothing yet this year.
                 </div>
               ) : (
@@ -1188,13 +1188,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 2: Best-selling items */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[200px]">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-bold text-slate-800">Best-selling items</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('reports')}
-                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer font-medium"
                 >
                   Full report
                 </button>
@@ -1202,7 +1202,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               <p className="text-[11px] text-slate-400">Invoiced value incl. GST, before bill discounts, this financial year</p>
 
               {data.bestSellingItems.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-400">
+                <div className="py-12 text-center text-xs text-slate-400">
                   Nothing yet this year.
                 </div>
               ) : (
@@ -1219,13 +1219,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 3: Sales by category */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[200px]">
             <div>
               <h3 className="text-sm font-bold text-slate-800 mb-1">Sales by category</h3>
               <p className="text-[11px] text-slate-400">Invoiced value, this financial year. Click a category for the report.</p>
 
               {data.salesByCategory.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-400">
+                <div className="py-12 text-center text-xs text-slate-400">
                   Nothing invoiced yet this year.
                 </div>
               ) : (
@@ -1238,7 +1238,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                         <div
-                          className="bg-[#1E5649] h-2 rounded-full"
+                          className="bg-[#1B263B] h-2 rounded-full"
                           style={{
                             width: `${(cat.amount / (heroFinancials.salesThisFY || 1)) * 100}%`,
                           }}
@@ -1254,10 +1254,10 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          6. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does` - Exact White Card Style)
+          5. INTERACTIVE FEATURE GUIDE CARD (`See what each part does`)
       ───────────────────────────────────────────────────────────── */}
       {showWalkthrough && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs relative">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_3px_rgba(15,23,42,0.03)] relative">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
               GET MORE FROM AMA CERAMICS
@@ -1292,7 +1292,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 onClick={() => setActiveWalkthroughTab(tab.id as any)}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
                   activeWalkthroughTab === tab.id
-                    ? 'bg-[#1E5649] text-white shadow-2xs'
+                    ? 'bg-[#1B263B] text-white shadow-2xs font-semibold'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -1303,8 +1303,8 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
           {/* Dynamic Content Display */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-6 pt-2">
-            <div className="flex flex-col items-center justify-center p-3 w-20 h-24 rounded-xl border border-slate-200 text-slate-600 shrink-0">
-              <FileText size={28} className="text-[#1E5649] mb-1" />
+            <div className="flex flex-col items-center justify-center p-3 w-20 h-24 rounded-xl border border-slate-200 text-slate-600 shrink-0 bg-slate-50/50">
+              <FileText size={28} className="text-[#1B263B] mb-1" />
               <span className="text-[10px] text-slate-500 font-medium">Quotations</span>
             </div>
 
@@ -1320,7 +1320,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               </p>
               <button
                 onClick={() => onNavigate && onNavigate(walkthroughContent.actionTab)}
-                className="text-xs font-semibold text-[#1E5649] hover:underline mt-3 inline-block cursor-pointer"
+                className="text-xs font-semibold text-[#1B263B] hover:underline mt-3 inline-block cursor-pointer"
               >
                 {walkthroughContent.linkText}
               </button>
@@ -1330,12 +1330,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          7. DEALER & CATALOG METRICS + ORDERS ROW (Exact Match Image 4)
+          6. DEALER & CATALOG METRICS + ORDERS ROW (Rows 1 to 5)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Metric Cards Row 1 (7 Cards) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+        {/* Metric Cards Row 1 (7 Compact Cards) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL DEALERS</span>
               <div
@@ -1345,12 +1345,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.totalDealers}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Users size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Users size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">ACTIVE PRICE LISTS</span>
               <div
@@ -1360,12 +1360,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.activePriceLists}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Tag size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Tag size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL PRODUCTS</span>
               <div
@@ -1375,12 +1375,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.totalProducts}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Package size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Package size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 QUOTATIONS AWAITING REPLY
@@ -1392,12 +1392,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.quotationsAwaitingReply}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Clock size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Clock size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 ORDERS PENDING DISPATCH
@@ -1409,12 +1409,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.ordersPendingDispatch}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Package size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Package size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 TRUCKS DISPATCHED THIS MONTH
@@ -1426,12 +1426,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.trucksDispatchedMonth}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Truck size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Truck size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">OPEN INQUIRIES</span>
               <div
@@ -1441,15 +1441,15 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.openInquiries}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Clock size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Clock size={14} strokeWidth={1.75} />
             </div>
           </div>
         </div>
 
-        {/* Metric Cards Row 2 (2 Cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+        {/* Metric Cards Row 2 (2 Compact Cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3.5">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 INQUIRY CONVERSION THIS MONTH
@@ -1461,12 +1461,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.inquiryConversionRate}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Tag size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Tag size={14} strokeWidth={1.75} />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 MEDIAN FIRST RESPONSE
@@ -1478,47 +1478,47 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 {data.dealerAndCatalogMetrics.medianFirstResponse}
               </div>
             </div>
-            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
-              <Clock size={13} />
+            <div className="w-7 h-7 rounded-lg bg-[#E8EEF5] text-[#1B263B] flex items-center justify-center shrink-0 border border-slate-200/50">
+              <Clock size={14} strokeWidth={1.75} />
             </div>
           </div>
         </div>
 
-        {/* Orders Trend & Pipeline Row */}
+        {/* Row 3: Orders Trend & Pipeline Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Orders, last 8 weeks Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-800">Orders, last 8 weeks</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('quotations')}
-                  className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer font-medium"
                 >
                   View orders
                 </button>
               </div>
 
-              {/* Sparkline / Line Graph (Exact Match Image 4) */}
+              {/* Sparkline Graph */}
               <div className="relative w-full h-24 flex items-end">
                 <svg viewBox="0 0 400 60" className="w-full h-full overflow-visible">
-                  <line x1="0" y1="50" x2="380" y2="50" stroke="#1E5649" strokeWidth="2" />
-                  <circle cx="380" cy="50" r="4" fill="#1E5649" />
-                  <text x="388" y="53" fontSize="10" fill="#1E5649" fontWeight="bold">0</text>
+                  <line x1="0" y1="50" x2="380" y2="50" stroke="#1B263B" strokeWidth="2" />
+                  <circle cx="380" cy="50" r="4" fill="#1B263B" />
+                  <text x="388" y="53" fontSize="10" fill="#1B263B" fontWeight="bold">0</text>
                 </svg>
               </div>
             </div>
           </div>
 
           {/* Order pipeline Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-800">Order pipeline</h3>
                 <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span className="hover:text-slate-800 cursor-pointer">Pending</span>
-                  <span className="hover:text-slate-800 cursor-pointer">In progress</span>
-                  <span className="hover:text-slate-800 cursor-pointer">Delivered</span>
+                  <span className="hover:text-slate-800 cursor-pointer font-medium">Pending</span>
+                  <span className="hover:text-slate-800 cursor-pointer font-medium">In progress</span>
+                  <span className="hover:text-slate-800 cursor-pointer font-medium">Delivered</span>
                 </div>
               </div>
 
@@ -1533,7 +1533,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                         cy="50"
                         r="40"
                         fill="transparent"
-                        stroke="#1E5649"
+                        stroke="#1B263B"
                         strokeWidth="8"
                         strokeDasharray="251 251"
                         strokeDashoffset="0"
@@ -1589,31 +1589,31 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
         </div>
 
-        {/* Action Banners (Add Dealer & Create Price List - Exact Match Image 4) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Row 4: Action Banners (Add Dealer & Create Price List) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
             onClick={() => onNavigate && onNavigate('dealers-list')}
-            className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
+            className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center gap-3.5"
           >
-            <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
-              <Users size={18} />
+            <div className="w-10 h-10 rounded-lg bg-[#1B263B] text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Users size={18} strokeWidth={1.75} />
             </div>
             <div className="font-bold text-sm text-slate-800">Add Dealer</div>
           </div>
 
           <div
             onClick={() => onNavigate && onNavigate('items-price-lists')}
-            className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
+            className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center gap-3.5"
           >
-            <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
-              <Tag size={18} />
+            <div className="w-10 h-10 rounded-lg bg-[#1B263B] text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Tag size={18} strokeWidth={1.75} />
             </div>
             <div className="font-bold text-sm text-slate-800">Create Price List</div>
           </div>
         </div>
 
-        {/* Recent Orders Full-Width Card (Exact Match Image 4) */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs">
+        {/* Row 5: Recent Orders Full-Width Card */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
           <div className="flex items-center justify-between mb-4">
             <h3
               className="text-base text-slate-800 font-normal"
@@ -1623,7 +1623,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </h3>
             <button
               onClick={() => onNavigate && onNavigate('quotations')}
-              className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
+              className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer font-medium"
             >
               View all
             </button>
