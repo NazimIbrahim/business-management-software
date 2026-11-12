@@ -28,7 +28,7 @@ const isCloudSsl = Boolean(
 );
 
 export const config = {
-  port: Number(process.env.PORT) > 0 ? Number(process.env.PORT) : 4000,
+  port: Number(process.env.PORT) || 5000,
   db: {
     connectionString: sanitizedDbUrl || undefined,
     rawConnectionString: rawDbUrl || undefined,

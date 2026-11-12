@@ -42,8 +42,10 @@ server.on('error', (err: any) => {
   logger.error('HTTP server error:', err);
 });
 
+const PORT = Number(process.env.PORT) || 5000;
+
 console.log(`[BOOT] AMA Ceramics Backend initializing on Node ${process.version}...`);
-console.log(`[BOOT] Target Port: ${config.port} (PORT env: ${process.env.PORT || 'default 4000'})`);
+console.log(`[BOOT] Target Port: ${PORT} (PORT env: ${process.env.PORT || 'default 5000'})`);
 
 // Enable CORS for all LAN clients & cloud web portals
 const corsOptions: cors.CorsOptions = {
@@ -684,12 +686,13 @@ async function ensureBootstrapData() {
 }
 
 // Start listening on 0.0.0.0 (all LAN interfaces)
-server.listen(config.port, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('Server listening on port', PORT);
   logger.info(`========================================================`);
   logger.info(`AMA Ceramics Quotation Central Server is running!`);
-  logger.info(`Port: ${config.port}`);
+  logger.info(`Port: ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'production'}`);
-  logger.info(`Local URL: http://localhost:${config.port}`);
+  logger.info(`Local URL: http://localhost:${PORT}`);
 
   // Display all available LAN IP addresses
   try {
@@ -700,7 +703,7 @@ server.listen(config.port, '0.0.0.0', () => {
       if (netList) {
         for (const net of netList) {
           if (net.family === 'IPv4' && !net.internal) {
-            logger.info(`  -> http://${net.address}:${config.port} (${name})`);
+            logger.info(`  -> http://${net.address}:${PORT} (${name})`);
           }
         }
       }
