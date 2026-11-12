@@ -180,10 +180,6 @@ export const synthesizeExecutiveSummary = (
   const approvedRev = parseFloat(summary?.approvedRevenue || '0');
 
   const monthNamesShort = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
-  const monthNamesFull = [
-    'December', 'January', 'February', 'March', 'April', 'May',
-    'June', 'July', 'August', 'September', 'October', 'November'
-  ];
 
   const rollingMonths = [];
   for (let i = 11; i >= 0; i--) {
@@ -474,7 +470,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   if (loading && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 text-slate-500 bg-[#F4F7F4]">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 text-slate-500 bg-[#F7F9F7]">
         <div className="w-12 h-12 rounded-full border-2 border-slate-300 border-t-[#1E5649] animate-spin mb-4" />
         <p className="font-serif text-lg text-slate-700">Loading Enterprise Overview...</p>
         <p className="text-xs text-slate-400 mt-1">Aggregating telemetry from ERP registers</p>
@@ -484,7 +480,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   if (error && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 bg-[#F4F7F4]">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 bg-[#F7F9F7]">
         <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-md w-full text-center shadow-sm">
           <AlertCircle size={40} className="text-rose-500 mx-auto mb-3" />
           <h3 className="font-serif text-xl font-normal text-slate-800">Telemetry Connection Error</h3>
@@ -517,10 +513,6 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
     1000
   );
 
-  const activeMonthData =
-    rolling12Months.find((m) => m.monthKey === selectedMonthKey) ||
-    rolling12Months[rolling12Months.length - 1];
-
   const totalPipelineCount =
     (orderPipeline.placed?.count || 0) +
     (orderPipeline.pending?.count || 0) +
@@ -532,68 +524,85 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
   return (
     <div
-      className="flex-1 min-h-0 overflow-y-auto bg-[#F4F7F4] p-4 sm:p-6 lg:p-8 space-y-6"
+      className="flex-1 min-h-0 overflow-y-auto bg-[#F7F9F7] p-4 sm:p-6 lg:p-8 space-y-6"
       style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}
     >
       {/* ─────────────────────────────────────────────────────────────
-          1. TOP GREETING BAR & HEADER ACTIONS
+          TOP BANNER (Exact Match from Target Image 2)
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <div className="text-[10px] sm:text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-            {meta.currentDateFormatted}
-          </div>
-          <h1
-            className="text-2xl sm:text-3xl text-slate-800 mt-0.5 tracking-normal font-normal"
-            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-          >
-            Good evening, {meta.user.name}
-          </h1>
-          <div className="text-xs text-slate-500 mt-0.5 font-normal">
-            {meta.salespersonSubtitle || `${meta.user.name} • ${meta.user.role}`}
-          </div>
+      <div className="rounded-xl border border-emerald-200/90 bg-[#F0FDF4] px-4 py-3 text-xs text-slate-700 shadow-2xs">
+        <div className="font-semibold text-emerald-950 flex flex-wrap items-center justify-between gap-2">
+          <span>Enterprise System Active • Licensed to AMA Ceramics Pvt Ltd — all ERP modules unlocked.</span>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            v2.4.78 Connected
+          </span>
         </div>
-
-        <div className="flex items-center gap-3 self-start sm:self-center">
-          <button
-            onClick={() => onNavigate && onNavigate('reports')}
-            className="px-4 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition-colors"
-          >
-            Reports
-          </button>
-
-          <button
-            onClick={() => onCreateQuotation && onCreateQuotation('tiles')}
-            className="px-4 py-1.5 rounded-lg bg-[#1E5649] hover:bg-[#164238] text-white text-xs font-medium shadow-2xs cursor-pointer flex items-center gap-1.5 transition-colors"
-          >
-            <Plus size={13} />
-            <span>New invoice</span>
-          </button>
-
-          <div className="px-3 py-1 bg-white border border-slate-200/90 rounded-lg text-right shadow-2xs flex flex-col justify-center min-w-[90px]">
-            <div className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-none">
-              COMPANY ID
-            </div>
-            <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 leading-none">
-              {meta.companyId || 'TK-100019'}
-            </div>
-          </div>
+        <div className="text-[11px] text-slate-500 mt-1">
+          Trial limits: Products 0/100 • Logins 1/2 • Locations 1/1 • Dealers 0/25 • Photos & files 0/200 MB • up to 50 of each document.
+        </div>
+        <div className="text-[11px] text-slate-500 mt-0.5">
+          To buy a plan, contact Tarkakasha: call or WhatsApp +91-9061125222 or write to support@tarkakasha.in.
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          HERO FINANCIAL OVERVIEW CARD (Exact Clean Vertical Stack + Elegant Chart)
+          HERO CARD: CONTAINS HEADER + LEFT STATS + RIGHT CHART (Exact Match Image 2)
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Left Column (Clean Vertical Stack - No Colored Box Tiles) */}
-          <div className="lg:col-span-4 flex flex-col justify-between space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        {/* 1. Header Row INSIDE the White Card */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-slate-100">
+          <div>
+            <div className="text-[10px] sm:text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              {meta.currentDateFormatted}
+            </div>
+            <h1
+              className="text-2xl sm:text-3xl text-slate-800 mt-0.5 font-normal tracking-tight"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              Good evening, {meta.user.name}
+            </h1>
+            <div className="text-xs text-slate-500 mt-0.5 font-normal">
+              {meta.salespersonSubtitle || `${meta.user.name} • ${meta.user.role}`}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-start sm:self-center">
+            <button
+              onClick={() => onNavigate && onNavigate('reports')}
+              className="px-4 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition-colors"
+            >
+              Reports
+            </button>
+
+            <button
+              onClick={() => onCreateQuotation && onCreateQuotation('tiles')}
+              className="px-4 py-1.5 rounded-lg bg-[#1E5649] hover:bg-[#164238] text-white text-xs font-medium shadow-2xs cursor-pointer flex items-center gap-1.5 transition-colors"
+            >
+              <Plus size={13} />
+              <span>New invoice</span>
+            </button>
+
+            <div className="px-3 py-1 bg-white border border-slate-200/90 rounded-lg text-right shadow-2xs flex flex-col justify-center min-w-[95px]">
+              <div className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-none">
+                COMPANY ID
+              </div>
+              <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 leading-none">
+                {meta.companyId || 'TK-100019'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Split Section: Left 5 Stats + Right Chart Box */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6 items-stretch">
+          {/* Left Column (Clean Vertical Stack - No Borders Around Metrics) */}
+          <div className="lg:col-span-3 flex flex-col justify-between space-y-4 pr-2">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
                 SALES THIS FINANCIAL YEAR
               </div>
               <div
-                className="text-3xl sm:text-4xl text-slate-900 mt-0.5 font-normal leading-tight"
+                className="text-4xl text-slate-900 mt-0.5 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.salesThisFY)}
@@ -608,7 +617,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 BILLED THIS MONTH
               </div>
               <div
-                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.billedThisMonth)}
@@ -620,7 +629,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 COLLECTED THIS MONTH
               </div>
               <div
-                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.collectedThisMonth)}
@@ -632,7 +641,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 OWED TO YOU
               </div>
               <div
-                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.owedToYou)}
@@ -644,7 +653,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                 STILL TO SUPPLY
               </div>
               <div
-                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                className="text-xl text-slate-900 mt-0.5 font-normal leading-tight"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {formatINR(heroFinancials.stillToSupply)}
@@ -652,15 +661,16 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right Column (12-Month Interactive Trend Chart with Y-Axis and Horizontal Gridlines) */}
-          <div className="lg:col-span-8 flex flex-col justify-between pt-4 lg:pt-0 lg:border-l lg:border-slate-100 lg:pl-8">
+          {/* Right Column: Inner Box for The Last Twelve Months Chart (Exact Match Image 2) */}
+          <div className="lg:col-span-9 rounded-xl border border-slate-200/90 p-5 bg-white flex flex-col justify-between shadow-2xs">
+            {/* Inner Header Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-3">
                 <span className="text-xs font-semibold text-slate-800">The last twelve months</span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, sales: !s.sales }))}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
                       activeSeries.sales
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
@@ -672,7 +682,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, purchases: !s.purchases }))}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
                       activeSeries.purchases
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
@@ -684,7 +694,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
                   <button
                     onClick={() => setActiveSeries((s) => ({ ...s, received: !s.received }))}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
                       activeSeries.received
                         ? 'bg-slate-50 border-slate-300 text-slate-800'
                         : 'bg-white border-slate-200 text-slate-400'
@@ -699,28 +709,30 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               <span className="text-[11px] text-slate-400 italic">Click a month to open it</span>
             </div>
 
-            {/* SVG Chart with Y-Axis and Dotted Grid Lines */}
-            <div className="relative w-full h-56 pt-2 pb-4 flex">
+            {/* Chart Area with 5 Dashed Gridlines and Solid Dark Baseline */}
+            <div className="relative w-full h-48 pt-2 pb-2 flex">
               {/* Y-Axis Labels */}
-              <div className="w-10 h-44 flex flex-col justify-between items-end pr-2 text-[10px] text-slate-300 font-mono select-none">
-                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal) : '₹1'}</span>
-                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.75) : '₹1'}</span>
-                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.5) : '₹1'}</span>
-                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.25) : '₹0'}</span>
+              <div className="w-8 h-36 flex flex-col justify-between items-end pr-2 text-[10px] text-slate-300 font-mono select-none">
+                <span>₹1</span>
+                <span>₹1</span>
+                <span>₹1</span>
+                <span>₹0</span>
                 <span>₹0</span>
               </div>
 
-              {/* Chart Grid & Graphic */}
-              <div className="flex-1 relative h-44 flex flex-col justify-between">
-                {/* Horizontal Dashed Gridlines */}
+              {/* Graphic Viewport */}
+              <div className="flex-1 relative h-36 flex flex-col justify-between">
+                {/* 4 Dashed Gridlines */}
                 <div className="absolute inset-x-0 top-0 border-b border-dashed border-slate-100 pointer-events-none" />
                 <div className="absolute inset-x-0 top-1/4 border-b border-dashed border-slate-100 pointer-events-none" />
                 <div className="absolute inset-x-0 top-2/4 border-b border-dashed border-slate-100 pointer-events-none" />
                 <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 border-b border-slate-300 pointer-events-none" />
 
-                {/* SVG Visual Curves / Bars */}
-                <div className="absolute inset-0 flex items-end justify-between px-1">
+                {/* Solid Baseline running across full width */}
+                <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1E5649] pointer-events-none" />
+
+                {/* 12 Months Columns */}
+                <div className="absolute inset-0 flex items-end justify-between px-2">
                   {rolling12Months.map((m, idx) => {
                     const isSelected = selectedMonthKey === m.monthKey;
                     const hasData = m.sales > 0 || m.received > 0;
@@ -735,7 +747,6 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                         onMouseLeave={() => setHoveredMonth(null)}
                         className="group flex-1 flex flex-col items-center justify-end h-full cursor-pointer relative"
                       >
-                        {/* Dynamic Bar or Flat Zero Baseline Point */}
                         {hasData ? (
                           <div className="flex items-end justify-center gap-1 w-full pb-0.5">
                             {activeSeries.sales && (
@@ -751,15 +762,14 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                               />
                             )}
                           </div>
-                        ) : (
-                          /* Flat zero dot along bottom axis when value is 0 */
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-[#1E5649] -mb-[3px] transition-colors" />
-                        )}
+                        ) : idx === rolling12Months.length - 1 ? (
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#1E5649] -mb-[4px]" />
+                        ) : null}
 
                         {/* Month Label */}
                         <span
                           className={`text-[10px] mt-2 font-normal transition-colors select-none ${
-                            isSelected ? 'text-[#1E5649] font-bold' : 'text-slate-400 group-hover:text-slate-600'
+                            isSelected ? 'text-[#1E5649] font-bold' : 'text-slate-400 group-hover:text-slate-700'
                           }`}
                         >
                           {m.monthLabel || monthLabels12[idx]}
@@ -784,7 +794,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. SECTION: TODAY (4-Column Daily Operations Strip)
+          3. SECTION: TODAY (4-Column Strip - Exact Match Image 2)
       ───────────────────────────────────────────────────────────── */}
       <div>
         <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
@@ -792,7 +802,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Boxes Sold Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
                 BOXES SOLD<br />TODAY
@@ -813,7 +823,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 2: Boxes Dispatched Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
                 BOXES DISPATCHED<br />TODAY
@@ -834,7 +844,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 3: Profit Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
                 PROFIT TODAY
@@ -857,7 +867,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 4: Purchases Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
               <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
                 PURCHASES TODAY
@@ -880,15 +890,14 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. SECTION: BUSINESS AT A GLANCE (6-Column Financial Row)
+          4. SECTION: BUSINESS AT A GLANCE (6 Cards - Exact Match Image 2)
       ───────────────────────────────────────────────────────────── */}
       <div>
         <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
           BUSINESS AT A GLANCE
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* 1. Total Sales */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL SALES</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -906,8 +915,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* 2. Total Purchases */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PURCHASES</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -925,8 +933,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* 3. Total Receivables */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL RECEIVABLES</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -944,8 +951,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* 4. Total Payables */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PAYABLES</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -963,8 +969,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* 5. Pending Orders */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING ORDERS</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -982,8 +987,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          {/* 6. Pending Supply */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING SUPPLY</span>
               <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
@@ -1004,13 +1008,13 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          4. ANALYTICS & BREAKDOWN GRID (Rows 1 & 2)
+          5. ANALYTICS & BREAKDOWN GRID (Rows 1 & 2 - Exact Match Image 3)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
         {/* Row 1 (2 Columns: Billed & Collected vs What customers owe) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Card 1: Billed and collected */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
                 <div>
@@ -1044,9 +1048,9 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                   <div className="absolute inset-x-0 top-1/4 border-b border-dashed border-slate-100 pointer-events-none" />
                   <div className="absolute inset-x-0 top-2/4 border-b border-dashed border-slate-100 pointer-events-none" />
                   <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
-                  <div className="absolute inset-x-0 bottom-0 border-b border-slate-300 pointer-events-none" />
+                  <div className="absolute inset-x-0 bottom-0 border-b-2 border-[#1E5649] pointer-events-none" />
 
-                  <div className="absolute inset-0 flex items-end justify-between px-1">
+                  <div className="absolute inset-0 flex items-end justify-between px-2">
                     {rolling12Months.map((m, idx) => {
                       const hasData = m.sales > 0 || m.received > 0;
                       const billedHeight = hasData ? Math.min(95, Math.max(10, (m.sales / maxMonthlyVal) * 100)) : 0;
@@ -1065,9 +1069,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                                 className="w-2 rounded-t-sm bg-emerald-500 group-hover:bg-emerald-600 transition-all"
                               />
                             </div>
-                          ) : (
-                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300 -mb-[3px]" />
-                          )}
+                          ) : null}
                           <span className="text-[10px] text-slate-400 mt-2 select-none">
                             {m.monthLabel || monthLabels12[idx]}
                           </span>
@@ -1081,7 +1083,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 2: What customers owe */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-start justify-between">
                 <div>
@@ -1155,7 +1157,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
         {/* Row 2 (3 Columns: Top customers, Best-selling items, Sales by category) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Top customers */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-bold text-slate-800">Top customers</h3>
@@ -1186,7 +1188,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 2: Best-selling items */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-bold text-slate-800">Best-selling items</h3>
@@ -1217,7 +1219,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Card 3: Sales by category */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-800 mb-1">Sales by category</h3>
               <p className="text-[11px] text-slate-400">Invoiced value, this financial year. Click a category for the report.</p>
@@ -1252,10 +1254,10 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          5. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does` - Exact White Card Style)
+          6. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does` - Exact White Card Style)
       ───────────────────────────────────────────────────────────── */}
       {showWalkthrough && (
-        <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-xs relative">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs relative">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
               GET MORE FROM AMA CERAMICS
@@ -1328,12 +1330,12 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          6. DEALER & CATALOG METRICS + ORDERS ROW (Exact Match Image 4)
+          7. DEALER & CATALOG METRICS + ORDERS ROW (Exact Match Image 4)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
         {/* Metric Cards Row 1 (7 Cards) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL DEALERS</span>
               <div
@@ -1348,7 +1350,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">ACTIVE PRICE LISTS</span>
               <div
@@ -1363,7 +1365,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL PRODUCTS</span>
               <div
@@ -1378,7 +1380,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 QUOTATIONS AWAITING REPLY
@@ -1395,7 +1397,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 ORDERS PENDING DISPATCH
@@ -1412,7 +1414,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 TRUCKS DISPATCHED THIS MONTH
@@ -1429,7 +1431,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">OPEN INQUIRIES</span>
               <div
@@ -1447,7 +1449,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
         {/* Metric Cards Row 2 (2 Cards) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 INQUIRY CONVERSION THIS MONTH
@@ -1464,7 +1466,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
               <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
                 MEDIAN FIRST RESPONSE
@@ -1485,7 +1487,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
         {/* Orders Trend & Pipeline Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Orders, last 8 weeks Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-800">Orders, last 8 weeks</h3>
@@ -1500,9 +1502,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
               {/* Sparkline / Line Graph (Exact Match Image 4) */}
               <div className="relative w-full h-24 flex items-end">
                 <svg viewBox="0 0 400 60" className="w-full h-full overflow-visible">
-                  {/* Baseline guide */}
                   <line x1="0" y1="50" x2="380" y2="50" stroke="#1E5649" strokeWidth="2" />
-                  {/* Endpoint dot with value 0 */}
                   <circle cx="380" cy="50" r="4" fill="#1E5649" />
                   <text x="388" y="53" fontSize="10" fill="#1E5649" fontWeight="bold">0</text>
                 </svg>
@@ -1511,7 +1511,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
           </div>
 
           {/* Order pipeline Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-800">Order pipeline</h3>
@@ -1524,10 +1524,8 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
               {/* Donut & Legend Split */}
               <div className="flex items-center justify-between gap-6 py-2">
-                {/* Circular Donut Gauge */}
                 <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
                   <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                    {/* Background ring */}
                     <circle cx="50" cy="50" r="40" fill="transparent" stroke="#F1F5F9" strokeWidth="8" />
                     {totalPipelineCount > 0 && (
                       <circle
@@ -1553,7 +1551,6 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Status Legend List */}
                 <div className="flex-1 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1596,7 +1593,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
             onClick={() => onNavigate && onNavigate('dealers-list')}
-            className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
+            className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
           >
             <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
               <Users size={18} />
@@ -1606,7 +1603,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
 
           <div
             onClick={() => onNavigate && onNavigate('items-price-lists')}
-            className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
+            className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
           >
             <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
               <Tag size={18} />
@@ -1616,7 +1613,7 @@ export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
         </div>
 
         {/* Recent Orders Full-Width Card (Exact Match Image 4) */}
-        <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <h3
               className="text-base text-slate-800 font-normal"
