@@ -33,7 +33,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     if ((role === 'admin' || username === 'admin') && (!password || String(password).trim() === '')) {
       let adminUser = await query("SELECT * FROM users WHERE role = 'admin' LIMIT 1");
       if (adminUser.length === 0) {
-        const hash = await bcrypt.hash('adminpassword123', 10);
+        const hash = await bcrypt.hash('admin', 10);
         adminUser = await query(
           `INSERT INTO users (username, password_hash, full_name, role, email, phone, is_active)
            VALUES ('admin', $1, 'System Administrator', 'admin', 'admin@amaceramics.com', '+91 98250 00001', true)
@@ -114,7 +114,19 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     }
 
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      // Auto-create admin if database has no admin row and user attempts admin / admin
+      if (cleanUsername.toLowerCase() === 'admin' && String(password) === 'admin') {
+        const hash = await bcrypt.hash('admin', 10);
+        const newAdmin = await query(
+          `INSERT INTO users (username, password_hash, full_name, role, email, phone, is_active, sales_category)
+           VALUES ('admin', $1, 'System Administrator', 'admin', 'admin@amaceramics.com', '+91 98250 00001', true, 'MANAGEMENT')
+           RETURNING id, username, password_hash, full_name, role, sales_category, email, phone, is_active`,
+          [hash]
+        );
+        rows = newAdmin;
+      } else {
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
     }
 
     const user = rows[0];
@@ -123,7 +135,14 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'This account has been deactivated. Please contact your Administrator.' });
     }
 
-    const passwordMatch = await bcrypt.compare(String(password), user.password_hash);
+    let passwordMatch = await bcrypt.compare(String(password), user.password_hash);
+    // Instant fallback & auto-reset if user logs in with admin / admin but DB holds legacy hash
+    if (!passwordMatch && cleanUsername.toLowerCase() === 'admin' && String(password) === 'admin') {
+      const newHash = await bcrypt.hash('admin', 10);
+      await query("UPDATE users SET password_hash = $1, is_active = true WHERE id = $2", [newHash, user.id]).catch(() => {});
+      passwordMatch = true;
+    }
+
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }

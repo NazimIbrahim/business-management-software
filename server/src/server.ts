@@ -9,6 +9,7 @@ process.on('unhandledRejection', (reason) => {
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import cors from 'cors';
+import bcrypt from 'bcryptjs';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -679,6 +680,29 @@ async function ensureBootstrapData() {
         );
         logger.info('Default company settings row created successfully.');
       }
+    }
+
+    // 5. Ensure admin credentials are set to username: admin, password: admin
+    try {
+      const adminSalt = await bcrypt.genSalt(10);
+      const adminHash = await bcrypt.hash('admin', adminSalt);
+      const adminCheck = await query("SELECT id FROM users WHERE LOWER(username) = 'admin' LIMIT 1").catch(() => []);
+      if (adminCheck.length === 0) {
+        await query(
+          `INSERT INTO users (username, password_hash, full_name, role, email, phone, is_active, sales_category)
+           VALUES ('admin', $1, 'System Administrator', 'admin', 'admin@amaceramics.com', '+91 98250 00001', true, 'MANAGEMENT')`,
+          [adminHash]
+        );
+        logger.info('Admin user created with credentials (username: admin, password: admin)');
+      } else {
+        await query(
+          `UPDATE users SET password_hash = $1, is_active = true WHERE LOWER(username) = 'admin'`,
+          [adminHash]
+        );
+        logger.info('Admin user password successfully reset to "admin"');
+      }
+    } catch (adminErr: any) {
+      logger.warn('Admin credential bootstrap notice:', adminErr.message);
     }
   } catch (err: any) {
     logger.warn('Bootstrap data check warning:', err.message);

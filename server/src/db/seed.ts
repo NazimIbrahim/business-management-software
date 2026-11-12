@@ -12,7 +12,7 @@ export async function seedDatabase(): Promise<void> {
     const users = [
       {
         username: 'admin',
-        password: 'adminpassword123',
+        password: 'admin',
         full_name: 'System Administrator',
         role: 'admin',
         email: 'admin@amaceramics.com',
