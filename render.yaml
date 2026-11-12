@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ama-quotation-backend
+    name: business-management-software1
     runtime: node
     plan: free
     rootDir: server

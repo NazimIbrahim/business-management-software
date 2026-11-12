@@ -70,7 +70,7 @@ export const ServerSetupModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Enter your local LAN Server IP (e.g. <code>http://192.168.1.10:4000</code>) or Cloud API URL (e.g. <code>https://ama-quotation.onrender.com</code>).
+              Enter your local LAN Server IP (e.g. <code>http://192.168.1.10:4000</code>) or Cloud API URL (e.g. <code>https://business-management-software1.onrender.com</code>).
             </p>
 
             {/* Quick Presets */}

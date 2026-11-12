@@ -5,7 +5,7 @@
       "root": "client",
       "framework": "vite"
     },
-    "ama-quotation-backend": {
+    "business-management-software1": {
       "root": "server",
       "framework": "express",
       "buildCommand": "npm install && npm run build"
@@ -15,13 +15,13 @@
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "ama-quotation-backend"
+        "service": "business-management-software1"
       }
     },
     {
       "source": "/uploads/(.*)",
       "destination": {
-        "service": "ama-quotation-backend"
+        "service": "business-management-software1"
       }
     },
     {

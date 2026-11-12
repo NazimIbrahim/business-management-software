@@ -720,7 +720,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
   // Cloud Keep-Alive Daemon: Keeps Render cloud instance awake 24/7 (skip when deployed on Vercel)
   if (!process.env.VERCEL) {
-    const cloudHealthUrl = 'https://ama-quotation-api.onrender.com/api/health';
+    const cloudHealthUrl = 'https://business-management-software1.onrender.com/api/health';
     const pingCloudKeepAlive = async () => {
       try {
         const res = await fetch(cloudHealthUrl, {

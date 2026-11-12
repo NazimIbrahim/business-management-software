@@ -74,7 +74,7 @@ const getDefaultServerUrl = (): string => {
       hostname.endsWith('.github.io');
 
     if (isStaticHosting) {
-      return 'https://ama-quotation-api.onrender.com';
+      return 'https://business-management-software1.onrender.com';
     }
 
     // If served directly from Express Host Server (port 4000) or custom LAN web portal
@@ -295,11 +295,11 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         try {
           const cController = new AbortController();
           const cTimeout = setTimeout(() => cController.abort(), 5000);
-          const cRes = await fetch('https://ama-quotation-api.onrender.com/api/health', { signal: cController.signal });
+          const cRes = await fetch('https://business-management-software1.onrender.com/api/health', { signal: cController.signal });
           clearTimeout(cTimeout);
           if (cRes.ok) {
-            setServerUrlState('https://ama-quotation-api.onrender.com');
-            localStorage.setItem('ama_server_url', 'https://ama-quotation-api.onrender.com');
+            setServerUrlState('https://business-management-software1.onrender.com');
+            localStorage.setItem('ama_server_url', 'https://business-management-software1.onrender.com');
             setStatus('connected');
             return true;
           }
