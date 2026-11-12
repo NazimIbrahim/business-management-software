@@ -29,6 +29,9 @@ import { dispatchRouter, ensureDispatchSchema } from './routes/dispatch';
 const app = express();
 const server = http.createServer(app);
 
+console.log(`[BOOT] AMA Ceramics Backend initializing on Node ${process.version}...`);
+console.log(`[BOOT] Target Port: ${config.port} (PORT env: ${process.env.PORT || 'default 4000'})`);
+
 // Enable CORS for all LAN clients & cloud web portals
 const corsOptions: cors.CorsOptions = {
   origin: '*',
