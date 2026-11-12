@@ -660,8 +660,7 @@ async function ensureBootstrapData() {
 }
 
 // Start listening on 0.0.0.0 (all LAN interfaces)
-server.listen(config.port, '0.0.0.0', async () => {
-  await ensureBootstrapData();
+server.listen(config.port, '0.0.0.0', () => {
   logger.info(`========================================================`);
   logger.info(`AMA Ceramics Quotation Central Server is running!`);
   logger.info(`Port: ${config.port}`);
@@ -669,19 +668,28 @@ server.listen(config.port, '0.0.0.0', async () => {
   logger.info(`Local URL: http://localhost:${config.port}`);
 
   // Display all available LAN IP addresses
-  const networkInterfaces = os.networkInterfaces();
-  logger.info(`Available LAN IP addresses for Client connection:`);
-  for (const name of Object.keys(networkInterfaces)) {
-    const netList = networkInterfaces[name];
-    if (netList) {
-      for (const net of netList) {
-        if (net.family === 'IPv4' && !net.internal) {
-          logger.info(`  -> http://${net.address}:${config.port} (${name})`);
+  try {
+    const networkInterfaces = os.networkInterfaces();
+    logger.info(`Available LAN IP addresses for Client connection:`);
+    for (const name of Object.keys(networkInterfaces)) {
+      const netList = networkInterfaces[name];
+      if (netList) {
+        for (const net of netList) {
+          if (net.family === 'IPv4' && !net.internal) {
+            logger.info(`  -> http://${net.address}:${config.port} (${name})`);
+          }
         }
       }
     }
+  } catch {
+    // Ignore interface inspection errors in sandbox
   }
   logger.info(`========================================================`);
+
+  // Run database bootstrap and auto-migrations in background so port is immediately open for Render
+  ensureBootstrapData().catch((err: any) => {
+    logger.warn('Bootstrap data background warning:', err?.message || err);
+  });
 
   // Cloud Keep-Alive Daemon: Keeps Render cloud instance awake 24/7 so it never spins down into sleep
   const cloudHealthUrl = 'https://ama-quotation-api.onrender.com/api/health';

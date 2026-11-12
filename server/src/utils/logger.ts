@@ -5,8 +5,12 @@ import { config } from '../config';
 const MAX_LOG_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB max per log file
 const MAX_BACKUP_LOGS = 3;
 
-if (!fs.existsSync(config.logsDir)) {
-  fs.mkdirSync(config.logsDir, { recursive: true });
+try {
+  if (!fs.existsSync(config.logsDir)) {
+    fs.mkdirSync(config.logsDir, { recursive: true });
+  }
+} catch {
+  // Silent fallback: In restricted containers stdout will handle logs
 }
 
 function rotateLogFile(filePath: string) {
@@ -23,8 +27,8 @@ function rotateLogFile(filePath: string) {
       }
     }
     fs.renameSync(filePath, `${filePath}.1`);
-  } catch (err) {
-    console.error('Failed to rotate log file:', err);
+  } catch {
+    // Ignore file rotation failures in read-only environments
   }
 }
 
@@ -33,11 +37,16 @@ export function log(level: 'INFO' | 'WARN' | 'ERROR', message: string, meta?: an
   const metaStr = meta ? ` | ${JSON.stringify(meta)}` : '';
   const logLine = `[${timestamp}] [${level}] ${message}${metaStr}\n`;
 
+  // Always output to stdout for cloud runtime log drains (Render, Vercel, Docker)
   console.log(`[${level}] ${message}`);
 
-  const logFile = path.join(config.logsDir, `${level.toLowerCase()}.log`);
-  rotateLogFile(logFile);
-  fs.appendFileSync(logFile, logLine, 'utf8');
+  try {
+    const logFile = path.join(config.logsDir, `${level.toLowerCase()}.log`);
+    rotateLogFile(logFile);
+    fs.appendFileSync(logFile, logLine, 'utf8');
+  } catch {
+    // Ignore local file append error if disk is restricted
+  }
 }
 
 export const logger = {

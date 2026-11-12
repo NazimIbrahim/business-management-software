@@ -44,6 +44,6 @@ export const config = {
   },
   jwtSecret: process.env.JWT_SECRET || 'ama_ceramics_secret_key_2026_jwt_token',
   jwtExpiresIn: '7d',
-  logsDir: path.join(__dirname, '../../logs'),
-  backupDir: path.join(__dirname, '../../backups'),
+  logsDir: process.env.LOGS_DIR || path.resolve(process.cwd(), 'logs'),
+  backupDir: process.env.BACKUP_DIR || path.resolve(process.cwd(), 'backups'),
 };
