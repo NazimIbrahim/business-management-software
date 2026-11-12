@@ -718,23 +718,25 @@ server.listen(PORT, '0.0.0.0', () => {
     logger.warn('Bootstrap data background warning:', err?.message || err);
   });
 
-  // Cloud Keep-Alive Daemon: Keeps Render cloud instance awake 24/7 so it never spins down into sleep
-  const cloudHealthUrl = 'https://ama-quotation-api.onrender.com/api/health';
-  const pingCloudKeepAlive = async () => {
-    try {
-      const res = await fetch(cloudHealthUrl, {
-        method: 'GET',
-        headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.60' },
-      });
-      if (res.ok) {
-        logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');
+  // Cloud Keep-Alive Daemon: Keeps Render cloud instance awake 24/7 (skip when deployed on Vercel)
+  if (!process.env.VERCEL) {
+    const cloudHealthUrl = 'https://ama-quotation-api.onrender.com/api/health';
+    const pingCloudKeepAlive = async () => {
+      try {
+        const res = await fetch(cloudHealthUrl, {
+          method: 'GET',
+          headers: { 'User-Agent': 'AMA-Host-KeepAlive/2.4.60' },
+        });
+        if (res.ok) {
+          logger.info('[KeepAlive] Cloud server ping successful — Render instance kept warm 24/7.');
+        }
+      } catch (err: any) {
+        logger.warn(`[KeepAlive] Cloud ping notice: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`[KeepAlive] Cloud ping notice: ${err.message}`);
-    }
-  };
+    };
 
-  // Initial ping 15 seconds after boot, then recurring every 7 minutes (Render sleeps after 15 minutes of inactivity)
-  setTimeout(pingCloudKeepAlive, 15000);
-  setInterval(pingCloudKeepAlive, 7 * 60 * 1000);
+    // Initial ping 15 seconds after boot, then recurring every 7 minutes (Render sleeps after 15 minutes of inactivity)
+    setTimeout(pingCloudKeepAlive, 15000);
+    setInterval(pingCloudKeepAlive, 7 * 60 * 1000);
+  }
 });

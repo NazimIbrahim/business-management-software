@@ -64,8 +64,12 @@ const getDefaultServerUrl = (): string => {
     const { protocol, hostname, port, origin } = window.location;
 
     // Detect if running on static frontend hosting (Vercel, Netlify, GitHub Pages, etc.)
+    // When deployed on Vercel as a multi-service project, /api is routed to the backend on the same origin
+    if (hostname.endsWith('.vercel.app')) {
+      return origin;
+    }
+
     const isStaticHosting =
-      hostname.endsWith('.vercel.app') ||
       hostname.endsWith('.netlify.app') ||
       hostname.endsWith('.github.io');
 
@@ -268,6 +272,20 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (lRes.ok) {
             setServerUrlState('http://localhost:4000');
             localStorage.setItem('ama_server_url', 'http://localhost:4000');
+            setStatus('connected');
+            return true;
+          }
+        } catch {}
+      } else if (typeof window !== 'undefined' && window.location?.hostname?.endsWith('.vercel.app')) {
+        // On Vercel, probe same-origin /api/health
+        try {
+          const vController = new AbortController();
+          const vTimeout = setTimeout(() => vController.abort(), 5000);
+          const vRes = await fetch(`${window.location.origin}/api/health`, { signal: vController.signal });
+          clearTimeout(vTimeout);
+          if (vRes.ok) {
+            setServerUrlState(window.location.origin);
+            localStorage.setItem('ama_server_url', window.location.origin);
             setStatus('connected');
             return true;
           }
