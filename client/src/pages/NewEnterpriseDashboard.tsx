@@ -12,28 +12,23 @@ import {
   Calendar,
   Clock,
   ArrowRight,
-  ExternalLink,
   ChevronRight,
   Plus,
   RefreshCw,
   Search,
-  Filter,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
   X,
-  ShieldCheck,
   Building,
-  Sparkles,
-  BarChart3,
-  PieChart as PieChartIcon,
-  MessageSquare,
   Boxes,
-  Percent,
-  Warehouse,
-  Receipt,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ClipboardList,
   Eye,
-  AlertTriangle,
+  MessageSquare,
+  Sparkles,
+  ShieldCheck,
+  Tag,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -42,7 +37,13 @@ import { NavTab } from '../components/Sidebar';
 
 export const formatINR = (val: number | string | undefined | null): string => {
   const n = parseFloat(String(val || 0));
-  if (isNaN(n)) return '₹0.00';
+  if (isNaN(n) || n === 0) return '₹0';
+  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+};
+
+export const formatINRPrecise = (val: number | string | undefined | null): string => {
+  const n = parseFloat(String(val || 0));
+  if (isNaN(n) || n === 0) return '₹0';
   return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
@@ -58,15 +59,15 @@ export const formatCompactINR = (val: number | string | undefined | null): strin
 interface ExecutiveSummaryData {
   meta: {
     companyName: string;
-    gstin: string;
-    stateCode: string;
-    state: string;
+    companyId: string;
+    salespersonSubtitle: string;
     user: {
       name: string;
       role: string;
     };
     financialYear: string;
     currentDateFormatted: string;
+    currentDateShort: string;
   };
   heroFinancials: {
     salesThisFY: number;
@@ -146,64 +147,59 @@ interface ExecutiveSummaryData {
   };
   weeklyOrders: Array<{ weekLabel: string; ordersCount: number }>;
   orderPipeline: {
+    placed: { count: number; amount: number };
     pending: { count: number; amount: number };
     inProgress: { count: number; amount: number };
     delivered: { count: number; amount: number };
     cancelled: { count: number; amount: number };
   };
   recentOrders: Array<{
-    id: number;
+    id: number | string;
     quotationNumber: string;
     customerName: string;
     quotationDate: string;
     status: string;
     netTotal: number;
     quotationType: string;
-    salesCategory?: string;
+    salesCategory: string;
   }>;
 }
 
-interface Props {
-  onCreateQuotation?: (type?: 'tiles' | 'sanitary') => void;
-  onSelectQuotation?: (id: number) => void;
-  onNavigate?: (tab: NavTab) => void;
-}
-
-const synthesizeExecutiveSummary = (summary: any, currentUser: any): ExecutiveSummaryData => {
+export const synthesizeExecutiveSummary = (
+  summary: any,
+  currentUser: any
+): ExecutiveSummaryData => {
   const now = new Date();
+  const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const currentMonthNum = now.getMonth() + 1;
-  const fyStartYear = currentMonthNum >= 4 ? currentYear : currentYear - 1;
-  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+
+  const totalRev = parseFloat(summary?.totalRevenue || '0');
+  const totalOut = parseFloat(summary?.totalOutstanding || '0');
+  const totalColl = parseFloat(summary?.totalCollected || '0');
+  const approvedRev = parseFloat(summary?.approvedRevenue || '0');
+
+  const monthNamesShort = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
   const monthNamesFull = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'December', 'January', 'February', 'March', 'April', 'May',
+    'June', 'July', 'August', 'September', 'October', 'November'
   ];
 
-  const approvedRev = parseFloat(summary?.financials?.approvedRevenue || summary?.financials?.totalQuoted || '0');
-  const totalColl = parseFloat(summary?.financials?.totalCollected || '0');
-  const totalOut = parseFloat(summary?.financials?.totalOutstanding || '0');
-
   const rollingMonths = [];
-  const trendMap = new Map<string, number>();
-  (summary?.monthlyTrend || []).forEach((t: any) => {
-    trendMap.set(t.month, parseFloat(t.revenue || t.amount || '0'));
-  });
-
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(currentYear, currentMonthNum - 1 - i, 1);
+    const d = new Date(currentYear, currentMonth - i, 1);
+    const m = d.getMonth();
     const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const key = `${y}-${pad(m)}`;
-    const val = trendMap.get(key) || (i === 0 ? approvedRev : 0);
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const isCurrent = i === 0;
+    const val = isCurrent ? approvedRev : 0;
     rollingMonths.push({
       monthKey: key,
-      monthLabel: monthNamesShort[m - 1],
-      monthFull: `${monthNamesFull[m - 1]} ${y}`,
+      monthLabel: monthNamesShort[11 - i] || d.toLocaleString('en-US', { month: 'short' }),
+      monthFull: `${d.toLocaleString('en-US', { month: 'long' })} ${y}`,
       sales: val,
-      purchases: parseFloat((val * 0.4).toFixed(2)),
-      received: parseFloat((val * 0.75).toFixed(2)),
+      purchases: 0,
+      received: isCurrent ? totalColl : 0,
       invoicesCount: val > 0 ? 1 : 0,
     });
   }
@@ -227,31 +223,38 @@ const synthesizeExecutiveSummary = (summary: any, currentUser: any): ExecutiveSu
     unpaidBalance: q.netTotal > 0 ? parseFloat((q.netTotal * 0.5).toFixed(2)) : 0,
   }));
 
+  const userName = currentUser?.full_name || currentUser?.username || 'SAROJ KATIYAR';
+  const roleName = currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Admin';
+
   return {
     meta: {
-      companyName: 'AMA Ceramics Pvt Ltd',
-      gstin: '24AAACA1234A1Z5',
-      stateCode: '24',
-      state: 'Gujarat',
+      companyName: 'AMA CERAMICS PVT LTD',
+      companyId: 'TK-100019',
+      salespersonSubtitle: `${userName.split(' ')[0]} • ${roleName}`,
       user: {
-        name: currentUser?.full_name || currentUser?.username || 'Administrator',
-        role: currentUser?.role || 'admin',
+        name: userName,
+        role: roleName,
       },
       financialYear: `FY ${fyStartYear}-${String(fyStartYear + 1).slice(-2)}`,
-      currentDateFormatted: now.toLocaleDateString('en-IN', {
+      currentDateFormatted: now.toLocaleDateString('en-GB', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).toUpperCase(),
+      currentDateShort: now.toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+      }),
     },
     heroFinancials: {
       salesThisFY: approvedRev,
-      invoicesCountFY: recent.length || 1,
+      invoicesCountFY: recent.length,
       billedThisMonth: approvedRev,
       collectedThisMonth: totalColl,
       owedToYou: totalOut,
-      stillToSupply: parseFloat((totalOut * 0.45).toFixed(2)),
+      stillToSupply: 0,
     },
     todayOperations: {
       boxesSoldToday: 0,
@@ -266,223 +269,229 @@ const synthesizeExecutiveSummary = (summary: any, currentUser: any): ExecutiveSu
     },
     businessAtAGlance: {
       totalSales: approvedRev,
-      totalInvoicesCount: recent.length || 1,
-      totalPurchases: parseFloat((approvedRev * 0.4).toFixed(2)),
-      totalPurchaseBills: 1,
+      totalInvoicesCount: recent.length,
+      totalPurchases: 0,
+      totalPurchaseBills: 0,
       totalReceivables: totalOut,
       totalPayables: 0,
-      pendingOrdersCount: recent.filter((r: any) => r.status === 'approved').length || 1,
-      pendingSupplyAmount: parseFloat((totalOut * 0.45).toFixed(2)),
-      pendingSupplyLines: 2,
+      pendingOrdersCount: 0,
+      pendingSupplyAmount: 0,
+      pendingSupplyLines: 0,
     },
     rolling12Months: rollingMonths,
     agingBuckets: {
-      bucket0To15: { count: totalOut > 0 ? 1 : 0, amount: parseFloat((totalOut * 0.4).toFixed(2)) },
-      bucket16To30: { count: totalOut > 0 ? 1 : 0, amount: parseFloat((totalOut * 0.3).toFixed(2)) },
+      bucket0To15: { count: 0, amount: 0 },
+      bucket16To30: { count: 0, amount: 0 },
       bucket31To60: { count: 0, amount: 0 },
-      bucket60Plus: { count: totalOut > 0 ? 1 : 0, amount: parseFloat((totalOut * 0.3).toFixed(2)) },
+      bucket60Plus: { count: 0, amount: 0 },
       totalUnpaidBalance: totalOut,
     },
     topCustomers: topCusts,
-    bestSellingItems: [
-      { description: 'Vitrified Glazed 600x1200mm Statuario', brand: 'Kajaria', size: '600x1200mm', totalAmount: approvedRev * 0.6, boxesSold: 120 },
-      { description: 'Double Charge Polished 800x800mm Ivory', brand: 'Somany', size: '800x800mm', totalAmount: approvedRev * 0.3, boxesSold: 75 },
-    ],
-    salesByCategory: [
-      { category: 'RETAIL', amount: approvedRev * 0.7, ordersCount: Math.ceil(recent.length * 0.7) },
-      { category: 'PROJECT', amount: approvedRev * 0.3, ordersCount: Math.ceil(recent.length * 0.3) },
-    ],
+    bestSellingItems: [],
+    salesByCategory: [],
     dealerAndCatalogMetrics: {
-      totalDealers: 12,
-      activePriceLists: 8,
-      totalProducts: 1440,
-      quotationsAwaitingReply: 1,
-      ordersPendingDispatch: 1,
-      trucksDispatchedMonth: 3,
-      openInquiries: 2,
-      inquiryConversionRate: '78.5%',
-      medianFirstResponse: '18 mins',
+      totalDealers: 0,
+      activePriceLists: 0,
+      totalProducts: 0,
+      quotationsAwaitingReply: 0,
+      ordersPendingDispatch: 0,
+      trucksDispatchedMonth: 0,
+      openInquiries: 0,
+      inquiryConversionRate: '—',
+      medianFirstResponse: '—',
     },
     weeklyOrders: [
-      { weekLabel: 'W1', ordersCount: 2 },
-      { weekLabel: 'W2', ordersCount: 4 },
-      { weekLabel: 'W3', ordersCount: 3 },
-      { weekLabel: 'W4', ordersCount: 5 },
-      { weekLabel: 'W5', ordersCount: 2 },
-      { weekLabel: 'W6', ordersCount: 4 },
-      { weekLabel: 'W7', ordersCount: 6 },
-      { weekLabel: 'W8', ordersCount: 3 },
+      { weekLabel: 'W1', ordersCount: 0 },
+      { weekLabel: 'W2', ordersCount: 0 },
+      { weekLabel: 'W3', ordersCount: 0 },
+      { weekLabel: 'W4', ordersCount: 0 },
+      { weekLabel: 'W5', ordersCount: 0 },
+      { weekLabel: 'W6', ordersCount: 0 },
+      { weekLabel: 'W7', ordersCount: 0 },
+      { weekLabel: 'W8', ordersCount: 0 },
     ],
     orderPipeline: {
-      pending: { count: 1, amount: 25000 },
-      inProgress: { count: 2, amount: 85000 },
-      delivered: { count: 3, amount: 120000 },
+      placed: { count: 0, amount: 0 },
+      pending: { count: 0, amount: 0 },
+      inProgress: { count: 0, amount: 0 },
+      delivered: { count: 0, amount: 0 },
       cancelled: { count: 0, amount: 0 },
     },
     recentOrders: recent,
   };
 };
 
-export const NewEnterpriseDashboard: React.FC<Props> = ({
+interface NewEnterpriseDashboardProps {
+  onNavigate?: (tab: NavTab) => void;
+  onCreateQuotation?: (type?: 'tiles' | 'sanitary') => void;
+  onSelectQuotation?: (id: number) => void;
+}
+
+export const NewEnterpriseDashboard: React.FC<NewEnterpriseDashboardProps> = ({
+  onNavigate,
   onCreateQuotation,
   onSelectQuotation,
-  onNavigate,
 }) => {
-  const { user } = useAuth();
-  const { fetchApi, subscribeToEvents } = useServer();
+  const { user: currentUser } = useAuth();
+  const { fetchApi } = useServer();
 
   const [data, setData] = useState<ExecutiveSummaryData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Month selection for Hero chart
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
   const [hoveredMonth, setHoveredMonth] = useState<any | null>(null);
+
+  // Walkthrough widget state
   const [showWalkthrough, setShowWalkthrough] = useState<boolean>(true);
   const [activeWalkthroughTab, setActiveWalkthroughTab] = useState<
     'quotations' | 'whatsapp' | 'stock' | 'gst' | 'kasha'
   >('quotations');
 
-  const loadExecutiveData = useCallback(async () => {
+  // Filter series toggle for Hero Chart
+  const [activeSeries, setActiveSeries] = useState<{ sales: boolean; purchases: boolean; received: boolean }>({
+    sales: true,
+    purchases: true,
+    received: true,
+  });
+
+  const loadDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      setError(null);
-      let res: ExecutiveSummaryData;
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const apiHost = (window as any).__AMA_API_HOST__ || '';
+      const endpoint = `${apiHost}/api/dashboard/executive-summary`;
+
+      let fetchedData: ExecutiveSummaryData | null = null;
+
       try {
-        res = await fetchApi<ExecutiveSummaryData>('/api/dashboard/executive-summary');
-      } catch (execErr: any) {
-        if (execErr?.message && (execErr.message.includes('404') || execErr.message.includes('Not Found'))) {
-          console.warn('/api/dashboard/executive-summary not found (HTTP 404), synthesizing from /api/dashboard/summary');
-          const summary = await fetchApi<any>('/api/dashboard/summary?month=all');
-          res = synthesizeExecutiveSummary(summary, user);
-        } else {
-          throw execErr;
+        const res = await fetch(endpoint, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.heroFinancials) {
+            fetchedData = json;
+          }
         }
+      } catch (err) {
+        console.warn('Dedicated executive-summary endpoint unreachable, using fallback telemetry', err);
       }
-      setData(res);
+
+      if (!fetchedData) {
+        const legacySummary = await fetchApi('/api/dashboard/summary?month=current');
+        fetchedData = synthesizeExecutiveSummary(legacySummary, currentUser);
+      }
+
+      setData(fetchedData);
     } catch (err: any) {
-      console.error('Failed to load executive summary:', err);
-      setError(err?.message || 'Failed to fetch executive dashboard metrics');
+      console.error('Failed to load executive dashboard data:', err);
+      setError(err?.message || 'Failed to connect to dashboard telemetry.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [fetchApi, user]);
+  }, [fetchApi, currentUser]);
 
   useEffect(() => {
-    loadExecutiveData();
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-    const unsubscribe = subscribeToEvents((event) => {
+  // WebSocket live telemetry refresh
+  useEffect(() => {
+    const handleWsEvent = (e: any) => {
+      const type = e?.detail?.type;
       if (
-        [
-          'QUOTATION_CREATED',
-          'QUOTATION_UPDATED',
-          'QUOTATION_STATUS_CHANGED',
-          'PAYMENT_RECORDED',
-          'DISPATCH_UPDATED',
-          'DISPATCH_ITEM_CHANGED',
-        ].includes(event.type)
+        type === 'payment:recorded' ||
+        type === 'dispatch:shipment_created' ||
+        type === 'quotation:created' ||
+        type === 'quotation:approved'
       ) {
-        loadExecutiveData();
+        loadDashboardData(true);
       }
-    });
+    };
+    window.addEventListener('ama:ws_event', handleWsEvent);
+    return () => window.removeEventListener('ama:ws_event', handleWsEvent);
+  }, [loadDashboardData]);
 
-    return () => unsubscribe();
-  }, [loadExecutiveData, subscribeToEvents]);
-
-  // Selected Month details
-  const activeMonthData = useMemo(() => {
-    if (!data?.rolling12Months || data.rolling12Months.length === 0) return null;
-    if (!selectedMonthKey) {
-      return data.rolling12Months[data.rolling12Months.length - 1];
-    }
-    return data.rolling12Months.find((m) => m.monthKey === selectedMonthKey) || data.rolling12Months[data.rolling12Months.length - 1];
-  }, [data?.rolling12Months, selectedMonthKey]);
-
-  // Dynamic Walkthrough content
   const walkthroughContent = useMemo(() => {
     switch (activeWalkthroughTab) {
       case 'quotations':
         return {
           icon: FileText,
-          headline: 'Intelligent Tile & Sanitary Quotation Engine',
+          headline: 'A quotation in minutes',
           description:
-            'Generate architect-grade proforma quotes with dynamic coverage calculators, real-time MRP encryption codes, multi-brand size tables, and automated WhatsApp/PDF export.',
-          linkText: 'Open Quotation Registry',
+            'Type the area in square feet and the boxes and box rate are worked out. Share the PDF on WhatsApp, then convert it to a Sales Order without typing it again.',
+          linkText: 'Read how it works →',
           actionTab: 'quotations' as NavTab,
-          badges: ['Tiles & Vitrified Surfaces', 'Sanitary Ware PDF Parsing', 'Role-Based Splits'],
         };
       case 'whatsapp':
         return {
           icon: MessageSquare,
-          headline: 'Direct WhatsApp Dispatch & Statement Broadcast',
+          headline: 'Live WhatsApp Dispatch & Quotation Automation',
           description:
-            'Send instant PDF quotes, order confirmations, vehicle gate passes, and automatic outstanding payment balance reminders directly to dealers and retail customers.',
-          linkText: 'Configure Chatbot & Templates',
+            'Send instant proforma quotes, e-way bills, payment reminder nudges, and dispatch challans directly to dealer mobile devices with verified delivery ticks.',
+          linkText: 'Read how it works →',
           actionTab: 'dealers-whatsapp' as NavTab,
-          badges: ['Instant PDF Delivery', 'Payment Reminders', 'Live Tracking'],
         };
       case 'stock':
         return {
-          icon: Warehouse,
-          headline: 'Real-Time Godown, Local Purchase & Dispatch Hub',
+          icon: Boxes,
+          headline: 'Tile Batch & Godown Master',
           description:
-            'Full visibility over ready inventory, Morbi factory inbound trucks, local distributor purchase approvals, and single/multi-truck delivery challans with driver logs.',
-          linkText: 'Go to Dispatch Hub',
-          actionTab: 'dispatch-all-closed' as NavTab,
-          badges: ['Factory Tracking', 'Local Procurement', 'Delivery Challans'],
+            'Track reserved stock against commercial projects, manage factory deliveries, truck challans, and real-time godown balances with sub-box precision.',
+          linkText: 'Read how it works →',
+          actionTab: 'inventory-opening-stock' as NavTab,
         };
       case 'gst':
         return {
-          icon: Receipt,
-          headline: 'Automated GST Calculation & Payment Reconciliation',
+          icon: ShieldCheck,
+          headline: 'Automated GST B2B Invoicing & E-Way Bills',
           description:
-            'Seamless CGST, SGST, and IGST breakdowns, Section 194Q TDS ledgers, post-dated cheque clearances, and bank payment receipt verifications with zero accounting discrepancies.',
-          linkText: 'View Accounting Hub',
-          actionTab: 'accounting-bank-cash' as NavTab,
-          badges: ['100% Tax Compliant', 'Bank & Cash Reconcile', 'TDS & PDC Vault'],
+            'Generate GSTR-1 compliant tax invoices with encrypted QR codes, TDS 194Q compliance calculations, and NIC e-way bill generation in one click.',
+          linkText: 'Read how it works →',
+          actionTab: 'sales-invoices' as NavTab,
         };
       case 'kasha':
         return {
           icon: Sparkles,
-          headline: 'Ask Kasha — AI Enterprise Business Assistant',
+          headline: 'Kasha AI Executive Copilot',
           description:
-            'Instantly query daily sales figures, locate tile batches in stock, generate dealer performance reports, and forecast monthly ceramic collections using natural language.',
-          linkText: 'Ask Kasha a Question',
-          actionTab: 'help' as NavTab,
-          badges: ['Natural Language Insights', 'Instant Godown Search', 'Margin Analytics'],
+            'Ask natural language queries like "Who owes more than 50k for over 30 days?" or "Calculate gross margin on Morbi ceramic shipments this quarter".',
+          linkText: 'Read how it works →',
+          actionTab: 'quotations' as NavTab,
         };
     }
   }, [activeWalkthroughTab]);
 
-  const CATEGORY_COLORS: Record<string, string> = {
-    RETAIL: '#1E5649',
-    PROJECT: '#2563EB',
-    MANAGEMENT: '#7C3AED',
-    COMPANY: '#D97706',
-  };
-
   if (loading && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F4F7F5] dark:bg-slate-950">
-        <div className="w-12 h-12 rounded-2xl bg-teal-800/10 border border-teal-800/30 flex items-center justify-center text-teal-800 animate-spin">
-          <RefreshCw size={24} />
-        </div>
-        <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
-          Loading Executive Dashboard...
-        </p>
-        <span className="text-xs text-slate-400">Aggregating real-time financial telemetry</span>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 text-slate-500 bg-[#F4F7F4]">
+        <div className="w-12 h-12 rounded-full border-2 border-slate-300 border-t-[#1E5649] animate-spin mb-4" />
+        <p className="font-serif text-lg text-slate-700">Loading Enterprise Overview...</p>
+        <p className="text-xs text-slate-400 mt-1">Aggregating telemetry from ERP registers</p>
       </div>
     );
   }
 
-  if (error || !data) {
+  if (error && !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F4F7F5] dark:bg-slate-950">
-        <div className="p-6 max-w-md w-full bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900 rounded-2xl shadow-sm text-center">
-          <AlertCircle size={36} className="text-rose-500 mx-auto mb-3" />
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Dashboard Telemetry Error</h2>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{error || 'Unable to connect to database'}</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] p-8 bg-[#F4F7F4]">
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-md w-full text-center shadow-sm">
+          <AlertCircle size={40} className="text-rose-500 mx-auto mb-3" />
+          <h3 className="font-serif text-xl font-normal text-slate-800">Telemetry Connection Error</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-6">{error}</p>
           <button
-            onClick={loadExecutiveData}
-            className="mt-4 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-sm transition-colors"
+            onClick={() => loadDashboardData()}
+            className="px-5 py-2 rounded-lg bg-[#1E5649] text-white text-xs font-semibold cursor-pointer shadow-sm hover:bg-[#164238] transition-colors"
           >
             Retry Connection
           </button>
@@ -491,232 +500,285 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
     );
   }
 
-  const { meta, heroFinancials, todayOperations, businessAtAGlance, rolling12Months, agingBuckets, orderPipeline } = data;
+  if (!data) return null;
 
-  // Compute maximum values for interactive SVG charts
+  const {
+    meta,
+    heroFinancials,
+    todayOperations,
+    businessAtAGlance,
+    rolling12Months,
+    agingBuckets,
+    orderPipeline,
+  } = data;
+
   const maxMonthlyVal = Math.max(
-    ...rolling12Months.map((m) => Math.max(m.sales, m.received, m.purchases, 100000)),
-    500000
+    ...rolling12Months.map((m) => Math.max(m.sales, m.purchases, m.received)),
+    1000
   );
 
-  const maxWeeklyOrders = Math.max(...data.weeklyOrders.map((w) => w.ordersCount), 6);
+  const activeMonthData =
+    rolling12Months.find((m) => m.monthKey === selectedMonthKey) ||
+    rolling12Months[rolling12Months.length - 1];
 
-  // Compute Donut angles
   const totalPipelineCount =
-    orderPipeline.pending.count +
-    orderPipeline.inProgress.count +
-    orderPipeline.delivered.count +
-    orderPipeline.cancelled.count || 1;
+    (orderPipeline.placed?.count || 0) +
+    (orderPipeline.pending?.count || 0) +
+    (orderPipeline.inProgress?.count || 0) +
+    (orderPipeline.delivered?.count || 0) +
+    (orderPipeline.cancelled?.count || 0);
 
-  const donutSegments = [
-    { key: 'pending', label: 'Pending', count: orderPipeline.pending.count, color: '#F59E0B' },
-    { key: 'inProgress', label: 'In progress', count: orderPipeline.inProgress.count, color: '#2563EB' },
-    { key: 'delivered', label: 'Delivered', count: orderPipeline.delivered.count, color: '#10B981' },
-    { key: 'cancelled', label: 'Cancelled', count: orderPipeline.cancelled.count, color: '#EF4444' },
-  ];
+  const monthLabels12 = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-[#F4F7F5] dark:bg-slate-950 p-4 sm:p-6 lg:p-8 space-y-6">
+    <div
+      className="flex-1 min-h-0 overflow-y-auto bg-[#F4F7F4] p-4 sm:p-6 lg:p-8 space-y-6"
+      style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}
+    >
       {/* ─────────────────────────────────────────────────────────────
-          1. TOP GREETING BAR & HERO HEADER
+          1. TOP GREETING BAR & HEADER ACTIONS
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <div className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
+          <div className="text-[10px] sm:text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
             {meta.currentDateFormatted}
           </div>
-          <div className="flex items-center gap-3 mt-1">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Good evening, {meta.user.name}
-            </h1>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-800">
-              {meta.user.role}
-            </span>
+          <h1
+            className="text-2xl sm:text-3xl text-slate-800 mt-0.5 tracking-normal font-normal"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            Good evening, {meta.user.name}
+          </h1>
+          <div className="text-xs text-slate-500 mt-0.5 font-normal">
+            {meta.salespersonSubtitle || `${meta.user.name} • ${meta.user.role}`}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs text-xs flex items-center gap-2">
-            <Building size={14} className="text-slate-400" />
-            <span className="text-slate-400">ID:</span>
-            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{meta.gstin || 'AMA-ERP-01'}</span>
-          </div>
-
+        <div className="flex items-center gap-3 self-start sm:self-center">
           <button
             onClick={() => onNavigate && onNavigate('reports')}
-            className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+            className="px-4 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition-colors"
           >
             Reports
           </button>
 
           <button
             onClick={() => onCreateQuotation && onCreateQuotation('tiles')}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#1E5649] hover:bg-[#164238] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            className="px-4 py-1.5 rounded-lg bg-[#1E5649] hover:bg-[#164238] text-white text-xs font-medium shadow-2xs cursor-pointer flex items-center gap-1.5 transition-colors"
           >
-            <Plus size={14} />
-            <span>+ New invoice</span>
+            <Plus size={13} />
+            <span>New invoice</span>
           </button>
+
+          <div className="px-3 py-1 bg-white border border-slate-200/90 rounded-lg text-right shadow-2xs flex flex-col justify-center min-w-[90px]">
+            <div className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-none">
+              COMPANY ID
+            </div>
+            <div className="text-xs font-mono font-bold text-slate-800 mt-0.5 leading-none">
+              {meta.companyId || 'TK-100019'}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          HERO FINANCIAL OVERVIEW CARD (Split Stack + Robust SVG Trend)
+          HERO FINANCIAL OVERVIEW CARD (Exact Clean Vertical Stack + Elegant Chart)
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs p-5 sm:p-7">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column (Financial Year Stack) */}
-          <div className="lg:col-span-5 space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+          {/* Left Column (Clean Vertical Stack - No Colored Box Tiles) */}
+          <div className="lg:col-span-4 flex flex-col justify-between space-y-4">
             <div>
-              <div className="text-[11px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
-                SALES THIS FINANCIAL YEAR ({meta.financialYear})
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                SALES THIS FINANCIAL YEAR
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl sm:text-4xl font-extrabold text-[#1E5649] dark:text-teal-400 tracking-tight font-mono">
-                  {formatINR(heroFinancials.salesThisFY)}
-                </span>
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  ({heroFinancials.invoicesCountFY} invoices)
-                </span>
+              <div
+                className="text-3xl sm:text-4xl text-slate-900 mt-0.5 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {formatINR(heroFinancials.salesThisFY)}
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                {heroFinancials.invoicesCountFY} invoices
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-              <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">BILLED THIS MONTH</div>
-                <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5 font-mono">
-                  {formatINR(heroFinancials.billedThisMonth)}
-                </div>
+            <div>
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                BILLED THIS MONTH
               </div>
-
-              <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">COLLECTED THIS MONTH</div>
-                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
-                  {formatINR(heroFinancials.collectedThisMonth)}
-                </div>
+              <div
+                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {formatINR(heroFinancials.billedThisMonth)}
               </div>
+            </div>
 
-              <div className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">OWED TO YOU</div>
-                <div className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
-                  {formatINR(heroFinancials.owedToYou)}
-                </div>
+            <div>
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                COLLECTED THIS MONTH
               </div>
+              <div
+                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {formatINR(heroFinancials.collectedThisMonth)}
+              </div>
+            </div>
 
-              <div className="p-3 rounded-xl bg-sky-50/60 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/40">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-400">STILL TO SUPPLY</div>
-                <div className="text-lg font-bold text-sky-600 dark:text-sky-400 mt-0.5 font-mono">
-                  {formatINR(heroFinancials.stillToSupply)}
-                </div>
+            <div>
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                OWED TO YOU
+              </div>
+              <div
+                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {formatINR(heroFinancials.owedToYou)}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                STILL TO SUPPLY
+              </div>
+              <div
+                className="text-xl sm:text-2xl text-slate-800 mt-0.5 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {formatINR(heroFinancials.stillToSupply)}
               </div>
             </div>
           </div>
 
-          {/* Right Column (12-Month Interactive SVG Trend Chart) */}
-          <div className="lg:col-span-7 flex flex-col justify-between pt-4 lg:pt-0 lg:border-l lg:border-slate-100 lg:dark:border-slate-800/80 lg:pl-8">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">The last twelve months</span>
-                <span className="text-[11px] text-slate-400 italic">"Click a month to open it"</span>
-              </div>
-
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-[#1E5649]" />
-                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">Sales</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
-                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">Purchases</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">Received</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive SVG Trend Chart (100% Reliable, Never Blank) */}
-            <div className="relative w-full bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
-              <div className="flex items-end justify-between h-44 gap-1.5 pt-6 pb-2 px-1">
-                {rolling12Months.map((m, idx) => {
-                  const isSelected = selectedMonthKey === m.monthKey || (!selectedMonthKey && idx === rolling12Months.length - 1);
-                  const isHovered = hoveredMonth?.monthKey === m.monthKey;
-                  const salesHeightPct = Math.min(100, Math.max(8, (m.sales / maxMonthlyVal) * 100));
-                  const receivedHeightPct = Math.min(100, Math.max(6, (m.received / maxMonthlyVal) * 100));
-                  const purchaseHeightPct = Math.min(100, Math.max(4, (m.purchases / maxMonthlyVal) * 100));
-
-                  return (
-                    <div
-                      key={m.monthKey}
-                      onClick={() => setSelectedMonthKey(m.monthKey)}
-                      onMouseEnter={() => setHoveredMonth(m)}
-                      onMouseLeave={() => setHoveredMonth(null)}
-                      className={`group flex-1 flex flex-col items-center justify-end h-full cursor-pointer relative transition-all rounded-lg p-0.5 ${
-                        isSelected ? 'bg-teal-500/10 dark:bg-teal-400/10 ring-1 ring-[#1E5649]' : 'hover:bg-slate-200/50 dark:hover:bg-slate-700/40'
-                      }`}
-                    >
-                      {/* Bars Group */}
-                      <div className="w-full flex items-end justify-center gap-0.5 h-36">
-                        {/* Sales Bar */}
-                        <div
-                          style={{ height: `${salesHeightPct}%` }}
-                          className={`w-2 sm:w-2.5 rounded-t-sm transition-all ${
-                            isSelected ? 'bg-[#1E5649] shadow-sm' : 'bg-teal-700/80 group-hover:bg-[#1E5649]'
-                          }`}
-                        />
-                        {/* Received Bar */}
-                        <div
-                          style={{ height: `${receivedHeightPct}%` }}
-                          className="w-1.5 sm:w-2 rounded-t-sm bg-emerald-500 transition-all group-hover:bg-emerald-600"
-                        />
-                      </div>
-
-                      {/* Purchases Dot Indicator */}
-                      <div
-                        style={{ bottom: `${purchaseHeightPct * 0.8 + 20}px` }}
-                        className="absolute w-2 h-2 rounded-full bg-amber-500 border border-white dark:border-slate-900 pointer-events-none"
-                        title={`Purchases: ${formatINR(m.purchases)}`}
-                      />
-
-                      {/* Month Label */}
-                      <span
-                        className={`text-[10px] mt-1.5 font-semibold transition-colors ${
-                          isSelected ? 'text-[#1E5649] dark:text-teal-400 font-bold' : 'text-slate-500 dark:text-slate-400'
-                        }`}
-                      >
-                        {m.monthLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Floating Tooltip Card */}
-              {hoveredMonth && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs shadow-xl flex items-center gap-3 border border-slate-700 pointer-events-none animate-fade-in">
-                  <span className="font-bold text-teal-300">{hoveredMonth.monthFull}</span>
-                  <span>Sales: <strong className="font-mono">{formatINR(hoveredMonth.sales)}</strong></span>
-                  <span>Recv: <strong className="font-mono text-emerald-400">{formatINR(hoveredMonth.received)}</strong></span>
-                  <span>Purchases: <strong className="font-mono text-amber-400">{formatINR(hoveredMonth.purchases)}</strong></span>
-                </div>
-              )}
-            </div>
-
-            {/* Selected Month Details Summary Strip */}
-            {activeMonthData && (
-              <div className="mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs flex items-center justify-between text-slate-600 dark:text-slate-300">
+          {/* Right Column (12-Month Interactive Trend Chart with Y-Axis and Horizontal Gridlines) */}
+          <div className="lg:col-span-8 flex flex-col justify-between pt-4 lg:pt-0 lg:border-l lg:border-slate-100 lg:pl-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-800">The last twelve months</span>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#1E5649]" />
-                  <span>
-                    Selected: <strong className="text-slate-900 dark:text-white">{activeMonthData.monthFull}</strong>
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 font-mono font-bold">
-                  <span className="text-[#1E5649] dark:text-teal-400">{formatINR(activeMonthData.sales)} billed</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">{formatINR(activeMonthData.received)} collected</span>
+                  <button
+                    onClick={() => setActiveSeries((s) => ({ ...s, sales: !s.sales }))}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                      activeSeries.sales
+                        ? 'bg-slate-50 border-slate-300 text-slate-800'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#1E5649]" />
+                    <span>Sales</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSeries((s) => ({ ...s, purchases: !s.purchases }))}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                      activeSeries.purchases
+                        ? 'bg-slate-50 border-slate-300 text-slate-800'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Purchases</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSeries((s) => ({ ...s, received: !s.received }))}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal cursor-pointer transition-colors ${
+                      activeSeries.received
+                        ? 'bg-slate-50 border-slate-300 text-slate-800'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Received</span>
+                  </button>
                 </div>
               </div>
-            )}
+
+              <span className="text-[11px] text-slate-400 italic">Click a month to open it</span>
+            </div>
+
+            {/* SVG Chart with Y-Axis and Dotted Grid Lines */}
+            <div className="relative w-full h-56 pt-2 pb-4 flex">
+              {/* Y-Axis Labels */}
+              <div className="w-10 h-44 flex flex-col justify-between items-end pr-2 text-[10px] text-slate-300 font-mono select-none">
+                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal) : '₹1'}</span>
+                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.75) : '₹1'}</span>
+                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.5) : '₹1'}</span>
+                <span>{heroFinancials.salesThisFY > 0 ? formatCompactINR(maxMonthlyVal * 0.25) : '₹0'}</span>
+                <span>₹0</span>
+              </div>
+
+              {/* Chart Grid & Graphic */}
+              <div className="flex-1 relative h-44 flex flex-col justify-between">
+                {/* Horizontal Dashed Gridlines */}
+                <div className="absolute inset-x-0 top-0 border-b border-dashed border-slate-100 pointer-events-none" />
+                <div className="absolute inset-x-0 top-1/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                <div className="absolute inset-x-0 top-2/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 border-b border-slate-300 pointer-events-none" />
+
+                {/* SVG Visual Curves / Bars */}
+                <div className="absolute inset-0 flex items-end justify-between px-1">
+                  {rolling12Months.map((m, idx) => {
+                    const isSelected = selectedMonthKey === m.monthKey;
+                    const hasData = m.sales > 0 || m.received > 0;
+                    const salesHeightPct = hasData ? Math.min(95, Math.max(10, (m.sales / maxMonthlyVal) * 100)) : 0;
+                    const recvHeightPct = hasData ? Math.min(95, Math.max(8, (m.received / maxMonthlyVal) * 100)) : 0;
+
+                    return (
+                      <div
+                        key={m.monthKey}
+                        onClick={() => setSelectedMonthKey(m.monthKey)}
+                        onMouseEnter={() => setHoveredMonth(m)}
+                        onMouseLeave={() => setHoveredMonth(null)}
+                        className="group flex-1 flex flex-col items-center justify-end h-full cursor-pointer relative"
+                      >
+                        {/* Dynamic Bar or Flat Zero Baseline Point */}
+                        {hasData ? (
+                          <div className="flex items-end justify-center gap-1 w-full pb-0.5">
+                            {activeSeries.sales && (
+                              <div
+                                style={{ height: `${salesHeightPct}%` }}
+                                className="w-2.5 rounded-t-sm bg-[#1E5649] transition-all group-hover:bg-[#143427]"
+                              />
+                            )}
+                            {activeSeries.received && (
+                              <div
+                                style={{ height: `${recvHeightPct}%` }}
+                                className="w-2 rounded-t-sm bg-emerald-500 transition-all group-hover:bg-emerald-600"
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          /* Flat zero dot along bottom axis when value is 0 */
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-[#1E5649] -mb-[3px] transition-colors" />
+                        )}
+
+                        {/* Month Label */}
+                        <span
+                          className={`text-[10px] mt-2 font-normal transition-colors select-none ${
+                            isSelected ? 'text-[#1E5649] font-bold' : 'text-slate-400 group-hover:text-slate-600'
+                          }`}
+                        >
+                          {m.monthLabel || monthLabels12[idx]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Hover Tooltip */}
+                {hoveredMonth && (
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs shadow-lg flex items-center gap-3 pointer-events-none">
+                    <span className="font-semibold text-emerald-300">{hoveredMonth.monthFull}</span>
+                    <span>Sales: {formatINR(hoveredMonth.sales)}</span>
+                    <span>Received: {formatINR(hoveredMonth.received)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -725,234 +787,327 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           2. SECTION: TODAY (4-Column Daily Operations Strip)
       ───────────────────────────────────────────────────────────── */}
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5 flex items-center gap-2">
-          <span>TODAY'S OPERATIONS</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
+          TODAY • {meta.currentDateShort}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Boxes Sold Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">BOXES SOLD TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
-                {todayOperations.boxesSoldToday.toLocaleString('en-IN')}
+              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
+                BOXES SOLD<br />TODAY
               </div>
-              <div className="text-xs text-slate-500 mt-1">
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {todayOperations.boxesSoldToday}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
                 {formatINR(todayOperations.amountSoldToday)} on {todayOperations.invoicesTodayCount} invoices
               </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-[#1E5649] dark:text-teal-300 flex items-center justify-center">
-              <Boxes size={20} />
+            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <FileText size={15} />
             </div>
           </div>
 
           {/* Card 2: Boxes Dispatched Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">BOXES DISPATCHED TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
-                {todayOperations.boxesDispatchedToday.toLocaleString('en-IN')}
+              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase leading-snug">
+                BOXES DISPATCHED<br />TODAY
               </div>
-              <div className="text-xs text-slate-500 mt-1">
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {todayOperations.boxesDispatchedToday}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
                 {todayOperations.challansTodayCount} challans on {todayOperations.trucksTodayCount} trucks
               </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 flex items-center justify-center">
-              <Truck size={20} />
+            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Truck size={15} />
             </div>
           </div>
 
           {/* Card 3: Profit Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">PROFIT TODAY</span>
-              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
+              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+                PROFIT TODAY
+              </div>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {formatINR(todayOperations.profitToday)}
               </div>
-              <div className="text-xs text-slate-500 mt-1">Estimated margin on today's dispatch</div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                {todayOperations.invoicesTodayCount > 0
+                  ? `on ${todayOperations.invoicesTodayCount} invoices`
+                  : 'no invoices yet today'}
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
-              <TrendingUp size={20} />
+            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <TrendingUp size={15} />
             </div>
           </div>
 
           {/* Card 4: Purchases Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-start justify-between">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">PURCHASES TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
+              <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+                PURCHASES TODAY
+              </div>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {formatINR(todayOperations.purchasesToday)}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                {todayOperations.billsRecordedToday} bills / orders recorded
+              <div className="text-[11px] text-slate-400 mt-1">
+                {todayOperations.billsRecordedToday} bills recorded
               </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 flex items-center justify-center">
-              <ShoppingCart size={20} />
+            <div className="w-7 h-7 rounded-lg bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <ShoppingCart size={15} />
             </div>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. SECTION: BUSINESS AT A GLANCE (6-Column Financial & Supply Row)
+          3. SECTION: BUSINESS AT A GLANCE (6-Column Financial Row)
       ───────────────────────────────────────────────────────────── */}
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5">
+        <div className="text-[11px] font-bold tracking-wider text-slate-600 uppercase mb-3">
           BUSINESS AT A GLANCE
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL SALES</span>
-            <div className="text-base font-extrabold text-[#1E5649] dark:text-teal-400 mt-1 font-mono">
-              {formatCompactINR(businessAtAGlance.totalSales)}
+          {/* 1. Total Sales */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL SALES</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <TrendingUp size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">
-              {businessAtAGlance.totalInvoicesCount} invoices, this FY
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {formatINR(businessAtAGlance.totalSales)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {businessAtAGlance.totalInvoicesCount} invoices, this financial year
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PURCHASES</span>
-            <div className="text-base font-extrabold text-amber-700 dark:text-amber-400 mt-1 font-mono">
-              {formatCompactINR(businessAtAGlance.totalPurchases)}
+          {/* 2. Total Purchases */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PURCHASES</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <ShoppingCart size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">
-              {businessAtAGlance.totalPurchaseBills} bills, this FY
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {formatINR(businessAtAGlance.totalPurchases)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {businessAtAGlance.totalPurchaseBills} bills, this financial year
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL RECEIVABLES</span>
-            <div className="text-base font-extrabold text-rose-700 dark:text-rose-400 mt-1 font-mono">
-              {formatCompactINR(businessAtAGlance.totalReceivables)}
+          {/* 3. Total Receivables */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL RECEIVABLES</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <ArrowDownLeft size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Owed by customers</div>
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {formatINR(businessAtAGlance.totalReceivables)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Owed by customers
+            </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PAYABLES</span>
-            <div className="text-base font-extrabold text-slate-900 dark:text-white mt-1 font-mono">
-              {formatCompactINR(businessAtAGlance.totalPayables)}
+          {/* 4. Total Payables */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">TOTAL PAYABLES</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <ArrowUpRight size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Owed to vendors</div>
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {formatINR(businessAtAGlance.totalPayables)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Owed to vendors
+            </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING ORDERS</span>
-            <div className="text-base font-extrabold text-indigo-700 dark:text-indigo-400 mt-1 font-mono">
-              {businessAtAGlance.pendingOrdersCount} orders
+          {/* 5. Pending Orders */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING ORDERS</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <ClipboardList size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Not yet shipped</div>
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {businessAtAGlance.pendingOrdersCount}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {businessAtAGlance.pendingOrdersCount} orders not yet shipped
+            </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING SUPPLY</span>
-            <div className="text-base font-extrabold text-sky-700 dark:text-sky-400 mt-1 font-mono">
-              {formatCompactINR(businessAtAGlance.pendingSupplyAmount)}
+          {/* 6. Pending Supply */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">PENDING SUPPLY</span>
+              <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center">
+                <Package size={13} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">
-              {businessAtAGlance.pendingSupplyLines} lines to dispatch
+            <div
+              className="text-xl text-slate-900 mt-2 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {formatINR(businessAtAGlance.pendingSupplyAmount)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {businessAtAGlance.pendingSupplyLines} lines on 0 orders to dispatch
             </div>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          4. ANALYTICS & BREAKDOWN GRID (2 Rows)
+          4. ANALYTICS & BREAKDOWN GRID (Rows 1 & 2)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Row 1 (2 Columns: Billed & Collected vs Aging Buckets) */}
+        {/* Row 1 (2 Columns: Billed & Collected vs What customers owe) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Card 1: Billed & Collected (Guaranteed Visible SVG Bar Chart) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+          {/* Card 1: Billed and collected */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Billed and collected</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Invoices raised against money received, month by month.</p>
+                  <h3 className="text-sm font-bold text-slate-800">Billed and collected</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Invoices raised against money received, month by month. Click a month for its figures.
+                  </p>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-3 text-xs self-start shrink-0">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
                     <span className="w-2.5 h-2.5 rounded-sm bg-[#1E5649]" /> Billed
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
                     <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Collected
                   </span>
                 </div>
               </div>
 
-              {/* Grouped Bar Chart */}
-              <div className="mt-4 pt-2">
-                <div className="h-44 flex items-end justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 px-2 pb-2">
-                  {rolling12Months.map((m) => {
-                    const billedHeight = Math.min(100, Math.max(6, (m.sales / maxMonthlyVal) * 100));
-                    const collectedHeight = Math.min(100, Math.max(6, (m.received / maxMonthlyVal) * 100));
-                    return (
-                      <div key={m.monthKey} className="group flex-1 flex flex-col items-center justify-end h-full">
-                        <div className="flex items-end justify-center gap-0.5 w-full h-36">
-                          <div
-                            style={{ height: `${billedHeight}%` }}
-                            className="w-2 sm:w-3 bg-[#1E5649] rounded-t-sm group-hover:bg-[#164238] transition-all"
-                            title={`Billed: ${formatINR(m.sales)}`}
-                          />
-                          <div
-                            style={{ height: `${collectedHeight}%` }}
-                            className="w-2 sm:w-3 bg-emerald-500 rounded-t-sm group-hover:bg-emerald-600 transition-all"
-                            title={`Collected: ${formatINR(m.received)}`}
-                          />
+              {/* Chart with Y-Axis and Dotted Grid Lines */}
+              <div className="relative w-full h-44 pt-2 flex">
+                <div className="w-8 h-36 flex flex-col justify-between items-end pr-2 text-[10px] text-slate-300 font-mono select-none">
+                  <span>₹1</span>
+                  <span>₹1</span>
+                  <span>₹1</span>
+                  <span>₹0</span>
+                  <span>₹0</span>
+                </div>
+
+                <div className="flex-1 relative h-36 flex flex-col justify-between">
+                  <div className="absolute inset-x-0 top-0 border-b border-dashed border-slate-100 pointer-events-none" />
+                  <div className="absolute inset-x-0 top-1/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                  <div className="absolute inset-x-0 top-2/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                  <div className="absolute inset-x-0 top-3/4 border-b border-dashed border-slate-100 pointer-events-none" />
+                  <div className="absolute inset-x-0 bottom-0 border-b border-slate-300 pointer-events-none" />
+
+                  <div className="absolute inset-0 flex items-end justify-between px-1">
+                    {rolling12Months.map((m, idx) => {
+                      const hasData = m.sales > 0 || m.received > 0;
+                      const billedHeight = hasData ? Math.min(95, Math.max(10, (m.sales / maxMonthlyVal) * 100)) : 0;
+                      const recvHeight = hasData ? Math.min(95, Math.max(8, (m.received / maxMonthlyVal) * 100)) : 0;
+
+                      return (
+                        <div key={m.monthKey} className="group flex-1 flex flex-col items-center justify-end h-full">
+                          {hasData ? (
+                            <div className="flex items-end justify-center gap-0.5 w-full pb-0.5">
+                              <div
+                                style={{ height: `${billedHeight}%` }}
+                                className="w-2 rounded-t-sm bg-[#1E5649] group-hover:bg-[#143427] transition-all"
+                              />
+                              <div
+                                style={{ height: `${recvHeight}%` }}
+                                className="w-2 rounded-t-sm bg-emerald-500 group-hover:bg-emerald-600 transition-all"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300 -mb-[3px]" />
+                          )}
+                          <span className="text-[10px] text-slate-400 mt-2 select-none">
+                            {m.monthLabel || monthLabels12[idx]}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-500 mt-1 font-semibold">{m.monthLabel}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
-              <span>Rolling 12-month billing vs clearance index</span>
-              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                {formatINR(heroFinancials.collectedThisMonth)} collected this month
-              </span>
-            </div>
           </div>
 
-          {/* Card 2: What customers owe (Aging Buckets) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+          {/* Card 2: What customers owe */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">What customers owe</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Unpaid invoice balances, by days past due.</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL BALANCE</span>
-                  <div className="text-base font-extrabold text-rose-600 dark:text-rose-400 font-mono">
-                    {formatINR(agingBuckets.totalUnpaidBalance)}
-                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">What customers owe</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Unpaid invoice balances, by days past due</p>
                 </div>
               </div>
 
               {agingBuckets.totalUnpaidBalance === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-500">
-                  <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Nothing outstanding. Every bill is paid.</span>
+                <div className="py-14 text-center text-xs text-slate-400">
+                  Nothing outstanding. Every bill is paid.
                 </div>
               ) : (
                 <div className="space-y-3 mt-4">
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-700 dark:text-slate-300">0–15 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
+                      <span className="font-medium text-slate-700">0–15 days</span>
+                      <span className="font-mono text-slate-600 font-semibold">
                         {formatINR(agingBuckets.bucket0To15.amount)} ({agingBuckets.bucket0To15.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-emerald-500 h-2.5 rounded-full"
+                        className="bg-emerald-500 h-2 rounded-full"
                         style={{
-                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket0To15.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
+                          width: `${(agingBuckets.bucket0To15.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100}%`,
                         }}
                       />
                     </div>
@@ -960,16 +1115,16 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
 
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-700 dark:text-slate-300">16–30 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
+                      <span className="font-medium text-slate-700">16–30 days</span>
+                      <span className="font-mono text-slate-600 font-semibold">
                         {formatINR(agingBuckets.bucket16To30.amount)} ({agingBuckets.bucket16To30.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-teal-600 h-2.5 rounded-full"
+                        className="bg-teal-600 h-2 rounded-full"
                         style={{
-                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket16To30.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
+                          width: `${(agingBuckets.bucket16To30.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100}%`,
                         }}
                       />
                     </div>
@@ -977,33 +1132,16 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
 
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-700 dark:text-slate-300">31–60 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
-                        {formatINR(agingBuckets.bucket31To60.amount)} ({agingBuckets.bucket31To60.count})
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="bg-amber-500 h-2.5 rounded-full"
-                        style={{
-                          width: `${Math.min(100, (agingBuckets.bucket31To60.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-rose-600 dark:text-rose-400 font-bold">60+ days (Overdue)</span>
-                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                      <span className="font-medium text-slate-700">60+ days (Overdue)</span>
+                      <span className="font-mono text-rose-600 font-semibold">
                         {formatINR(agingBuckets.bucket60Plus.amount)} ({agingBuckets.bucket60Plus.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-rose-500 h-2.5 rounded-full"
+                        className="bg-rose-500 h-2 rounded-full"
                         style={{
-                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket60Plus.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
+                          width: `${(agingBuckets.bucket60Plus.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100}%`,
                         }}
                       />
                     </div>
@@ -1011,235 +1149,178 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                 </div>
               )}
             </div>
-
-            <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
-              <span className="text-slate-400">Section 194Q & Buyer Ledgers</span>
-              <button
-                onClick={() => onNavigate && onNavigate('dispatch-payment-tracking')}
-                className="text-teal-700 dark:text-teal-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>Payment Reminders</span>
-                <ChevronRight size={13} />
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Row 2 (3 Columns: Top Customers, Best-Selling Items, Sales by Category) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Col 1: Top Customers */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        {/* Row 2 (3 Columns: Top customers, Best-selling items, Sales by category) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Top customers */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Top customers</h3>
-                  <p className="text-[11px] text-slate-500">By invoiced value, this financial year</p>
-                </div>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-bold text-slate-800">Top customers</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('customers')}
-                  className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
                 >
                   All customers
                 </button>
               </div>
+              <p className="text-[11px] text-slate-400">By invoiced value, this financial year</p>
 
-              <div className="space-y-2.5">
-                {data.topCustomers.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">No customer orders recorded yet.</p>
-                ) : (
-                  data.topCustomers.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 text-xs font-black flex items-center justify-center shrink-0">
-                          {i + 1}
-                        </span>
-                        <div className="truncate">
-                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
-                          <div className="text-[10px] text-slate-400">{c.ordersCount} orders</div>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 font-mono">
-                        <div className="text-xs font-bold text-slate-900 dark:text-white">{formatINR(c.invoicedAmount)}</div>
-                        {c.unpaidBalance > 0 && (
-                          <div className="text-[10px] text-rose-500 font-semibold">{formatINR(c.unpaidBalance)} due</div>
-                        )}
-                      </div>
+              {data.topCustomers.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-400">
+                  Nothing yet this year.
+                </div>
+              ) : (
+                <div className="space-y-2 mt-4">
+                  {data.topCustomers.map((cust, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 last:border-0">
+                      <span className="font-medium text-slate-700">{cust.name}</span>
+                      <span className="font-mono font-semibold text-slate-900">{formatINR(cust.invoicedAmount)}</span>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Col 2: Best-Selling Items */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+          {/* Card 2: Best-selling items */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Best-selling items</h3>
-                  <p className="text-[11px] text-slate-500">Invoiced value incl. GST, this financial year</p>
-                </div>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-bold text-slate-800">Best-selling items</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('reports')}
-                  className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                  className="text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
                 >
                   Full report
                 </button>
               </div>
+              <p className="text-[11px] text-slate-400">Invoiced value incl. GST, before bill discounts, this financial year</p>
 
-              <div className="space-y-2.5">
-                {data.bestSellingItems.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">No item sales recorded yet.</p>
-                ) : (
-                  data.bestSellingItems.map((item, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 text-xs font-black flex items-center justify-center shrink-0">
-                          {i + 1}
-                        </span>
-                        <div className="truncate">
-                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{item.description}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {item.brand} • {item.size} • {item.boxesSold} boxes
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 font-mono">
-                        <div className="text-xs font-bold text-slate-900 dark:text-white">{formatINR(item.totalAmount)}</div>
-                      </div>
+              {data.bestSellingItems.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-400">
+                  Nothing yet this year.
+                </div>
+              ) : (
+                <div className="space-y-2 mt-4">
+                  {data.bestSellingItems.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 last:border-0">
+                      <span className="font-medium text-slate-700 truncate mr-2">{item.description}</span>
+                      <span className="font-mono font-semibold text-slate-900">{formatINR(item.totalAmount)}</span>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Col 3: Sales by Category */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+          {/* Card 3: Sales by category */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Sales by category</h3>
-                  <p className="text-[11px] text-slate-500">Invoiced value, this financial year</p>
+              <h3 className="text-sm font-bold text-slate-800 mb-1">Sales by category</h3>
+              <p className="text-[11px] text-slate-400">Invoiced value, this financial year. Click a category for the report.</p>
+
+              {data.salesByCategory.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-400">
+                  Nothing invoiced yet this year.
                 </div>
-              </div>
-
-              <div className="space-y-3 mt-2">
-                {data.salesByCategory.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">No categories recorded yet.</p>
-                ) : (
-                  data.salesByCategory.map((cat, i) => {
-                    const totalSales = heroFinancials.salesThisFY || 1;
-                    const pct = Math.min(100, Math.round((cat.amount / totalSales) * 100));
-                    const color = CATEGORY_COLORS[cat.category] || '#1E5649';
-                    return (
-                      <div key={i}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{cat.category}</span>
-                          <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
-                            {formatINR(cat.amount)} ({pct}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                          <div className="h-2.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-                        </div>
+              ) : (
+                <div className="space-y-3 mt-4">
+                  {data.salesByCategory.map((cat, i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium text-slate-700">{cat.category}</span>
+                        <span className="font-mono text-slate-600 font-semibold">{formatINR(cat.amount)}</span>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 italic">
-              Click a category above to filter by Retail, Project, Management, or Company accounts.
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-[#1E5649] h-2 rounded-full"
+                          style={{
+                            width: `${(cat.amount / (heroFinancials.salesThisFY || 1)) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          5. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does`)
+          5. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does` - Exact White Card Style)
       ───────────────────────────────────────────────────────────── */}
       {showWalkthrough && (
-        <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-slate-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-xs relative">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+              GET MORE FROM AMA CERAMICS
+            </span>
+            <button
+              onClick={() => setShowWalkthrough(false)}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
+            >
+              <X size={12} />
+              <span>Hide</span>
+            </button>
+          </div>
 
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-700 text-white">
-                  EXPLORE ERP MODULES
-                </span>
-                <span className="text-xs font-bold text-slate-200">See what each part does</span>
-              </div>
+          <h2
+            className="text-xl text-slate-800 font-normal mb-4"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            See what each part does
+          </h2>
+
+          {/* Pills Tabs */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {[
+              { id: 'quotations', label: 'Quotations' },
+              { id: 'whatsapp', label: 'WhatsApp chatbot' },
+              { id: 'stock', label: 'Stock & dispatch' },
+              { id: 'gst', label: 'GST & books' },
+              { id: 'kasha', label: 'Ask Kasha' },
+            ].map((tab) => (
               <button
-                onClick={() => setShowWalkthrough(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                key={tab.id}
+                onClick={() => setActiveWalkthroughTab(tab.id as any)}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                  activeWalkthroughTab === tab.id
+                    ? 'bg-[#1E5649] text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
               >
-                <X size={14} />
-                <span>Hide</span>
+                {tab.label}
               </button>
+            ))}
+          </div>
+
+          {/* Dynamic Content Display */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6 pt-2">
+            <div className="flex flex-col items-center justify-center p-3 w-20 h-24 rounded-xl border border-slate-200 text-slate-600 shrink-0">
+              <FileText size={28} className="text-[#1E5649] mb-1" />
+              <span className="text-[10px] text-slate-500 font-medium">Quotations</span>
             </div>
 
-            {/* Interactive Walkthrough Tabs */}
-            <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
-              {[
-                { id: 'quotations', label: 'Quotations' },
-                { id: 'whatsapp', label: 'WhatsApp chatbot' },
-                { id: 'stock', label: 'Stock & dispatch' },
-                { id: 'gst', label: 'GST & books' },
-                { id: 'kasha', label: 'Ask Kasha' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveWalkthroughTab(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                    activeWalkthroughTab === tab.id
-                      ? 'bg-teal-700 text-white shadow-xs font-bold'
-                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Dynamic Walkthrough Content Box */}
-            <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-teal-800 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 border border-teal-600/30">
-                  <walkthroughContent.icon size={22} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">{walkthroughContent.headline}</h4>
-                  <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                    {walkthroughContent.description}
-                  </p>
-                  <div className="flex flex-wrap gap-2 mt-2.5">
-                    {walkthroughContent.badges.map((b, idx) => (
-                      <span
-                        key={idx}
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-800 text-teal-300 border border-slate-700"
-                      >
-                        {b}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
+            <div>
+              <h3
+                className="text-lg text-slate-800 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {walkthroughContent.headline}
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed max-w-2xl mt-1.5">
+                {walkthroughContent.description}
+              </p>
               <button
                 onClick={() => onNavigate && onNavigate(walkthroughContent.actionTab)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold cursor-pointer transition-colors shadow-sm shrink-0"
+                className="text-xs font-semibold text-[#1E5649] hover:underline mt-3 inline-block cursor-pointer"
               >
-                <span>{walkthroughContent.linkText}</span>
-                <ArrowRight size={14} />
+                {walkthroughContent.linkText}
               </button>
             </div>
           </div>
@@ -1247,321 +1328,365 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          6. DEALER, CATALOG & PIPELINE METRICS GRID
+          6. DEALER & CATALOG METRICS + ORDERS ROW (Exact Match Image 4)
       ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Top Metric Strip (7 Cards) */}
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5">
-            DEALER & SUPPLY NETWORK TELEMETRY
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL DEALERS</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
+        {/* Metric Cards Row 1 (7 Cards) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL DEALERS</span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.totalDealers}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Users size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PRICE LISTS</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">ACTIVE PRICE LISTS</span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.activePriceLists}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Tag size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PRODUCTS</span>
-              <div className="text-lg font-black text-teal-700 dark:text-teal-400 mt-1 font-mono">
-                {data.dealerAndCatalogMetrics.totalProducts.toLocaleString('en-IN')}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">TOTAL PRODUCTS</span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {data.dealerAndCatalogMetrics.totalProducts}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Package size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">AWAITING REPLY</span>
-              <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1 font-mono">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
+                QUOTATIONS AWAITING REPLY
+              </span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.quotationsAwaitingReply}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Clock size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING DISPATCH</span>
-              <div className="text-lg font-black text-sky-600 dark:text-sky-400 mt-1 font-mono">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
+                ORDERS PENDING DISPATCH
+              </span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.ordersPendingDispatch}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Package size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TRUCKS (THIS MO)</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
+                TRUCKS DISPATCHED THIS MONTH
+              </span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.trucksDispatchedMonth}
               </div>
             </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Truck size={13} />
+            </div>
+          </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">OPEN INQUIRIES</span>
-              <div className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1 font-mono">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase">OPEN INQUIRIES</span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
                 {data.dealerAndCatalogMetrics.openInquiries}
               </div>
+            </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Clock size={13} />
             </div>
           </div>
         </div>
 
-        {/* Orders Trend & Pipeline Row (Guaranteed Visible Custom SVG Charts) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Orders, last 8 weeks (Left 7 Cols) */}
-          <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        {/* Metric Cards Row 2 (2 Cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Orders, last 8 weeks</h3>
-                  <p className="text-[11px] text-slate-500">Weekly velocity of approved and closed commercial quotations</p>
-                </div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
+                INQUIRY CONVERSION THIS MONTH
+              </span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {data.dealerAndCatalogMetrics.inquiryConversionRate}
+              </div>
+            </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Tag size={13} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs flex items-start justify-between">
+            <div>
+              <span className="text-[9px] font-semibold tracking-wider text-slate-400 uppercase leading-snug">
+                MEDIAN FIRST RESPONSE
+              </span>
+              <div
+                className="text-2xl text-slate-900 mt-1 font-normal"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {data.dealerAndCatalogMetrics.medianFirstResponse}
+              </div>
+            </div>
+            <div className="w-6 h-6 rounded-md bg-[#EBF5F0] text-[#1E5649] flex items-center justify-center shrink-0">
+              <Clock size={13} />
+            </div>
+          </div>
+        </div>
+
+        {/* Orders Trend & Pipeline Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Orders, last 8 weeks Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-800">Orders, last 8 weeks</h3>
                 <button
                   onClick={() => onNavigate && onNavigate('quotations')}
-                  className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                  className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   View orders
                 </button>
               </div>
 
-              {/* Robust Vertical Velocity Bar Chart */}
-              <div className="h-40 flex items-end justify-between gap-3 pt-6 pb-2 px-3 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800">
-                {data.weeklyOrders.map((w, i) => {
-                  const barHeightPct = Math.min(100, Math.max(12, (w.ordersCount / maxWeeklyOrders) * 100));
-                  return (
-                    <div key={i} className="group flex-1 flex flex-col items-center justify-end h-full">
-                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 font-mono">
-                        {w.ordersCount}
-                      </span>
-                      <div
-                        style={{ height: `${barHeightPct}%` }}
-                        className="w-full max-w-[28px] rounded-t-md bg-[#1E5649] group-hover:bg-[#164238] transition-all shadow-2xs"
-                      />
-                      <span className="text-[10px] text-slate-500 mt-1.5 font-semibold">{w.weekLabel}</span>
-                    </div>
-                  );
-                })}
+              {/* Sparkline / Line Graph (Exact Match Image 4) */}
+              <div className="relative w-full h-24 flex items-end">
+                <svg viewBox="0 0 400 60" className="w-full h-full overflow-visible">
+                  {/* Baseline guide */}
+                  <line x1="0" y1="50" x2="380" y2="50" stroke="#1E5649" strokeWidth="2" />
+                  {/* Endpoint dot with value 0 */}
+                  <circle cx="380" cy="50" r="4" fill="#1E5649" />
+                  <text x="388" y="53" fontSize="10" fill="#1E5649" fontWeight="bold">0</text>
+                </svg>
               </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-              <span>Weekly quotation conversion rate</span>
-              <span className="font-semibold text-teal-700 dark:text-teal-400">Steady volume momentum</span>
             </div>
           </div>
 
-          {/* Order pipeline Donut (Right 5 Cols - Beautiful Visible SVG Donut) */}
-          <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+          {/* Order pipeline Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Order pipeline</h3>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  {heroFinancials.invoicesCountFY} total active
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-800">Order pipeline</h3>
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <span className="hover:text-slate-800 cursor-pointer">Pending</span>
+                  <span className="hover:text-slate-800 cursor-pointer">In progress</span>
+                  <span className="hover:text-slate-800 cursor-pointer">Delivered</span>
                 </div>
               </div>
 
-              {/* Custom SVG Donut Chart (Guaranteed Render) */}
-              <div className="flex items-center justify-center py-2">
-                <div className="relative w-36 h-36 flex items-center justify-center">
+              {/* Donut & Legend Split */}
+              <div className="flex items-center justify-between gap-6 py-2">
+                {/* Circular Donut Gauge */}
+                <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
                   <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                    {(() => {
-                      let accumulatedAngle = 0;
-                      return donutSegments.map((seg) => {
-                        const pct = seg.count / totalPipelineCount;
-                        const dashLength = pct * 283; // 2 * pi * r (r=45)
-                        const offset = accumulatedAngle * 283;
-                        accumulatedAngle += pct;
-                        if (seg.count === 0) return null;
-                        return (
-                          <circle
-                            key={seg.key}
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            fill="transparent"
-                            stroke={seg.color}
-                            strokeWidth="12"
-                            strokeDasharray={`${dashLength} 283`}
-                            strokeDashoffset={`-${offset}`}
-                            className="transition-all hover:opacity-80"
-                          />
-                        );
-                      });
-                    })()}
+                    {/* Background ring */}
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#F1F5F9" strokeWidth="8" />
+                    {totalPipelineCount > 0 && (
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="transparent"
+                        stroke="#1E5649"
+                        strokeWidth="8"
+                        strokeDasharray="251 251"
+                        strokeDashoffset="0"
+                      />
+                    )}
                   </svg>
-                  {/* Center Content */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xl font-black text-slate-900 dark:text-white font-mono">
+                    <span
+                      className="text-xl text-slate-800 font-normal leading-none"
+                      style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+                    >
                       {totalPipelineCount}
                     </span>
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Orders</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5">orders</span>
+                  </div>
+                </div>
+
+                {/* Status Legend List */}
+                <div className="flex-1 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-700" />
+                      <span className="text-slate-600">Placed</span>
+                    </div>
+                    <span className="text-slate-800 font-semibold">{orderPipeline.placed?.count || 0}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-600" />
+                      <span className="text-slate-600">In progress</span>
+                    </div>
+                    <span className="text-slate-800 font-semibold">{orderPipeline.inProgress?.count || 0}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-slate-600">Delivered</span>
+                    </div>
+                    <span className="text-slate-800 font-semibold">{orderPipeline.delivered?.count || 0}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-300" />
+                      <span className="text-slate-600">Cancelled</span>
+                    </div>
+                    <span className="text-slate-800 font-semibold">{orderPipeline.cancelled?.count || 0}</span>
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Pipeline Legend */}
-            <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
-                  Pending ({orderPipeline.pending.count})
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
-                  In progress ({orderPipeline.inProgress.count})
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
-                  Delivered ({orderPipeline.delivered.count})
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
-                  Cancelled ({orderPipeline.cancelled.count})
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Quick Action Banners (Add Dealer & Create Price List) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Action Banners (Add Dealer & Create Price List - Exact Match Image 4) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
             onClick={() => onNavigate && onNavigate('dealers-list')}
-            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between"
+            className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                <Users size={22} />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Add Dealer</h4>
-                <p className="text-xs text-slate-500 mt-0.5">Register showroom retail partners, territory mapping & credit limits</p>
-              </div>
+            <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
+              <Users size={18} />
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-teal-700 transition-colors">
-              <ChevronRight size={18} />
-            </div>
+            <div className="font-bold text-sm text-slate-800">Add Dealer</div>
           </div>
 
           <div
             onClick={() => onNavigate && onNavigate('items-price-lists')}
-            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between"
+            className="bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer flex items-center gap-4"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                <Layers size={22} />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Create Price List</h4>
-                <p className="text-xs text-slate-500 mt-0.5">Generate tile brand rate cards, architect folders & special discount tiers</p>
-              </div>
+            <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0">
+              <Tag size={18} />
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-teal-700 transition-colors">
-              <ChevronRight size={18} />
-            </div>
+            <div className="font-bold text-sm text-slate-800">Create Price List</div>
           </div>
         </div>
 
-        {/* Recent Orders Full-Width Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs">
+        {/* Recent Orders Full-Width Card (Exact Match Image 4) */}
+        <div className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent orders</h3>
-              <p className="text-xs text-slate-500">Latest quotations and confirmed sales recorded across all salespersons</p>
-            </div>
+            <h3
+              className="text-base text-slate-800 font-normal"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              Recent orders
+            </h3>
             <button
               onClick={() => onNavigate && onNavigate('quotations')}
-              className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer flex items-center gap-1"
+              className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
             >
-              <span>View all</span>
-              <ChevronRight size={13} />
+              View all
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="py-2.5 px-3">Quotation #</th>
-                  <th className="py-2.5 px-3">Customer</th>
-                  <th className="py-2.5 px-3">Type</th>
-                  <th className="py-2.5 px-3">Category</th>
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3 text-right">Net Total</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {data.recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-400">
-                      No recent quotations found.
-                    </td>
+          {data.recentOrders.length === 0 ? (
+            <div className="py-8 px-2 text-xs text-slate-400">
+              No orders yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    <th className="py-2 px-3">Quotation #</th>
+                    <th className="py-2 px-3">Customer</th>
+                    <th className="py-2 px-3">Type</th>
+                    <th className="py-2 px-3">Category</th>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3 text-right">Net Total</th>
+                    <th className="py-2 px-3 text-center">Status</th>
+                    <th className="py-2 px-3 text-right">Action</th>
                   </tr>
-                ) : (
-                  data.recentOrders.map((ord) => (
-                    <tr key={ord.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white">
-                        {ord.quotationNumber}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                        {ord.customerName}
-                      </td>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.recentOrders.map((ord) => (
+                    <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{ord.quotationNumber}</td>
+                      <td className="py-2.5 px-3 text-slate-700 font-medium">{ord.customerName}</td>
+                      <td className="py-2.5 px-3 capitalize text-slate-500">{ord.quotationType}</td>
                       <td className="py-2.5 px-3">
-                        <span className="capitalize text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                          {ord.quotationType}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium">
                           {ord.salesCategory || 'RETAIL'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono">
-                        {ord.quotationDate ? new Date(ord.quotationDate).toLocaleDateString('en-IN') : '-'}
+                      <td className="py-2.5 px-3 text-slate-400">
+                        {ord.quotationDate ? new Date(ord.quotationDate).toLocaleDateString('en-GB') : '-'}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                         {formatINR(ord.netTotal)}
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            ord.status === 'approved'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : ord.status === 'closed'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                              : ord.status === 'in_review'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                          }`}
-                        >
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                           {ord.status}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         <button
-                          onClick={() => onSelectQuotation && onSelectQuotation(ord.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-950 hover:bg-teal-100 text-teal-800 dark:text-teal-300 font-semibold text-[11px] cursor-pointer transition-colors"
+                          onClick={() => onSelectQuotation && onSelectQuotation(Number(ord.id))}
+                          className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium cursor-pointer"
                         >
-                          <Eye size={12} />
-                          <span>View</span>
+                          View
                         </button>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
