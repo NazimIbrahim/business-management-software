@@ -25,12 +25,13 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { BackupRestorePage } from './pages/BackupRestorePage';
 import { AdminPanelPage } from './pages/AdminPanelPage';
 import { DispatchManagement } from './pages/DispatchManagement';
+import { NewEnterpriseDashboard } from './pages/NewEnterpriseDashboard';
 
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
   const { openServerWizard, setOpenServerWizard, fetchApi } = useServer();
 
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>('executive-dashboard');
   const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
   const [isEditingQuotation, setIsEditingQuotation] = useState<boolean>(false);
   const [quotationType, setQuotationType] = useState<'tiles' | 'sanitary'>('tiles');
@@ -61,7 +62,7 @@ const AppContent: React.FC = () => {
       if (user.role === 'dispatch' || user.role === 'dispatch_team') {
         setActiveTab('dispatch-local');
       } else {
-        setActiveTab('dashboard');
+        setActiveTab('executive-dashboard');
       }
       setSelectedQuotationId(null);
       setIsEditingQuotation(false);
@@ -296,7 +297,16 @@ const AppContent: React.FC = () => {
 
     // Standard tab rendering
     switch (activeTab) {
+      case 'executive-dashboard':
+        return (
+          <NewEnterpriseDashboard
+            onCreateQuotation={(type) => handleCreateQuotation(type)}
+            onSelectQuotation={handleSelectQuotation}
+            onNavigate={handleNavTabChange}
+          />
+        );
       case 'dashboard':
+      case 'dashboard-legacy':
         return (
           <Dashboard
             onSelectQuotation={handleSelectQuotation}
@@ -855,9 +865,10 @@ const AppContent: React.FC = () => {
 
       default:
         return (
-          <Dashboard
+          <NewEnterpriseDashboard
+            onCreateQuotation={(type) => handleCreateQuotation(type)}
             onSelectQuotation={handleSelectQuotation}
-            onCreateQuotation={() => handleCreateQuotation()}
+            onNavigate={handleNavTabChange}
           />
         );
     }

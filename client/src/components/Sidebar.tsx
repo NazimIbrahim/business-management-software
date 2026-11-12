@@ -50,6 +50,8 @@ import {
 export type NavTab =
   // Existing legacy tabs
   | 'dashboard'
+  | 'dashboard-legacy'
+  | 'executive-dashboard'
   | 'quotations'
   | 'dispatch'
   | 'dispatch-all-closed'
@@ -266,9 +268,9 @@ export const Sidebar: React.FC<Props> = ({
       {
         id: 'dashboard',
         label: 'Dashboard',
-        icon: Grid,
+        icon: LayoutDashboard,
         isDirectLink: true,
-        directTab: 'dashboard',
+        directTab: 'executive-dashboard',
       },
       {
         id: 'crm',
@@ -409,6 +411,7 @@ export const Sidebar: React.FC<Props> = ({
   // Legacy Tabs list for auto-expanding Old Menu
   const oldMenuTabIds = useMemo(() => {
     return [
+      'dashboard-legacy',
       'quotations',
       'quotation-create',
       'quotation-create-tiles',
@@ -762,15 +765,15 @@ export const Sidebar: React.FC<Props> = ({
                 <div className="space-y-0.5">
                   {/* Dashboard in Old Menu */}
                   <button
-                    onClick={() => handleNavSelect('dashboard')}
+                    onClick={() => handleNavSelect('dashboard-legacy')}
                     className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left ${
-                      activeTab === 'dashboard'
+                      activeTab === 'dashboard-legacy' || activeTab === 'dashboard'
                         ? 'bg-teal-700 text-white font-semibold'
                         : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800/70'
                     }`}
                   >
                     <LayoutDashboard size={14} />
-                    <span className="truncate">Dashboard</span>
+                    <span className="truncate">Legacy Dashboard</span>
                   </button>
 
                   {/* Quotations List */}
