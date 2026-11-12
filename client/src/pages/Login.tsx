@@ -197,7 +197,11 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                 {status === 'connecting' && (
                   <div className="flex items-center justify-center space-x-2 py-1.5 px-3 text-xs text-blue-700 bg-blue-50/80 border border-blue-200/60 rounded-md">
                     <RefreshCw size={13} className="animate-spin text-blue-600 flex-shrink-0" />
-                    <span className="truncate">Connecting to server ({serverUrl})...</span>
+                    <span className="truncate">
+                      {serverUrl.includes('onrender.com')
+                        ? 'Waking up cloud server (please wait ~20s)...'
+                        : `Connecting to server (${serverUrl})...`}
+                    </span>
                   </div>
                 )}
 

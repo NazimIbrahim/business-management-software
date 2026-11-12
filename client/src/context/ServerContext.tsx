@@ -245,7 +245,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Verify HTTP API connectivity & perform intelligent auto-failover
   const verifyHttpConnectivity = useCallback(async (url: string) => {
     const isCloudUrl = url.includes('onrender.com');
-    const healthTimeout = isCloudUrl ? 25000 : 8000;
+    const healthTimeout = isCloudUrl ? 45000 : 8000;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), healthTimeout);
@@ -253,7 +253,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'ok' || data.dbConnected) {
+        // Server responded successfully (even if database is degraded/connecting, the HTTP server is alive and reachable)
+        if (data.status === 'ok' || data.status === 'degraded' || data.server || data.dbConnected) {
           setStatus('connected');
           setLastSyncTime(new Date());
           return true;
