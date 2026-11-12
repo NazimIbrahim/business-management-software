@@ -106,6 +106,12 @@ export type NavTab =
   | 'sales-invoices'
   | 'sales-payment-reminders'
   | 'sales-eway-bills'
+  | 'purchases-preferred-vendors'
+  | 'purchases-purchase-orders'
+  | 'purchases-bills'
+  | 'purchases-transit-claims'
+  | 'purchases-payments-made'
+  | 'purchases-expenses'
   | 'purchases-landed-cost'
   | 'dealers-list'
   | 'dealers-find'
@@ -116,8 +122,13 @@ export type NavTab =
   | 'marketing-documents'
   | 'marketing-mail'
   | 'accounting-bank-cash'
+  | 'accounting-journal-vouchers'
   | 'accounting-tds'
   | 'accounting-cheques'
+  | 'accounting-cost-centres'
+  | 'accounting-budgets'
+  | 'accounting-fixed-assets'
+  | 'accounting-payroll'
   | 'accounting-recurring'
   | 'help';
 
@@ -324,6 +335,12 @@ export const Sidebar: React.FC<Props> = ({
         label: 'Purchases',
         icon: ShoppingCart,
         items: [
+          { id: 'purchases-preferred-vendors', label: 'Preferred Vendors' },
+          { id: 'purchases-purchase-orders', label: 'Purchase Orders' },
+          { id: 'purchases-bills', label: 'Purchase Bills' },
+          { id: 'purchases-transit-claims', label: 'Transit Claims' },
+          { id: 'purchases-payments-made', label: 'Payments Made' },
+          { id: 'purchases-expenses', label: 'Expenses' },
           { id: 'purchases-landed-cost', label: 'Landed Cost Calculator' },
         ],
       },
@@ -355,8 +372,13 @@ export const Sidebar: React.FC<Props> = ({
         icon: Calculator,
         items: [
           { id: 'accounting-bank-cash', label: 'Bank & Cash Accounts', hasAdd: true },
+          { id: 'accounting-journal-vouchers', label: 'Journal Vouchers' },
           { id: 'accounting-tds', label: 'TDS' },
           { id: 'accounting-cheques', label: 'Cheques' },
+          { id: 'accounting-cost-centres', label: 'Cost Centres' },
+          { id: 'accounting-budgets', label: 'Budgets' },
+          { id: 'accounting-fixed-assets', label: 'Fixed Assets' },
+          { id: 'accounting-payroll', label: 'Payroll' },
           { id: 'accounting-recurring', label: 'Recurring Transactions', hasAdd: true },
         ],
       },

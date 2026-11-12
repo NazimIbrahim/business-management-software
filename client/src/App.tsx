@@ -600,6 +600,66 @@ const AppContent: React.FC = () => {
         );
 
       // New Purchases Modules
+      case 'purchases-preferred-vendors':
+        return (
+          <ModuleComingSoon
+            title="Preferred Vendors"
+            category="Purchases"
+            description="Approved ceramic tile manufacturers, sanitary suppliers, local distributor directories, and rate contracts."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'purchases-purchase-orders':
+        return (
+          <ModuleComingSoon
+            title="Purchase Orders"
+            category="Purchases"
+            description="Factory direct purchase orders, local procurement orders, batch dispatch tracking, and supplier confirmations."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'purchases-bills':
+        return (
+          <ModuleComingSoon
+            title="Purchase Bills"
+            category="Purchases"
+            description="Factory inward tax invoices, vendor bill passing, purchase ledger debit entries, and input GST reconciliation."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'purchases-transit-claims':
+        return (
+          <ModuleComingSoon
+            title="Transit Claims"
+            category="Purchases"
+            description="Goods-in-transit damage claims, factory transit insurance settlements, carrier damage reports, and credit notes."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'purchases-payments-made':
+        return (
+          <ModuleComingSoon
+            title="Payments Made"
+            category="Purchases"
+            description="Supplier NEFT/RTGS payments, advance disbursements, vendor debit balances, and payment advice generation."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'purchases-expenses':
+        return (
+          <ModuleComingSoon
+            title="Expenses"
+            category="Purchases"
+            description="Showroom operating expenses, lorry freight charges, local cartage, unloader labor payments, and utility bills."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
       case 'purchases-landed-cost':
         return (
           <ModuleComingSoon
@@ -699,6 +759,16 @@ const AppContent: React.FC = () => {
             onNavigateToModule={handleNavTabChange}
           />
         );
+      case 'accounting-journal-vouchers':
+        return (
+          <ModuleComingSoon
+            title="Journal Vouchers"
+            category="Accounting"
+            description="General ledger adjustment entries, inter-branch transfers, depreciation entries, and year-end closing entries."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
       case 'accounting-tds':
         return (
           <ModuleComingSoon
@@ -715,6 +785,46 @@ const AppContent: React.FC = () => {
             title="Cheque Clearance Register"
             category="Accounting"
             description="Post-dated cheques (PDC) vault, bank deposit slips, bounce tracking, and clearance status."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'accounting-cost-centres':
+        return (
+          <ModuleComingSoon
+            title="Cost Centres"
+            category="Accounting"
+            description="Showroom, godown, factory, and project-wise departmental cost allocation and profitability centers."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'accounting-budgets':
+        return (
+          <ModuleComingSoon
+            title="Budgets"
+            category="Accounting"
+            description="Monthly sales targets vs procurement budgets, operating expenditure caps, and variance analytics."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'accounting-fixed-assets':
+        return (
+          <ModuleComingSoon
+            title="Fixed Assets"
+            category="Accounting"
+            description="Showroom display infrastructure, material handling equipment, delivery vehicles, and depreciation schedules."
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToModule={handleNavTabChange}
+          />
+        );
+      case 'accounting-payroll':
+        return (
+          <ModuleComingSoon
+            title="Payroll"
+            category="Accounting"
+            description="Staff salary structures, sales incentives, attendance integration, and monthly payroll disbursement registers."
             onBackToDashboard={() => setActiveTab('dashboard')}
             onNavigateToModule={handleNavTabChange}
           />
