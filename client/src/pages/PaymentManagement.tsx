@@ -55,7 +55,11 @@ interface ActiveCustomerQuotation {
   balance_due: number | string;
 }
 
-export const PaymentManagement: React.FC = () => {
+interface Props {
+  initialOpenModal?: boolean;
+}
+
+export const PaymentManagement: React.FC<Props> = ({ initialOpenModal }) => {
   const { fetchApi, getReceiptUrl, subscribeToEvents, serverUrl } = useServer();
   const { user } = useAuth();
   const userRole = (user?.role || '').toLowerCase();
@@ -208,6 +212,12 @@ export const PaymentManagement: React.FC = () => {
     setAllowOverpayment(false);
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (initialOpenModal) {
+      openPaymentModal();
+    }
+  }, [initialOpenModal]);
 
   const handleSelectCustomer = async (cust: CustomerSearchResult) => {
     setSelectedCustomer(cust);
