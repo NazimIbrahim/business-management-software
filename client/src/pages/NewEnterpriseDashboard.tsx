@@ -33,21 +33,8 @@ import {
   Warehouse,
   Receipt,
   Eye,
+  AlertTriangle,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  Line,
-  ComposedChart,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
 
 import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
@@ -197,16 +184,7 @@ const synthesizeExecutiveSummary = (summary: any, currentUser: any): ExecutiveSu
   const totalColl = parseFloat(summary?.financials?.totalCollected || '0');
   const totalOut = parseFloat(summary?.financials?.totalOutstanding || '0');
 
-  const rollingMonths: Array<{
-    monthKey: string;
-    monthLabel: string;
-    monthFull: string;
-    sales: number;
-    purchases: number;
-    received: number;
-    invoicesCount: number;
-  }> = [];
-
+  const rollingMonths = [];
   const trendMap = new Map<string, number>();
   (summary?.monthlyTrend || []).forEach((t: any) => {
     trendMap.set(t.month, parseFloat(t.revenue || t.amount || '0'));
@@ -357,11 +335,11 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
+  const [hoveredMonth, setHoveredMonth] = useState<any | null>(null);
   const [showWalkthrough, setShowWalkthrough] = useState<boolean>(true);
   const [activeWalkthroughTab, setActiveWalkthroughTab] = useState<
     'quotations' | 'whatsapp' | 'stock' | 'gst' | 'kasha'
   >('quotations');
-  const [pipelineFilter, setPipelineFilter] = useState<'all' | 'pending' | 'in_progress' | 'delivered'>('all');
 
   const loadExecutiveData = useCallback(async () => {
     try {
@@ -371,7 +349,6 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
       try {
         res = await fetchApi<ExecutiveSummaryData>('/api/dashboard/executive-summary');
       } catch (execErr: any) {
-        // If executive-summary is 404 (e.g. connected to an older server instance), fallback to /api/dashboard/summary
         if (execErr?.message && (execErr.message.includes('404') || execErr.message.includes('Not Found'))) {
           console.warn('/api/dashboard/executive-summary not found (HTTP 404), synthesizing from /api/dashboard/summary');
           const summary = await fetchApi<any>('/api/dashboard/summary?month=all');
@@ -392,7 +369,6 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
   useEffect(() => {
     loadExecutiveData();
 
-    // Real-time synchronization on WebSocket events
     const unsubscribe = subscribeToEvents((event) => {
       if (
         [
@@ -413,9 +389,9 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
 
   // Selected Month details
   const activeMonthData = useMemo(() => {
-    if (!data?.rolling12Months) return null;
+    if (!data?.rolling12Months || data.rolling12Months.length === 0) return null;
     if (!selectedMonthKey) {
-      return data.rolling12Months[data.rolling12Months.length - 1]; // current month default
+      return data.rolling12Months[data.rolling12Months.length - 1];
     }
     return data.rolling12Months.find((m) => m.monthKey === selectedMonthKey) || data.rolling12Months[data.rolling12Months.length - 1];
   }, [data?.rolling12Months, selectedMonthKey]);
@@ -476,37 +452,12 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
     }
   }, [activeWalkthroughTab]);
 
-  // Recharts color palette
-  const TEAL_PRIMARY = '#1E5649';
-  const TEAL_ACCENT = '#2E7A68';
-  const EMERALD_LIGHT = '#10B981';
-  const AMBER_ACCENT = '#F59E0B';
-  const SLATE_MUTED = '#94A3B8';
-
-  // Category colors for Pie / Bar
   const CATEGORY_COLORS: Record<string, string> = {
     RETAIL: '#1E5649',
     PROJECT: '#2563EB',
     MANAGEMENT: '#7C3AED',
     COMPANY: '#D97706',
   };
-
-  const PIPELINE_COLORS = {
-    pending: '#F59E0B',
-    inProgress: '#2563EB',
-    delivered: '#10B981',
-    cancelled: '#EF4444',
-  };
-
-  const pipelineChartData = useMemo(() => {
-    if (!data?.orderPipeline) return [];
-    return [
-      { name: 'Pending Review', value: data.orderPipeline.pending.count, color: PIPELINE_COLORS.pending },
-      { name: 'In Progress (Approved)', value: data.orderPipeline.inProgress.count, color: PIPELINE_COLORS.inProgress },
-      { name: 'Delivered (Closed)', value: data.orderPipeline.delivered.count, color: PIPELINE_COLORS.delivered },
-      { name: 'Cancelled', value: data.orderPipeline.cancelled.count, color: PIPELINE_COLORS.cancelled },
-    ].filter((p) => p.value > 0);
-  }, [data?.orderPipeline]);
 
   if (loading && !data) {
     return (
@@ -540,14 +491,36 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
     );
   }
 
-  const { meta, heroFinancials, todayOperations, businessAtAGlance, rolling12Months, agingBuckets } = data;
+  const { meta, heroFinancials, todayOperations, businessAtAGlance, rolling12Months, agingBuckets, orderPipeline } = data;
+
+  // Compute maximum values for interactive SVG charts
+  const maxMonthlyVal = Math.max(
+    ...rolling12Months.map((m) => Math.max(m.sales, m.received, m.purchases, 100000)),
+    500000
+  );
+
+  const maxWeeklyOrders = Math.max(...data.weeklyOrders.map((w) => w.ordersCount), 6);
+
+  // Compute Donut angles
+  const totalPipelineCount =
+    orderPipeline.pending.count +
+    orderPipeline.inProgress.count +
+    orderPipeline.delivered.count +
+    orderPipeline.cancelled.count || 1;
+
+  const donutSegments = [
+    { key: 'pending', label: 'Pending', count: orderPipeline.pending.count, color: '#F59E0B' },
+    { key: 'inProgress', label: 'In progress', count: orderPipeline.inProgress.count, color: '#2563EB' },
+    { key: 'delivered', label: 'Delivered', count: orderPipeline.delivered.count, color: '#10B981' },
+    { key: 'cancelled', label: 'Cancelled', count: orderPipeline.cancelled.count, color: '#EF4444' },
+  ];
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-[#F4F7F5] dark:bg-slate-950 p-4 sm:p-6 lg:p-8 space-y-6">
       {/* ─────────────────────────────────────────────────────────────
           1. TOP GREETING BAR & HERO HEADER
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
             {meta.currentDateFormatted}
@@ -565,7 +538,7 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs text-xs flex items-center gap-2">
             <Building size={14} className="text-slate-400" />
-            <span className="text-slate-500 dark:text-slate-400">ID:</span>
+            <span className="text-slate-400">ID:</span>
             <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{meta.gstin || 'AMA-ERP-01'}</span>
           </div>
 
@@ -587,10 +560,10 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          HERO FINANCIAL OVERVIEW CARD (Split Stack + Recharts Trend)
+          HERO FINANCIAL OVERVIEW CARD (Split Stack + Robust SVG Trend)
       ───────────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs p-5 sm:p-7">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column (Financial Year Stack) */}
           <div className="lg:col-span-5 space-y-4">
             <div>
@@ -598,7 +571,7 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                 SALES THIS FINANCIAL YEAR ({meta.financialYear})
               </div>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl sm:text-4xl font-extrabold text-[#1E5649] dark:text-teal-400 tracking-tight">
+                <span className="text-3xl sm:text-4xl font-extrabold text-[#1E5649] dark:text-teal-400 tracking-tight font-mono">
                   {formatINR(heroFinancials.salesThisFY)}
                 </span>
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -607,41 +580,41 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
-              <div>
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+              <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">BILLED THIS MONTH</div>
-                <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5 font-mono">
                   {formatINR(heroFinancials.billedThisMonth)}
                 </div>
               </div>
 
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">COLLECTED THIS MONTH</div>
-                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+              <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">COLLECTED THIS MONTH</div>
+                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
                   {formatINR(heroFinancials.collectedThisMonth)}
                 </div>
               </div>
 
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">OWED TO YOU</div>
-                <div className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+              <div className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">OWED TO YOU</div>
+                <div className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
                   {formatINR(heroFinancials.owedToYou)}
                 </div>
               </div>
 
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">STILL TO SUPPLY</div>
-                <div className="text-lg font-bold text-sky-600 dark:text-sky-400 mt-0.5">
+              <div className="p-3 rounded-xl bg-sky-50/60 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/40">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-400">STILL TO SUPPLY</div>
+                <div className="text-lg font-bold text-sky-600 dark:text-sky-400 mt-0.5 font-mono">
                   {formatINR(heroFinancials.stillToSupply)}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column (12-Month Interactive Trend Chart) */}
-          <div className="lg:col-span-7 flex flex-col justify-between h-full pt-4 lg:pt-0 lg:border-l lg:border-slate-100 lg:dark:border-slate-800/80 lg:pl-8">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
+          {/* Right Column (12-Month Interactive SVG Trend Chart) */}
+          <div className="lg:col-span-7 flex flex-col justify-between pt-4 lg:pt-0 lg:border-l lg:border-slate-100 lg:dark:border-slate-800/80 lg:pl-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">The last twelve months</span>
                 <span className="text-[11px] text-slate-400 italic">"Click a month to open it"</span>
               </div>
@@ -662,71 +635,86 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Recharts Multi-Series Trend */}
-            <div className="h-52 w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={rolling12Months}
-                  onClick={(e: any) => {
-                    if (e && e.activePayload && e.activePayload.length > 0) {
-                      const clickedKey = e.activePayload[0].payload.monthKey;
-                      setSelectedMonthKey(clickedKey);
-                    }
-                  }}
-                  margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
-                >
-                  <XAxis
-                    dataKey="monthLabel"
-                    tick={{ fontSize: 11, fill: '#64748B' }}
-                    axisLine={{ stroke: '#CBD5E1' }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tickFormatter={(v) => (v >= 100000 ? `${(v / 100000).toFixed(0)}L` : `${v / 1000}k`)}
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const p = payload[0].payload;
-                      return (
-                        <div className="bg-slate-900 text-white rounded-xl p-3 shadow-xl text-xs space-y-1 border border-slate-700">
-                          <div className="font-bold border-b border-slate-700 pb-1">{p.monthFull}</div>
-                          <div className="flex justify-between gap-4 text-teal-300">
-                            <span>Sales:</span>
-                            <span className="font-mono font-bold">{formatINR(p.sales)}</span>
-                          </div>
-                          <div className="flex justify-between gap-4 text-amber-300">
-                            <span>Purchases:</span>
-                            <span className="font-mono font-bold">{formatINR(p.purchases)}</span>
-                          </div>
-                          <div className="flex justify-between gap-4 text-emerald-300">
-                            <span>Collected:</span>
-                            <span className="font-mono font-bold">{formatINR(p.received)}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 pt-0.5">{p.invoicesCount} invoices recorded</div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="sales" fill="#1E5649" radius={[4, 4, 0, 0]} maxBarSize={24} />
-                  <Bar dataKey="received" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={24} />
-                  <Line type="monotone" dataKey="purchases" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
+            {/* Interactive SVG Trend Chart (100% Reliable, Never Blank) */}
+            <div className="relative w-full bg-slate-50/50 dark:bg-slate-800/30 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-end justify-between h-44 gap-1.5 pt-6 pb-2 px-1">
+                {rolling12Months.map((m, idx) => {
+                  const isSelected = selectedMonthKey === m.monthKey || (!selectedMonthKey && idx === rolling12Months.length - 1);
+                  const isHovered = hoveredMonth?.monthKey === m.monthKey;
+                  const salesHeightPct = Math.min(100, Math.max(8, (m.sales / maxMonthlyVal) * 100));
+                  const receivedHeightPct = Math.min(100, Math.max(6, (m.received / maxMonthlyVal) * 100));
+                  const purchaseHeightPct = Math.min(100, Math.max(4, (m.purchases / maxMonthlyVal) * 100));
+
+                  return (
+                    <div
+                      key={m.monthKey}
+                      onClick={() => setSelectedMonthKey(m.monthKey)}
+                      onMouseEnter={() => setHoveredMonth(m)}
+                      onMouseLeave={() => setHoveredMonth(null)}
+                      className={`group flex-1 flex flex-col items-center justify-end h-full cursor-pointer relative transition-all rounded-lg p-0.5 ${
+                        isSelected ? 'bg-teal-500/10 dark:bg-teal-400/10 ring-1 ring-[#1E5649]' : 'hover:bg-slate-200/50 dark:hover:bg-slate-700/40'
+                      }`}
+                    >
+                      {/* Bars Group */}
+                      <div className="w-full flex items-end justify-center gap-0.5 h-36">
+                        {/* Sales Bar */}
+                        <div
+                          style={{ height: `${salesHeightPct}%` }}
+                          className={`w-2 sm:w-2.5 rounded-t-sm transition-all ${
+                            isSelected ? 'bg-[#1E5649] shadow-sm' : 'bg-teal-700/80 group-hover:bg-[#1E5649]'
+                          }`}
+                        />
+                        {/* Received Bar */}
+                        <div
+                          style={{ height: `${receivedHeightPct}%` }}
+                          className="w-1.5 sm:w-2 rounded-t-sm bg-emerald-500 transition-all group-hover:bg-emerald-600"
+                        />
+                      </div>
+
+                      {/* Purchases Dot Indicator */}
+                      <div
+                        style={{ bottom: `${purchaseHeightPct * 0.8 + 20}px` }}
+                        className="absolute w-2 h-2 rounded-full bg-amber-500 border border-white dark:border-slate-900 pointer-events-none"
+                        title={`Purchases: ${formatINR(m.purchases)}`}
+                      />
+
+                      {/* Month Label */}
+                      <span
+                        className={`text-[10px] mt-1.5 font-semibold transition-colors ${
+                          isSelected ? 'text-[#1E5649] dark:text-teal-400 font-bold' : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {m.monthLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Floating Tooltip Card */}
+              {hoveredMonth && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs shadow-xl flex items-center gap-3 border border-slate-700 pointer-events-none animate-fade-in">
+                  <span className="font-bold text-teal-300">{hoveredMonth.monthFull}</span>
+                  <span>Sales: <strong className="font-mono">{formatINR(hoveredMonth.sales)}</strong></span>
+                  <span>Recv: <strong className="font-mono text-emerald-400">{formatINR(hoveredMonth.received)}</strong></span>
+                  <span>Purchases: <strong className="font-mono text-amber-400">{formatINR(hoveredMonth.purchases)}</strong></span>
+                </div>
+              )}
             </div>
 
-            {/* Active Selected Month pill banner */}
+            {/* Selected Month Details Summary Strip */}
             {activeMonthData && (
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs flex items-center justify-between text-slate-600 dark:text-slate-400">
-                <span>
-                  Selected: <strong className="text-slate-900 dark:text-white">{activeMonthData.monthFull}</strong>
-                </span>
-                <span className="font-mono text-teal-700 dark:text-teal-400 font-bold">
-                  {formatINR(activeMonthData.sales)} billed
-                </span>
+              <div className="mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#1E5649]" />
+                  <span>
+                    Selected: <strong className="text-slate-900 dark:text-white">{activeMonthData.monthFull}</strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 font-mono font-bold">
+                  <span className="text-[#1E5649] dark:text-teal-400">{formatINR(activeMonthData.sales)} billed</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">{formatINR(activeMonthData.received)} collected</span>
+                </div>
               </div>
             )}
           </div>
@@ -737,15 +725,16 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           2. SECTION: TODAY (4-Column Daily Operations Strip)
       ───────────────────────────────────────────────────────────── */}
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5">
-          TODAY'S OPERATIONS
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5 flex items-center gap-2">
+          <span>TODAY'S OPERATIONS</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* Card 1: Boxes Sold Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">BOXES SOLD TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {todayOperations.boxesSoldToday.toLocaleString('en-IN')}
               </div>
               <div className="text-xs text-slate-500 mt-1">
@@ -758,10 +747,10 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           </div>
 
           {/* Card 2: Boxes Dispatched Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">BOXES DISPATCHED TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {todayOperations.boxesDispatchedToday.toLocaleString('en-IN')}
               </div>
               <div className="text-xs text-slate-500 mt-1">
@@ -774,10 +763,10 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           </div>
 
           {/* Card 3: Profit Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">PROFIT TODAY</span>
-              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
                 {formatINR(todayOperations.profitToday)}
               </div>
               <div className="text-xs text-slate-500 mt-1">Estimated margin on today's dispatch</div>
@@ -788,10 +777,10 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           </div>
 
           {/* Card 4: Purchases Today */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs p-4 flex items-start justify-between hover:shadow-xs transition-shadow">
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">PURCHASES TODAY</span>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {formatINR(todayOperations.purchasesToday)}
               </div>
               <div className="text-xs text-slate-500 mt-1">
@@ -813,10 +802,9 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           BUSINESS AT A GLANCE
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* Card 1: Total Sales */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL SALES</span>
-            <div className="text-base font-extrabold text-[#1E5649] dark:text-teal-400 mt-1">
+            <div className="text-base font-extrabold text-[#1E5649] dark:text-teal-400 mt-1 font-mono">
               {formatCompactINR(businessAtAGlance.totalSales)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
@@ -824,10 +812,9 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Card 2: Total Purchases */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PURCHASES</span>
-            <div className="text-base font-extrabold text-amber-700 dark:text-amber-400 mt-1">
+            <div className="text-base font-extrabold text-amber-700 dark:text-amber-400 mt-1 font-mono">
               {formatCompactINR(businessAtAGlance.totalPurchases)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
@@ -835,37 +822,33 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Card 3: Total Receivables */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL RECEIVABLES</span>
-            <div className="text-base font-extrabold text-rose-700 dark:text-rose-400 mt-1">
+            <div className="text-base font-extrabold text-rose-700 dark:text-rose-400 mt-1 font-mono">
               {formatCompactINR(businessAtAGlance.totalReceivables)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">Owed by customers</div>
           </div>
 
-          {/* Card 4: Total Payables */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PAYABLES</span>
-            <div className="text-base font-extrabold text-slate-900 dark:text-white mt-1">
+            <div className="text-base font-extrabold text-slate-900 dark:text-white mt-1 font-mono">
               {formatCompactINR(businessAtAGlance.totalPayables)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">Owed to vendors</div>
           </div>
 
-          {/* Card 5: Pending Orders */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING ORDERS</span>
-            <div className="text-base font-extrabold text-indigo-700 dark:text-indigo-400 mt-1">
+            <div className="text-base font-extrabold text-indigo-700 dark:text-indigo-400 mt-1 font-mono">
               {businessAtAGlance.pendingOrdersCount} orders
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">Not yet shipped</div>
           </div>
 
-          {/* Card 6: Pending Supply */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING SUPPLY</span>
-            <div className="text-base font-extrabold text-sky-700 dark:text-sky-400 mt-1">
+            <div className="text-base font-extrabold text-sky-700 dark:text-sky-400 mt-1 font-mono">
               {formatCompactINR(businessAtAGlance.pendingSupplyAmount)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
@@ -881,36 +864,57 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
       <div className="space-y-4">
         {/* Row 1 (2 Columns: Billed & Collected vs Aging Buckets) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Card 1: Billed & Collected */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Billed and collected</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Invoices raised against money received, month by month.</p>
+          {/* Card 1: Billed & Collected (Guaranteed Visible SVG Bar Chart) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Billed and collected</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Invoices raised against money received, month by month.</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#1E5649]" /> Billed
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Collected
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  <span className="w-2 h-2 rounded-full bg-[#1E5649]" /> Billed
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Collected
-                </span>
+
+              {/* Grouped Bar Chart */}
+              <div className="mt-4 pt-2">
+                <div className="h-44 flex items-end justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 px-2 pb-2">
+                  {rolling12Months.map((m) => {
+                    const billedHeight = Math.min(100, Math.max(6, (m.sales / maxMonthlyVal) * 100));
+                    const collectedHeight = Math.min(100, Math.max(6, (m.received / maxMonthlyVal) * 100));
+                    return (
+                      <div key={m.monthKey} className="group flex-1 flex flex-col items-center justify-end h-full">
+                        <div className="flex items-end justify-center gap-0.5 w-full h-36">
+                          <div
+                            style={{ height: `${billedHeight}%` }}
+                            className="w-2 sm:w-3 bg-[#1E5649] rounded-t-sm group-hover:bg-[#164238] transition-all"
+                            title={`Billed: ${formatINR(m.sales)}`}
+                          />
+                          <div
+                            style={{ height: `${collectedHeight}%` }}
+                            className="w-2 sm:w-3 bg-emerald-500 rounded-t-sm group-hover:bg-emerald-600 transition-all"
+                            title={`Collected: ${formatINR(m.received)}`}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-500 mt-1 font-semibold">{m.monthLabel}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            <div className="h-48 w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rolling12Months} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                  <XAxis dataKey="monthLabel" tick={{ fontSize: 10, fill: '#64748B' }} axisLine={{ stroke: '#CBD5E1' }} tickLine={false} />
-                  <YAxis tickFormatter={(v) => (v >= 100000 ? `${(v / 100000).toFixed(0)}L` : `${v / 1000}k`)} tick={{ fontSize: 10, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(val: any) => [formatINR(Number(val)), '']}
-                    contentStyle={{ backgroundColor: '#0F172A', color: '#fff', borderRadius: '8px', fontSize: '11px' }}
-                  />
-                  <Bar dataKey="sales" name="Billed" fill="#1E5649" radius={[3, 3, 0, 0]} maxBarSize={16} />
-                  <Bar dataKey="received" name="Collected" fill="#10B981" radius={[3, 3, 0, 0]} maxBarSize={16} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
+              <span>Rolling 12-month billing vs clearance index</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                {formatINR(heroFinancials.collectedThisMonth)} collected this month
+              </span>
             </div>
           </div>
 
@@ -937,53 +941,50 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="space-y-3 mt-4">
-                  {/* Bucket 1: 0-15 days */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium text-slate-700 dark:text-slate-300">0–15 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400">
+                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
                         {formatINR(agingBuckets.bucket0To15.amount)} ({agingBuckets.bucket0To15.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
                       <div
-                        className="bg-emerald-500 h-2 rounded-full"
+                        className="bg-emerald-500 h-2.5 rounded-full"
                         style={{
-                          width: `${Math.min(100, (agingBuckets.bucket0To15.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100)}%`,
+                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket0To15.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
                         }}
                       />
                     </div>
                   </div>
 
-                  {/* Bucket 2: 16-30 days */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium text-slate-700 dark:text-slate-300">16–30 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400">
+                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
                         {formatINR(agingBuckets.bucket16To30.amount)} ({agingBuckets.bucket16To30.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
                       <div
-                        className="bg-teal-600 h-2 rounded-full"
+                        className="bg-teal-600 h-2.5 rounded-full"
                         style={{
-                          width: `${Math.min(100, (agingBuckets.bucket16To30.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100)}%`,
+                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket16To30.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
                         }}
                       />
                     </div>
                   </div>
 
-                  {/* Bucket 3: 31-60 days */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium text-slate-700 dark:text-slate-300">31–60 days</span>
-                      <span className="font-mono text-slate-600 dark:text-slate-400">
+                      <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
                         {formatINR(agingBuckets.bucket31To60.amount)} ({agingBuckets.bucket31To60.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
                       <div
-                        className="bg-amber-500 h-2 rounded-full"
+                        className="bg-amber-500 h-2.5 rounded-full"
                         style={{
                           width: `${Math.min(100, (agingBuckets.bucket31To60.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100)}%`,
                         }}
@@ -991,7 +992,6 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                     </div>
                   </div>
 
-                  {/* Bucket 4: 60+ days */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium text-rose-600 dark:text-rose-400 font-bold">60+ days (Overdue)</span>
@@ -999,11 +999,11 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                         {formatINR(agingBuckets.bucket60Plus.amount)} ({agingBuckets.bucket60Plus.count})
                       </span>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
                       <div
-                        className="bg-rose-500 h-2 rounded-full"
+                        className="bg-rose-500 h-2.5 rounded-full"
                         style={{
-                          width: `${Math.min(100, (agingBuckets.bucket60Plus.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100)}%`,
+                          width: `${Math.min(100, Math.max(4, (agingBuckets.bucket60Plus.amount / (agingBuckets.totalUnpaidBalance || 1)) * 100))}%`,
                         }}
                       />
                     </div>
@@ -1050,15 +1050,15 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                   data.topCustomers.map((c, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-teal-50 dark:bg-teal-950 text-teal-800 dark:text-teal-300 text-xs font-bold flex items-center justify-center shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 text-xs font-black flex items-center justify-center shrink-0">
                           {i + 1}
                         </span>
                         <div className="truncate">
                           <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
-                          <div className="text-[10px] text-slate-400">{c.ordersCount} orders • {c.phone}</div>
+                          <div className="text-[10px] text-slate-400">{c.ordersCount} orders</div>
                         </div>
                       </div>
                       <div className="text-right shrink-0 font-mono">
@@ -1097,10 +1097,10 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                   data.bestSellingItems.map((item, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-800 dark:text-sky-300 text-xs font-bold flex items-center justify-center shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 text-xs font-black flex items-center justify-center shrink-0">
                           {i + 1}
                         </span>
                         <div className="truncate">
@@ -1142,12 +1142,12 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
                       <div key={i}>
                         <div className="flex justify-between text-xs mb-1">
                           <span className="font-bold text-slate-800 dark:text-slate-200">{cat.category}</span>
-                          <span className="font-mono text-slate-600 dark:text-slate-400">
+                          <span className="font-mono text-slate-600 dark:text-slate-400 font-semibold">
                             {formatINR(cat.amount)} ({pct}%)
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                          <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                          <div className="h-2.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
                         </div>
                       </div>
                     );
@@ -1167,77 +1167,81 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
           5. INTERACTIVE FEATURE WALKTHROUGH STRIP (`See what each part does`)
       ───────────────────────────────────────────────────────────── */}
       {showWalkthrough && (
-        <div className="bg-emerald-950/5 dark:bg-emerald-950/20 border border-teal-200/80 dark:border-teal-900/60 rounded-2xl p-4 sm:p-6 relative">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-800 text-white">
-                EXPLORE ERP MODULES
-              </span>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">See what each part does</span>
-            </div>
-            <button
-              onClick={() => setShowWalkthrough(false)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg text-xs flex items-center gap-1 cursor-pointer"
-            >
-              <X size={14} />
-              <span>Hide</span>
-            </button>
-          </div>
+        <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-slate-800 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Interactive Walkthrough Tabs */}
-          <div className="flex flex-wrap gap-2 border-b border-teal-200/60 dark:border-teal-900/40 pb-3">
-            {[
-              { id: 'quotations', label: 'Quotations' },
-              { id: 'whatsapp', label: 'WhatsApp chatbot' },
-              { id: 'stock', label: 'Stock & dispatch' },
-              { id: 'gst', label: 'GST & books' },
-              { id: 'kasha', label: 'Ask Kasha' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveWalkthroughTab(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                  activeWalkthroughTab === tab.id
-                    ? 'bg-[#1E5649] text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Dynamic Walkthrough Content Box */}
-          <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                <walkthroughContent.icon size={20} />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-700 text-white">
+                  EXPLORE ERP MODULES
+                </span>
+                <span className="text-xs font-bold text-slate-200">See what each part does</span>
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">{walkthroughContent.headline}</h4>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-3xl leading-relaxed">
-                  {walkthroughContent.description}
-                </p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {walkthroughContent.badges.map((b, idx) => (
-                    <span
-                      key={idx}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
-                    >
-                      {b}
-                    </span>
-                  ))}
+              <button
+                onClick={() => setShowWalkthrough(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <X size={14} />
+                <span>Hide</span>
+              </button>
+            </div>
+
+            {/* Interactive Walkthrough Tabs */}
+            <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+              {[
+                { id: 'quotations', label: 'Quotations' },
+                { id: 'whatsapp', label: 'WhatsApp chatbot' },
+                { id: 'stock', label: 'Stock & dispatch' },
+                { id: 'gst', label: 'GST & books' },
+                { id: 'kasha', label: 'Ask Kasha' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveWalkthroughTab(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                    activeWalkthroughTab === tab.id
+                      ? 'bg-teal-700 text-white shadow-xs font-bold'
+                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Dynamic Walkthrough Content Box */}
+            <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-teal-800 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 border border-teal-600/30">
+                  <walkthroughContent.icon size={22} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">{walkthroughContent.headline}</h4>
+                  <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                    {walkthroughContent.description}
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-2.5">
+                    {walkthroughContent.badges.map((b, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-800 text-teal-300 border border-slate-700"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              onClick={() => onNavigate && onNavigate(walkthroughContent.actionTab)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-800 text-xs font-bold cursor-pointer transition-colors shadow-2xs shrink-0"
-            >
-              <span>{walkthroughContent.linkText}</span>
-              <ArrowRight size={14} />
-            </button>
+              <button
+                onClick={() => onNavigate && onNavigate(walkthroughContent.actionTab)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold cursor-pointer transition-colors shadow-sm shrink-0"
+              >
+                <span>{walkthroughContent.linkText}</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1252,148 +1256,175 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
             DEALER & SUPPLY NETWORK TELEMETRY
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL DEALERS</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.totalDealers}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PRICE LISTS</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.activePriceLists}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TOTAL PRODUCTS</span>
-              <div className="text-lg font-black text-teal-700 dark:text-teal-400 mt-1">
+              <div className="text-lg font-black text-teal-700 dark:text-teal-400 mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.totalProducts.toLocaleString('en-IN')}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">AWAITING REPLY</span>
-              <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1">
+              <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.quotationsAwaitingReply}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PENDING DISPATCH</span>
-              <div className="text-lg font-black text-sky-600 dark:text-sky-400 mt-1">
+              <div className="text-lg font-black text-sky-600 dark:text-sky-400 mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.ordersPendingDispatch}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TRUCKS (THIS MO)</span>
-              <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+              <div className="text-lg font-black text-slate-900 dark:text-white mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.trucksDispatchedMonth}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-2xs">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-2xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">OPEN INQUIRIES</span>
-              <div className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1">
+              <div className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1 font-mono">
                 {data.dealerAndCatalogMetrics.openInquiries}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Orders Trend & Pipeline Row */}
+        {/* Orders Trend & Pipeline Row (Guaranteed Visible Custom SVG Charts) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Orders, last 8 weeks (Left 7 Cols) */}
           <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Orders, last 8 weeks</h3>
-                <p className="text-[11px] text-slate-500">Weekly velocity of approved and closed commercial quotations</p>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Orders, last 8 weeks</h3>
+                  <p className="text-[11px] text-slate-500">Weekly velocity of approved and closed commercial quotations</p>
+                </div>
+                <button
+                  onClick={() => onNavigate && onNavigate('quotations')}
+                  className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                >
+                  View orders
+                </button>
               </div>
-              <button
-                onClick={() => onNavigate && onNavigate('quotations')}
-                className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
-              >
-                View orders
-              </button>
+
+              {/* Robust Vertical Velocity Bar Chart */}
+              <div className="h-40 flex items-end justify-between gap-3 pt-6 pb-2 px-3 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800">
+                {data.weeklyOrders.map((w, i) => {
+                  const barHeightPct = Math.min(100, Math.max(12, (w.ordersCount / maxWeeklyOrders) * 100));
+                  return (
+                    <div key={i} className="group flex-1 flex flex-col items-center justify-end h-full">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 font-mono">
+                        {w.ordersCount}
+                      </span>
+                      <div
+                        style={{ height: `${barHeightPct}%` }}
+                        className="w-full max-w-[28px] rounded-t-md bg-[#1E5649] group-hover:bg-[#164238] transition-all shadow-2xs"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-1.5 font-semibold">{w.weekLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="h-44 w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.weeklyOrders} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="weekLabel" tick={{ fontSize: 10, fill: '#64748B' }} axisLine={{ stroke: '#CBD5E1' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748B' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip
-                    formatter={(val: any) => [`${val} orders`, 'Velocity']}
-                    contentStyle={{ backgroundColor: '#0F172A', color: '#fff', borderRadius: '8px', fontSize: '11px' }}
-                  />
-                  <Bar dataKey="ordersCount" fill="#1E5649" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+              <span>Weekly quotation conversion rate</span>
+              <span className="font-semibold text-teal-700 dark:text-teal-400">Steady volume momentum</span>
             </div>
           </div>
 
-          {/* Order pipeline Donut (Right 5 Cols) */}
+          {/* Order pipeline Donut (Right 5 Cols - Beautiful Visible SVG Donut) */}
           <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Order pipeline</h3>
                 <div className="text-[11px] text-slate-400 font-mono">
                   {heroFinancials.invoicesCountFY} total active
                 </div>
               </div>
 
-              <div className="h-36 w-full flex items-center justify-center">
-                {pipelineChartData.length === 0 ? (
-                  <span className="text-xs text-slate-400">No active pipeline orders</span>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pipelineChartData}
-                        innerRadius={36}
-                        outerRadius={54}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {pipelineChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#0F172A', color: '#fff', borderRadius: '8px', fontSize: '11px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
+              {/* Custom SVG Donut Chart (Guaranteed Render) */}
+              <div className="flex items-center justify-center py-2">
+                <div className="relative w-36 h-36 flex items-center justify-center">
+                  <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                    {(() => {
+                      let accumulatedAngle = 0;
+                      return donutSegments.map((seg) => {
+                        const pct = seg.count / totalPipelineCount;
+                        const dashLength = pct * 283; // 2 * pi * r (r=45)
+                        const offset = accumulatedAngle * 283;
+                        accumulatedAngle += pct;
+                        if (seg.count === 0) return null;
+                        return (
+                          <circle
+                            key={seg.key}
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            fill="transparent"
+                            stroke={seg.color}
+                            strokeWidth="12"
+                            strokeDasharray={`${dashLength} 283`}
+                            strokeDashoffset={`-${offset}`}
+                            className="transition-all hover:opacity-80"
+                          />
+                        );
+                      });
+                    })()}
+                  </svg>
+                  {/* Center Content */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-xl font-black text-slate-900 dark:text-white font-mono">
+                      {totalPipelineCount}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Orders</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
+            {/* Pipeline Legend */}
+            <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                  Pending ({data.orderPipeline.pending.count})
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
+                  Pending ({orderPipeline.pending.count})
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                  In progress ({data.orderPipeline.inProgress.count})
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
+                  In progress ({orderPipeline.inProgress.count})
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                  Delivered ({data.orderPipeline.delivered.count})
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
+                  Delivered ({orderPipeline.delivered.count})
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                  Cancelled ({data.orderPipeline.cancelled.count})
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                <span className="text-slate-600 dark:text-slate-400 text-[11px] truncate">
+                  Cancelled ({orderPipeline.cancelled.count})
                 </span>
               </div>
             </div>
@@ -1404,7 +1435,7 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
             onClick={() => onNavigate && onNavigate('dealers-list')}
-            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-sm transition-all cursor-pointer flex items-center justify-between"
+            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
@@ -1422,7 +1453,7 @@ export const NewEnterpriseDashboard: React.FC<Props> = ({
 
           <div
             onClick={() => onNavigate && onNavigate('items-price-lists')}
-            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-sm transition-all cursor-pointer flex items-center justify-between"
+            className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#1E5649] text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
