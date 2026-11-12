@@ -219,7 +219,33 @@ export const Login: React.FC<Props> = ({ onOpenServerSettings }) => {
                       <p className="text-[11px] text-amber-700/90 break-all font-mono">
                         Target: {serverUrl}
                       </p>
-                      {serverUrl !== 'http://localhost:4000' && (
+                      {serverUrl !== 'https://business-management-software1.onrender.com' && (
+                        <div className="pt-0.5 flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setError(null);
+                              setServerUrl('https://business-management-software1.onrender.com');
+                            }}
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/90 hover:bg-amber-300 text-amber-950 transition-colors"
+                          >
+                            Switch to Cloud (Render)
+                          </button>
+                          {serverUrl !== 'http://localhost:4000' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setError(null);
+                                setServerUrl('http://localhost:4000');
+                              }}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 transition-colors"
+                            >
+                              Local (localhost:4000)
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {serverUrl === 'https://business-management-software1.onrender.com' && (
                         <div className="pt-0.5">
                           <button
                             type="button"

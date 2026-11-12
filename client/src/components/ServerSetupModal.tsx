@@ -87,7 +87,18 @@ export const ServerSetupModal: React.FC<Props> = ({ isOpen, onClose }) => {
               >
                 localhost:4000
               </button>
-              {typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInputUrl('https://business-management-software1.onrender.com');
+                  setTestResult(null);
+                }}
+                className="px-2 py-0.5 rounded text-[11px] font-mono bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 transition-colors"
+                title="Connect to Render cloud server"
+              >
+                Render Cloud
+              </button>
+              {typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('vercel.app') && (
                 <button
                   type="button"
                   onClick={() => {

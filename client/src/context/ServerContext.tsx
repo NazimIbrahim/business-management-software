@@ -54,7 +54,10 @@ const getDefaultServerUrl = (): string => {
   // 1. Prioritize user's saved server URL from previous configuration
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('ama_server_url')?.trim();
-    if (saved) {
+    // If user has old obsolete or vercel domain saved in localStorage as server target, purge it
+    if (saved && (saved.includes('.vercel.app') || saved.includes('ama-quotation-api'))) {
+      localStorage.removeItem('ama_server_url');
+    } else if (saved) {
       return saved;
     }
   }
@@ -64,12 +67,8 @@ const getDefaultServerUrl = (): string => {
     const { protocol, hostname, port, origin } = window.location;
 
     // Detect if running on static frontend hosting (Vercel, Netlify, GitHub Pages, etc.)
-    // When deployed on Vercel as a multi-service project, /api is routed to the backend on the same origin
-    if (hostname.endsWith('.vercel.app')) {
-      return origin;
-    }
-
     const isStaticHosting =
+      hostname.endsWith('.vercel.app') ||
       hostname.endsWith('.netlify.app') ||
       hostname.endsWith('.github.io');
 
@@ -276,22 +275,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             return true;
           }
         } catch {}
-      } else if (typeof window !== 'undefined' && window.location?.hostname?.endsWith('.vercel.app')) {
-        // On Vercel, probe same-origin /api/health
-        try {
-          const vController = new AbortController();
-          const vTimeout = setTimeout(() => vController.abort(), 5000);
-          const vRes = await fetch(`${window.location.origin}/api/health`, { signal: vController.signal });
-          clearTimeout(vTimeout);
-          if (vRes.ok) {
-            setServerUrlState(window.location.origin);
-            localStorage.setItem('ama_server_url', window.location.origin);
-            setStatus('connected');
-            return true;
-          }
-        } catch {}
-      } else if (url.includes('localhost') || url.includes('127.0.0.1')) {
-        // Probe cloud server
+      } else if (url.includes('localhost') || url.includes('127.0.0.1') || url.includes('vercel.app')) {
+        // Probe cloud server on Render
         try {
           const cController = new AbortController();
           const cTimeout = setTimeout(() => cController.abort(), 5000);
